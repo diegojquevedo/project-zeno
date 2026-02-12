@@ -120,6 +120,11 @@ FOREST_CARBON_FLUX_ID = [
     for ds in DATASETS
     if ds["dataset_name"] == "Forest greenhouse gas net flux"
 ][0]
+FOREST_CARBON_GROSS_REMOVALS_ID = [
+    ds["dataset_id"]
+    for ds in DATASETS
+    if ds["dataset_name"] == "Forest Carbon Gross Removals"
+][0]
 TREE_COVER_ID = [
     ds["dataset_id"] for ds in DATASETS if ds["dataset_name"] == "Tree cover"
 ][0]
@@ -171,6 +176,7 @@ class AnalyticsHandler(DataSourceHandler):
             TREE_COVER_LOSS_ID,
             TREE_COVER_GAIN_ID,
             FOREST_CARBON_FLUX_ID,
+            FOREST_CARBON_GROSS_REMOVALS_ID,
             TREE_COVER_ID,
             TREE_COVER_LOSS_BY_DRIVER_ID,
             SLUC_EMISSION_FACTORS_ID,
@@ -322,7 +328,11 @@ class AnalyticsHandler(DataSourceHandler):
                 "end_year": str(max(2005, end_year)),
                 "forest_filter": None,
             }
-        elif dataset.get("dataset_id") == FOREST_CARBON_FLUX_ID:
+        elif dataset.get("dataset_id") in [
+            FOREST_CARBON_FLUX_ID,
+            FOREST_CARBON_GROSS_REMOVALS_ID,
+        ]:
+            # Both use /v0/land_change/carbon_flux/analytics
             payload = {
                 **base_payload,
                 "canopy_cover": 30,
