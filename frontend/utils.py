@@ -230,12 +230,16 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
             location=center, zoom_start=zoom_start, tiles="OpenStreetMap"
         )
 
-        # Add dataset tile layer
-        dataset_name = dataset_data.get("data_layer", "Dataset Layer")
+        # Add dataset tile layer - use layer name from dataset (dynamic)
+        layer_name = (
+            dataset_data.get("data_layer")
+            or dataset_data.get("dataset_name")
+            or "Dataset Layer"
+        )
         folium.raster_layers.TileLayer(
             tiles=tile_url,
-            attr="Dataset Tiles",
-            name=dataset_name,
+            attr=layer_name,
+            name=layer_name,
             overlay=True,
             control=True,
         ).add_to(m2)
@@ -261,9 +265,9 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
         # Add layer control
         folium.LayerControl().add_to(m2)
 
-        # Display map in streamlit
+        # Display map in streamlit (title: Vizonomy AI; layer name only in map layer control)
         if show_title:
-            st.subheader(f"🗺️ {dataset_name}")
+            st.subheader("🌎 Vizonomy AI")
         folium_static(m2, width=width, height=height)
 
         # Show dataset info

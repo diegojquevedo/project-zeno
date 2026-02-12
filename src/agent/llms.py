@@ -58,6 +58,8 @@ MODEL_REGISTRY = {
     "sonnet": SONNET,
     "haiku": HAIKU,
     "gemini": GEMINI,
+    "gemini-3-pro-preview": GEMINI,  # alias for MODEL/SMALL_MODEL
+    "gemini-3-flash-preview": GEMINI_FLASH,
     "gemini-flash": GEMINI_FLASH,
     "gemini-flash-lite": GEMINI_FLASH_LITE,
     "gpt": GPT,

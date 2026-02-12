@@ -16,10 +16,10 @@ if "token" not in st.session_state:
 
 # Sidebar content
 with st.sidebar:
-    st.header("🐊")
+    st.header("Vizonomy AI")
     st.write(
         """
-    "Zeno's Uniguana is a friendly, knowledgeable guide to the Land and Carbon lab data.
+    This is a friendly prompt-based system to filter and analyze mapping data.
     """
     )
 

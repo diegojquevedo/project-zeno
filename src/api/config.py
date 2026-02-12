@@ -16,7 +16,7 @@ class _APISettings(BaseSettings):
     regular_user_daily_quota: int = 25
     pro_user_daily_quota: int = 50
     machine_user_daily_quota: int = 99999
-    anonymous_user_daily_quota: int = 10
+    anonymous_user_daily_quota: int = 100
     ip_address_daily_quota: int = 50
     enable_quota_checking: bool = True
 

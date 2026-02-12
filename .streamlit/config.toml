@@ -1,0 +1,3 @@
+# Hide sidebar page navigation (Uni Guana, Threads, etc.) to avoid flash on startup
+[client]
+showSidebarNavigation = false
