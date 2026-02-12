@@ -39,8 +39,8 @@ services:
       - key: NEXTJS_API_KEY
         generateValue: true
 
-    # Migraciones al arranque (preDeployCommand no disponible en plan free)
-    dockerCommand: sh -c "cd /app/db && uv run alembic upgrade head && uv run uvicorn src.api.app:app --host 0.0.0.0 --port 10000"
+    # Migraciones al arranque (uv no en PATH en Render, usamos venv directo)
+    dockerCommand: sh -c "cd /app/db && /app/.venv/bin/alembic upgrade head && exec /app/.venv/bin/uvicorn src.api.app:app --host 0.0.0.0 --port 10000"
 
   # Frontend Streamlit - puerto 8501
   - type: web
