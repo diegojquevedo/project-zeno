@@ -31,3 +31,6 @@ WORKDIR /app
 
 # Install main + frontend deps (streamlit for zeno-web service)
 RUN uv sync --frozen --no-dev --group frontend
+
+# Add venv bin to PATH so alembic/uvicorn are findable at runtime
+ENV PATH="/app/.venv/bin:$PATH"
