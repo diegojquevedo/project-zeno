@@ -136,7 +136,7 @@ security = HTTPBearer(auto_error=False)
 
 @app.get("/api/health")
 async def health():
-    """Health check for Render and load balancers."""
+    """Health check for load balancers and orchestrators."""
     return {"status": "ok"}
 
 
