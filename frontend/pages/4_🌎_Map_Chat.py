@@ -7,13 +7,15 @@ Map Conversational: Chat with the agent and see responses on an interactive map.
 """
 
 import json
+import os
 import uuid
 
-import requests
 import streamlit as st
-from app import API_BASE_URL, STREAMLIT_URL
 from client import ZenoClient
-from utils import render_dataset_map, render_stream
+from dotenv import load_dotenv
+from utils import API_BASE_URL, render_dataset_map, render_stream
+
+load_dotenv()
 
 # Fixed dataset for this view: Forest Carbon Gross Removals
 FOREST_CARBON_REMOVALS_DATASET = {
@@ -34,8 +36,14 @@ if "map_aoi_data" not in st.session_state:
     st.session_state.map_aoi_data = None
 if "map_dataset_data" not in st.session_state:
     st.session_state.map_dataset_data = FOREST_CARBON_REMOVALS_DATASET
-if "token" not in st.session_state:
-    st.session_state["token"] = None
+
+# Auto-login: use token from .env if available and no token in session
+if "token" not in st.session_state or st.session_state["token"] is None:
+    auto_token = os.environ.get("AUTO_LOGIN_TOKEN")
+    if auto_token and auto_token != "<your-gfw-jwt-token>":
+        st.session_state["token"] = auto_token
+    else:
+        st.session_state["token"] = None
 
 st.set_page_config(
     page_title="Map Chat - Zeno",
@@ -68,27 +76,6 @@ with chat_col:
     )
     st.caption("Ask about any place (e.g. Bolivia, Odisha) to zoom and highlight on the map.")
 
-    if not st.session_state.get("token"):
-        st.button(
-            "Login with Global Forest Watch",
-            key="login_map_chat",
-            on_click=lambda: st.markdown(
-                f'<meta http-equiv="refresh" content="0;url=https://api.resourcewatch.org/auth?callbackUrl={STREAMLIT_URL}&token=true">',
-                unsafe_allow_html=True,
-            ),
-        )
-    else:
-        user_info = requests.get(
-            f"{API_BASE_URL}/api/auth/me",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {st.session_state['token']}",
-            },
-        )
-        if user_info.status_code == 200:
-            st.session_state["user"] = user_info.json()
-            st.success(f"Logged in as {st.session_state['user']['name']}")
-
     st.divider()
 
     # Chat history
@@ -120,7 +107,7 @@ with chat_col:
         user_input = st.session_state.map_chat_pending_input
         st.session_state.map_chat_pending_input = None
 
-    if user_input and st.session_state.get("token"):
+    if user_input:
         st.session_state.map_chat_messages.append(
             {"role": "user", "content": user_input}
         )
@@ -139,29 +126,29 @@ with chat_col:
                 thread_id=st.session_state.map_chat_session_id,
                 user_id=st.session_state.get("user", {}).get("email", "anonymous"),
             ):
-                if stream.get("node") == "trace_info":
+                try:
+                    if stream.get("node") == "trace_info":
+                        update = json.loads(stream["update"])
+                        if "trace_id" in update:
+                            st.success(f"Trace ID: {update['trace_id']}")
+                        continue
+
                     update = json.loads(stream["update"])
-                    if "trace_id" in update:
-                        st.success(f"🔍 Trace ID: {update['trace_id']}")
-                    continue
 
-                update = json.loads(stream["update"])
+                    if "aoi" in update:
+                        st.session_state.map_aoi_data = update["aoi"]
+                    if "dataset" in update:
+                        st.session_state.map_dataset_data = update["dataset"]
 
-                if "aoi" in update:
-                    st.session_state.map_aoi_data = update["aoi"]
-                if "dataset" in update:
-                    st.session_state.map_dataset_data = update["dataset"]
-
-                render_stream(stream, skip_maps=True)
+                    render_stream(stream, skip_maps=True)
+                except Exception as e:
+                    st.error(f"Error processing stream: {e}")
 
 with map_col:
-    if st.session_state.get("token"):
-        render_dataset_map(
-            st.session_state.map_dataset_data,
-            st.session_state.map_aoi_data,
-            show_title=True,
-            width=1200,
-            height=550,
-        )
-    else:
-        st.info("Log in to view the map.")
+    render_dataset_map(
+        st.session_state.map_dataset_data,
+        st.session_state.map_aoi_data,
+        show_title=True,
+        width=1200,
+        height=550,
+    )

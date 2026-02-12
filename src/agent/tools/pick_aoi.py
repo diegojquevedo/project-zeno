@@ -148,10 +148,8 @@ async def query_aoi_database(
                 WHERE name IS NOT NULL AND name % :place_name
             """
             )
-        if "custom" in existing_tables:
+        if "custom" in existing_tables and user_id:
             src_id = SOURCE_ID_MAPPING["custom"]["id_column"]
-            if not user_id:
-                raise ValueError("user_id required for custom areas")
             union_parts.append(
                 f"""
                 SELECT CAST({src_id} as TEXT) as src_id,
@@ -186,16 +184,12 @@ async def query_aoi_database(
 
         logger.debug(f"Executing AOI query: {sql_query}")
 
+        params = {"place_name": place_name, "limit_val": result_limit}
+        if user_id and "custom" in existing_tables:
+            params["user_id"] = user_id
+
         def _read(sync_conn):
-            return pd.read_sql(
-                text(sql_query),
-                sync_conn,
-                params={
-                    "place_name": place_name,
-                    "limit_val": result_limit,
-                    "user_id": user_id,
-                },
-            )
+            return pd.read_sql(text(sql_query), sync_conn, params=params)
 
         query_results = await conn.run_sync(_read)
 

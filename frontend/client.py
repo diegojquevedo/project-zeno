@@ -109,14 +109,15 @@ class ZenoClient:
         Fetch the geometry for a given src_id.
 
         Args:
+            source: The source type (gadm, kba, landmark, wdpa, custom)
             src_id: The source ID to fetch geometry for
         Returns:
             The geometry data as a dictionary
         """
-        if not self.token:
-            raise ValueError("Token is required to fetch geometry.")
         url = f"{self.base_url}/api/geometry/{source}/{src_id}"
-        headers = {"Authorization": f"Bearer {self.token}"}
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
 
         with requests.get(url, headers=headers) as response:
             if response.status_code != 200:

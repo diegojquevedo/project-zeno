@@ -760,11 +760,15 @@ async def extract_anonymous_session_cookie(request: Request) -> Optional[str]:
         Optional[str]: The anonymous session ID if found, otherwise None.
     """
 
-    # Extract anonymous session ID from auth header (validation already done in fetch_user_from_rw_api)
-    auth_header = request.headers["Authorization"]
-    credentials = auth_header.strip("Bearer ")
-    [scheme, anonymous_id] = credentials.split(":", 1)
-    return f"{ANONYMOUS_USER_PREFIX}:{anonymous_id}"
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return f"{ANONYMOUS_USER_PREFIX}:no-session"
+
+    credentials = auth_header.replace("Bearer ", "", 1)
+    parts = credentials.split(":", 1)
+    if len(parts) == 2:
+        return f"{ANONYMOUS_USER_PREFIX}:{parts[1]}"
+    return f"{ANONYMOUS_USER_PREFIX}:no-session"
 
 
 async def get_user_identity_and_daily_quota(
@@ -1435,7 +1439,7 @@ async def delete_thread(
 async def get_geometry(
     source: str,
     src_id: str,
-    user: UserModel = Depends(require_auth),
+    user: Optional[UserModel] = Depends(optional_auth),
 ):
     """
     Get geometry data by source and source ID.
@@ -1443,7 +1447,7 @@ async def get_geometry(
     Args:
         source: Source type (gadm, kba, landmark, wdpa, custom)
         src_id: Source-specific ID (GID_X for GADM, sitrecid for KBA, UUID for custom areas, etc.)
-        user: Authenticated user (required)
+        user: Authenticated user (optional, required only for custom areas)
 
     Returns:
         Geometry data with name, subtype, and GeoJSON geometry
