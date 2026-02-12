@@ -134,6 +134,12 @@ app.add_middleware(
 security = HTTPBearer(auto_error=False)
 
 
+@app.get("/api/health")
+async def health():
+    """Health check for Render and load balancers."""
+    return {"status": "ok"}
+
+
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next) -> Response:
     """Middleware to log requests and bind request ID to context."""

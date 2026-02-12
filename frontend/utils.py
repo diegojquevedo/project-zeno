@@ -77,12 +77,14 @@ def render_aoi_map(aoi_data, subregion_data=None):
     """
     try:
         src_id = aoi_data.get("src_id")
-        # fetch the geometry by src_id
+        source = aoi_data.get("source")
+        if source is None and src_id and ("gadm_id" in aoi_data or "." in src_id):
+            source = "gadm"
         client = ZenoClient(
             base_url=API_BASE_URL, token=st.session_state.token
         )
         geom_response = client.fetch_geometry(
-            source=aoi_data.get("source"), src_id=src_id
+            source=source, src_id=src_id
         )
         geojson_data = geom_response.get("geometry")
 
@@ -125,6 +127,10 @@ def render_aoi_map(aoi_data, subregion_data=None):
                     if isinstance(subregion, dict):
                         subregion_source = subregion.get("source")
                         subregion_src_id = subregion.get("src_id")
+                        if subregion_source is None and subregion_src_id and (
+                            "gadm_id" in subregion or "." in subregion_src_id
+                        ):
+                            subregion_source = "gadm"
                         subregion_geojson = client.fetch_geometry(
                             source=subregion_source, src_id=subregion_src_id
                         ).get("geometry")
@@ -157,13 +163,16 @@ def render_aoi_map(aoi_data, subregion_data=None):
         st.json(aoi_data)  # Fallback to show raw data
 
 
-def render_dataset_map(dataset_data, aoi_data=None):
+def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400):
     """
     Render dataset tile layer as a map using streamlit-folium.
 
     Args:
         dataset_data: Dictionary containing dataset information with tile_url
         aoi_data: Optional dictionary containing geojson data for AOI overlay
+        show_title: Whether to show the dataset name as subheader (default True)
+        width: Map width in pixels (default 700)
+        height: Map height in pixels (default 400)
     """
     try:
         # Extract tile_url from dataset_data
@@ -171,6 +180,32 @@ def render_dataset_map(dataset_data, aoi_data=None):
         if not tile_url:
             st.warning("No tile_url found in dataset")
             return
+
+        # Fetch geometry when AOI has src_id/source but no geometry
+        if (
+            aoi_data
+            and isinstance(aoi_data, dict)
+            and "geometry" not in aoi_data
+            and aoi_data.get("src_id")
+        ):
+            source = aoi_data.get("source")
+            if source is None and (
+                "gadm_id" in aoi_data or "." in aoi_data.get("src_id", "")
+            ):
+                source = "gadm"
+            if source:
+                try:
+                    client = ZenoClient(
+                        base_url=API_BASE_URL, token=st.session_state.token
+                    )
+                    geom_response = client.fetch_geometry(
+                        source=source, src_id=aoi_data["src_id"]
+                    )
+                    geom = geom_response.get("geometry")
+                    if geom:
+                        aoi_data = {**aoi_data, "geometry": geom}
+                except Exception:
+                    pass
 
         # Calculate center from AOI if available, otherwise use default
         center = [0, 0]  # Default center
@@ -227,8 +262,9 @@ def render_dataset_map(dataset_data, aoi_data=None):
         folium.LayerControl().add_to(m2)
 
         # Display map in streamlit
-        st.subheader(f"🗺️ {dataset_name}")
-        folium_static(m2, width=700, height=400)
+        if show_title:
+            st.subheader(f"🗺️ {dataset_name}")
+        folium_static(m2, width=width, height=height)
 
         # Show dataset info
         with st.expander("Dataset Information"):
@@ -645,7 +681,7 @@ def render_charts(charts_data):
         st.json(charts_data)  # Fallback to show raw data
 
 
-def render_stream(stream):
+def render_stream(stream, skip_maps=False):
     # node = stream["node"]
     update = json.loads(stream["update"])
 
@@ -683,7 +719,7 @@ def render_stream(stream):
             st.markdown(content)
     # Render map if this is a tool node with AOI data
     aoi_data = None
-    if "aoi" in update:
+    if not skip_maps and "aoi" in update:
         aoi_data = update["aoi"]
         subregion_data = (
             update.get("subregion_aois")
@@ -693,7 +729,7 @@ def render_stream(stream):
         render_aoi_map(aoi_data, subregion_data)
 
     # Render dataset map if this is a tool node with dataset data
-    if "dataset" in update:
+    if not skip_maps and "dataset" in update:
         dataset_data = update["dataset"]
         aoi_data = (
             update.get("aoi") or aoi_data
@@ -752,6 +788,7 @@ def display_sidebar_selections():
         "Odisha": {
             "aoi": {
                 "name": "Odisha, India",
+                "source": "gadm",
                 "gadm_id": "IND.26_1",
                 "src_id": "IND.26_1",
                 "subtype": "state-province",
@@ -764,6 +801,7 @@ def display_sidebar_selections():
         "Koraput": {
             "aoi": {
                 "name": "Koraput, Odisha, India",
+                "source": "gadm",
                 "gadm_id": "IND.26.20_1",
                 "src_id": "IND.26.20_1",
                 "subtype": "district-county",

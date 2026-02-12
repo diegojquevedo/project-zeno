@@ -1181,3 +1181,47 @@ datasets:
     C. Wilson, C. Winchester, A. Ernstoff, T. Hohmann, V. Rossi, A. Stern. 2025.
     Statistical land use change emissions from deforestation and land occupation for
     42 agricultural crop categories. WRI Technical Note. [url pending]
+
+- dataset_id: 10
+  dataset_name: Forest Carbon Gross Removals
+  context_layers: null
+  variables: null
+  tile_url: "https://tiles.globalforestwatch.org/gfw_forest_carbon_gross_removals/latest/dynamic/{z}/{x}/{y}.png?tree_cover_density_threshold=30"
+  license: "CC by 4.0"
+  geographic_coverage: "Global"
+  resolution: "30 x 30 meters"
+  update_frequency: "annual"
+  content_date: "2001-2023"
+  start_date: "2001-01-01"
+  end_date: "2023-12-31"
+  content_date_fixed: false
+  keywords:
+    - carbon
+    - removals
+    - sequestration
+    - forest carbon
+  analytics_api_endpoint: "/v0/land_change/carbon_flux/analytics"
+  prompt_instructions: >
+    Shows cumulative forest carbon removals (sequestration) 2001-2023 in Mg CO2/ha.
+    Values are totals over the model period; divide by 23 for average annual removals.
+    DO NOT show trends over time. Removals reflect carbon absorbed by standing and new forests.
+  description: >
+    Forest Carbon Gross Removals maps cumulative carbon sequestration from forests (2001-2023)
+    at 30-meter resolution. Part of the GFW forest carbon flux model (Harris et al. 2021).
+    Shows where forests are absorbing CO2. Values in megagrams CO2 per hectare (Mg CO2/ha).
+    Available from datasets.wri.org/datasets/gfw-forest-carbon-gross-removals.
+  methodology: >
+    Part of the forest greenhouse gas flux model (Harris et al. 2021, Gibbs et al. 2025).
+    Uses Earth-observation-based inputs and IPCC AFOLU methods. Removals include above-
+    and belowground live tree biomass. Tree cover gain years 2000-2020 from Potapov et al. 2022.
+  cautions: >
+    Data are modeled; inherent error and uncertainty. Values are cumulative 2001-2023,
+    not annual. Divide by 23 for average annual removals. Applicable to forest areas
+    (canopy >30%, height >5m or tree cover gain). See Harris et al. (2021) for forest definition.
+  function_usage_notes: >
+    Identifies areas of forest carbon sequestration (gross removals).
+  providers: >
+    Harris et al. 2021. Land & Carbon Lab.
+  citation: >
+    Harris et al. (2021). Global maps of 21st century forest carbon fluxes.
+    Accessed from Global Forest Watch / WRI Data Explorer.

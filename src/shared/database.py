@@ -44,7 +44,14 @@ async def initialize_global_pool(database_url: Optional[str] = None) -> None:
             logger.warning("Global database pool already initialized")
             return
 
-        db_url = database_url or SharedSettings.database_url
+        raw_url = database_url or SharedSettings.database_url
+        # Convert postgresql:// to postgresql+asyncpg:// for SQLAlchemy async
+        if raw_url.startswith("postgresql://") and not raw_url.startswith(
+            "postgresql+asyncpg://"
+        ):
+            db_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        else:
+            db_url = raw_url
 
         # Create engine with optimized pool settings for combined workload
         # (API requests + tool operations)
