@@ -1,0 +1,18 @@
+[Unit]
+Description=Zeno Frontend (Streamlit)
+After=network.target zeno-api.service
+Wants=zeno-api.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/project-zeno
+Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/home/ubuntu/project-zeno/.env
+ExecStart=/usr/bin/env uv run streamlit run frontend/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
