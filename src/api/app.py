@@ -73,6 +73,11 @@ from src.api.schemas import (
     UserProfileUpdateRequest,
     UserWithQuotaModel,
 )
+from src.api.lake_county_config import (
+    LAKE_COUNTY_LAYERS,
+    LAKE_COUNTY_LAYERS_BY_ID,
+)
+from src.api.lake_county_service import search_lake_county_project
 from src.api.user_profile_configs.sectors import SECTOR_ROLES, SECTORS
 from src.shared.database import (
     close_global_pool,
@@ -340,20 +345,28 @@ async def stream_chat(
                     content = f"User selected AOI in UI: {action_data['aoi_name']}\n\n"
                     state_updates["aoi"] = action_data["aoi"]
                     state_updates["aoi_name"] = action_data["aoi_name"]
-                    state_updates["subregion_aois"] = action_data[
-                        "subregion_aois"
-                    ]
-                    state_updates["subregion"] = action_data["subregion"]
-                    state_updates["subtype"] = action_data["subtype"]
-                    # also update aoi_options
+                    state_updates["subregion_aois"] = action_data.get(
+                        "subregion_aois", []
+                    )
+                    state_updates["subregion"] = action_data.get(
+                        "subregion", ""
+                    )
+                    state_updates["subtype"] = action_data.get(
+                        "subtype", ""
+                    )
                     state_updates["aoi_options"] = {
                         "aoi": action_data["aoi"],
-                        "subregion_aois": action_data["subregion_aois"],
-                        "subregion": action_data["subregion"],
-                        "subtype": action_data["subtype"],
+                        "subregion_aois": action_data.get(
+                            "subregion_aois", []
+                        ),
+                        "subregion": action_data.get("subregion", ""),
+                        "subtype": action_data.get("subtype", ""),
                     }
+                case "data_source_selected":
+                    content = f"User selected data source: {action_data.get('data_source', 'unknown')}\n\n"
+                    state_updates["data_source"] = action_data.get("data_source")
                 case "dataset_selected":
-                    content = f"User selected dataset in UI: {action_data['dataset']['dataset_name']}\n\n"
+                    content = f"User selected dataset in UI: {action_data['dataset'].get('dataset_name', action_data['dataset'].get('data_layer', 'dataset'))}\n\n"
                     state_updates["dataset"] = action_data["dataset"]
                 case "daterange_selected":
                     content = f"User selected daterange in UI: start_date: {action_data['start_date']}, end_date: {action_data['end_date']}"
@@ -1474,6 +1487,86 @@ async def get_geometry(
     except Exception as e:
         logger.exception(f"Error fetching geometry for {source}:{src_id}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Lake County ArcGIS endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/lake_county/layers")
+async def get_lake_county_layers():
+    """
+    List available Lake County layers (Projects).
+    """
+    return {"layers": LAKE_COUNTY_LAYERS}
+
+
+@app.get("/api/lake_county/project/search")
+async def search_lake_county_project_endpoint(name: str = ""):
+    """
+    Search for Lake County projects by name (partial match, CONTAINS).
+    Returns all matches (up to 10) with geometry + attributes.
+    """
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="name parameter required")
+    return await search_lake_county_project(name)
+
+
+@app.get("/api/lake_county/{layer_id}/features")
+async def get_lake_county_features(
+    layer_id: str,
+    minx: float = -88.33,
+    miny: float = 41.99,
+    maxx: float = -87.67,
+    maxy: float = 42.69,
+):
+    """
+    Fetch features from a Lake County ArcGIS FeatureServer layer by bbox.
+
+    Uses WGS84 (EPSG:4326). Default bbox is Lake County bounds.
+    """
+    layer = LAKE_COUNTY_LAYERS_BY_ID.get(layer_id)
+    if not layer:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Layer '{layer_id}' not found. Use GET /api/lake_county/layers",
+        )
+
+    arcgis_url = layer["arcgis_url"]
+    query_url = f"{arcgis_url}/query"
+
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "inSR": 4326,
+        "f": "geojson",
+        "geometry": json.dumps(
+            {"xmin": minx, "ymin": miny, "xmax": maxx, "ymax": maxy}
+        ),
+        "geometryType": "esriGeometryEnvelope",
+        "spatialRel": "esriSpatialRelIntersects",
+    }
+
+    arcgis_key = os.environ.get("ARCGIS_API_KEY")
+    if arcgis_key:
+        params["token"] = arcgis_key
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            resp = await client.get(query_url, params=params)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            logger.exception(
+                f"ArcGIS query failed for {layer_id}: {e.response.text}"
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"ArcGIS service error: {e.response.text[:200]}",
+            )
 
 
 async def send_rating_to_langfuse(

@@ -6,9 +6,11 @@ import altair as alt
 import folium
 import pandas as pd
 import streamlit as st
-from client import ZenoClient
 from shapely.geometry import shape
 from streamlit_folium import folium_static
+
+from client import ZenoClient
+from lake_county_constants import get_style_by_projecttype
 
 API_BASE_URL = os.environ.get(
     "API_BASE_URL",
@@ -163,22 +165,129 @@ def render_aoi_map(aoi_data, subregion_data=None):
         st.json(aoi_data)  # Fallback to show raw data
 
 
-def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400):
-    """
-    Render dataset tile layer as a map using streamlit-folium.
+# Lake County bounds (WGS84): [[west, south], [east, north]]
+LAKE_COUNTY_BOUNDS = [[-88.33, 41.99], [-87.67, 42.69]]
+LAKE_COUNTY_CENTER = [42.34, -88.0]
+LAKE_COUNTY_ZOOM = 10
 
-    Args:
-        dataset_data: Dictionary containing dataset information with tile_url
-        aoi_data: Optional dictionary containing geojson data for AOI overlay
-        show_title: Whether to show the dataset name as subheader (default True)
-        width: Map width in pixels (default 700)
-        height: Map height in pixels (default 400)
+
+def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None):
+    """
+    Render Lake County map.
+    - If project_data: show rep point (PIN) + geometry (polygon/line/point) with blue style.
+    - Else: base map centered on Lake County.
+    """
+    center = LAKE_COUNTY_CENTER
+    zoom = LAKE_COUNTY_ZOOM
+    rep_point_geojson = None
+    geometry_geojson = None
+
+    if project_data and isinstance(project_data, dict):
+        rep_point_geojson = project_data.get("rep_point_geojson")
+        geometry_geojson = project_data.get("geometry_geojson")
+        geojson = geometry_geojson or rep_point_geojson
+        if geojson and isinstance(geojson, dict):
+            feats = geojson.get("features", [])
+            all_bounds = []
+            for feat in feats:
+                g = feat.get("geometry")
+                if g:
+                    try:
+                        geom = shape(g)
+                        all_bounds.append(geom.bounds)
+                    except (ValueError, AttributeError, TypeError):
+                        pass
+            if rep_point_geojson and rep_point_geojson.get("features"):
+                try:
+                    g = rep_point_geojson["features"][0].get("geometry")
+                    if g:
+                        all_bounds.append(shape(g).bounds)
+                except (ValueError, AttributeError, TypeError):
+                    pass
+            if all_bounds:
+                minx = min(b[0] for b in all_bounds)
+                miny = min(b[1] for b in all_bounds)
+                maxx = max(b[2] for b in all_bounds)
+                maxy = max(b[3] for b in all_bounds)
+                center = [(miny + maxy) / 2, (minx + maxx) / 2]
+                zoom = 14
+
+    m2 = folium.Map(
+        location=center,
+        zoom_start=zoom,
+        tiles="CartoDB positron",
+        max_zoom=19,
+        zoom_control=True,
+    )
+
+    projecttype = None
+    if project_data and isinstance(project_data, dict):
+        projecttype = project_data.get("attributes", {}).get("projecttype")
+        if not projecttype and geometry_geojson and geometry_geojson.get("features"):
+            projecttype = geometry_geojson["features"][0].get("properties", {}).get("projecttype")
+    style = get_style_by_projecttype(projecttype)
+    pin_hex = style["fillColor"]
+
+    if geometry_geojson and geometry_geojson.get("features"):
+        folium.GeoJson(
+            geometry_geojson,
+            style_function=lambda f: style,
+        ).add_to(m2)
+
+    if rep_point_geojson and rep_point_geojson.get("features"):
+        for feat in rep_point_geojson["features"]:
+            geom = feat.get("geometry")
+            if geom and geom.get("type") == "Point":
+                coords = geom.get("coordinates", [])
+                if len(coords) >= 2:
+                    folium.CircleMarker(
+                        location=[coords[1], coords[0]],
+                        radius=8,
+                        color=pin_hex,
+                        fill=True,
+                        fill_color=pin_hex,
+                        fill_opacity=0.6,
+                        weight=2,
+                    ).add_to(m2)
+
+    if not rep_point_geojson and not geometry_geojson:
+        st.info("Ask about a project by name to see its geometry on the map.")
+
+    if show_title:
+        st.subheader("Vizonomy AI")
+    folium_static(m2, width=width, height=height)
+    with st.expander("Dataset Information"):
+        layer_name = (
+            dataset_data.get("data_layer")
+            or dataset_data.get("dataset_name")
+            or "Lake County"
+        )
+        st.write(f"**Layer:** {layer_name}")
+        st.write("**Source:** Lake County")
+        st.write(f"**Description:** {dataset_data.get('description', 'N/A')}")
+
+
+def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None):
+    """
+    Render dataset layer as a map using streamlit-folium.
+
+    Supports:
+    - tile_url: raster tile layer (e.g. Forest Carbon)
+    - layer_type=FeatureServer + layer_id: vector from Lake County ArcGIS
     """
     try:
-        # Extract tile_url from dataset_data
+        layer_type = dataset_data.get("layer_type")
+        layer_id = dataset_data.get("layer_id")
+
+        # Lake County vector layer
+        if layer_type == "FeatureServer" and layer_id:
+            _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data)
+            return
+
+        # Raster tile layer (default)
         tile_url = dataset_data.get("tile_url")
         if not tile_url:
-            st.warning("No tile_url found in dataset")
+            st.warning("No tile_url or valid Lake County layer found in dataset")
             return
 
         # Fetch geometry when AOI has src_id/source but no geometry
@@ -267,7 +376,7 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
 
         # Display map in streamlit (title: Vizonomy AI; layer name only in map layer control)
         if show_title:
-            st.subheader("🌎 Vizonomy AI")
+            st.subheader("Vizonomy AI")
         folium_static(m2, width=width, height=height)
 
         # Show dataset info

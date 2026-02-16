@@ -1,3 +1,5 @@
+from typing import Optional
+
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
@@ -29,6 +31,7 @@ class _APISettings(BaseSettings):
     allow_anonymous_chat: bool = Field(
         default=False, alias="ALLOW_ANONYMOUS_CHAT"
     )
+    arcgis_api_key: Optional[str] = Field(default=None, alias="ARCGIS_API_KEY")
 
     @property
     def domains_allowlist(self) -> list[str]:

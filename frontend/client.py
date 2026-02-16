@@ -104,6 +104,43 @@ class ZenoClient:
                     decoded_update = update.decode("utf-8")
                     yield json.loads(decoded_update)
 
+    def fetch_lake_county_layers(self) -> List[Dict[str, Any]]:
+        """Fetch list of Lake County layers."""
+        url = f"{self.base_url}/api/lake_county/layers"
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        with requests.get(url, headers=headers) as response:
+            if response.status_code != 200:
+                raise Exception(
+                    f"Request failed with status code {response.status_code}: {response.text}"
+                )
+            data = response.json()
+            return data.get("layers", [])
+
+    def fetch_lake_county_features(
+        self,
+        layer_id: str,
+        minx: float = -88.33,
+        miny: float = 41.99,
+        maxx: float = -87.67,
+        maxy: float = 42.69,
+    ) -> Dict[str, Any]:
+        """
+        Fetch features from a Lake County ArcGIS layer by bbox (WGS84).
+        """
+        url = f"{self.base_url}/api/lake_county/{layer_id}/features"
+        params = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        with requests.get(url, params=params, headers=headers) as response:
+            if response.status_code != 200:
+                raise Exception(
+                    f"Request failed with status code {response.status_code}: {response.text}"
+                )
+            return response.json()
+
     def fetch_geometry(self, source: str, src_id: str):
         """
         Fetch the geometry for a given src_id.

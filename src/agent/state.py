@@ -20,6 +20,7 @@ def add_aois(left, right):
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_persona: str
+    data_source: str  # "forest_carbon" | "lake_county"
 
     # pick-aoi tool
     aoi: dict
@@ -31,6 +32,9 @@ class AgentState(TypedDict):
 
     # pick-dataset tool
     dataset: dict
+
+    # Lake County project lookup
+    project_result: dict
 
     # pull-data tool
     raw_data: dict
