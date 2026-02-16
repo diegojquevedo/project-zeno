@@ -16,7 +16,7 @@ if "token" not in st.session_state:
 
 # Sidebar content
 with st.sidebar:
-    st.header("Vizonomy AI")
+    st.header("Geo AI")
     st.write(
         """
     This is a friendly prompt-based system to filter and analyze mapping data.

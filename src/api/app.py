@@ -81,6 +81,7 @@ from src.api.lake_county_config import (
 from src.api.lake_county_service import (
     fetch_lake_county_boundary,
     fetch_lake_county_domains,
+    fetch_municipality_boundary,
     query_lake_county_projects,
     search_lake_county_project,
 )
@@ -1531,6 +1532,20 @@ async def get_lake_county_boundary():
             }
         ],
     }
+
+
+@app.get("/api/lake_county/municipality")
+async def get_lake_county_municipality(name: str = ""):
+    """
+    Fetch municipality boundary GeoJSON by name (e.g. Village of Wadsworth).
+    Returns outline geometry from Municipal Boundaries layer.
+    """
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="name parameter required")
+    boundary = await fetch_municipality_boundary(name.strip())
+    if boundary and boundary.get("features"):
+        return boundary
+    raise HTTPException(status_code=404, detail=f"No municipality found matching '{name}'")
 
 
 @app.get("/api/lake_county/domains")

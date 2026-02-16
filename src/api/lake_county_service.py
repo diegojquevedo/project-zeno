@@ -10,6 +10,7 @@ from src.api.lake_county_config import (
     LAKE_COUNTY_LAYERS_BY_ID,
     LAKE_COUNTY_SEARCH_LAYER_ID,
     LC_BOUNDARY_URL,
+    LC_MUNICIPALITIES_URL,
 )
 from src.shared.logging_config import get_logger
 
@@ -152,6 +153,36 @@ async def query_lake_county_projects(
             })
 
     return {"found": True, "matches": matches, "limit_exceeded": limit_exceeded}
+
+
+async def fetch_municipality_boundary(jurisdiction_name: str) -> dict | None:
+    """
+    Fetch municipality boundary GeoJSON from Municipal Boundaries layer by name.
+    Uses NAME field with LIKE match (case-insensitive). Returns outline geometry only.
+    """
+    if not jurisdiction_name or not str(jurisdiction_name).strip():
+        return None
+    safe = str(jurisdiction_name).strip().replace("'", "''")
+    where = f"UPPER(NAME) LIKE UPPER('%{safe}%')"
+    query_url = f"{LC_MUNICIPALITIES_URL}/query"
+    params = {
+        "where": where,
+        "outFields": "NAME",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "f": "geojson",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(query_url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("LC_MUNI_BOUNDARY_FETCH_FAILED", jurisdiction=jurisdiction_name, error=str(e))
+        return None
+    if "error" in data or not data.get("features"):
+        return None
+    return data
 
 
 async def fetch_lake_county_boundary() -> dict | None:

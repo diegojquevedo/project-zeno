@@ -189,7 +189,7 @@ def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict
         return None
 
 
-def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None):
+def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None, jurisdiction_boundary=None):
     """
     Render Lake County map.
     - If project_data (single): show rep point (PIN) + geometry, zoom to project.
@@ -248,6 +248,19 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
             boundary_geojson,
             style_function=lambda f: LC_BOUNDARY_STYLE,
             name="Lake County Boundary",
+        ).add_to(m2)
+
+    # Jurisdiction boundary (municipality outline) when filtering by jurisdiction
+    if jurisdiction_boundary and jurisdiction_boundary.get("features"):
+        folium.GeoJson(
+            jurisdiction_boundary,
+            style_function=lambda f: {
+                "color": "#e65100",
+                "weight": 2.5,
+                "fillColor": "#ffffff",
+                "fillOpacity": 0,
+            },
+            name="Jurisdiction",
         ).add_to(m2)
 
     if list_mode:
@@ -313,7 +326,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         st.info("Ask about a project by name to see its geometry on the map.")
 
     if show_title:
-        st.subheader("Vizonomy AI")
+        st.subheader("Geo AI")
     folium_static(m2, width=width, height=height)
     with st.expander("Dataset Information"):
         layer_name = (
@@ -326,7 +339,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         st.write(f"**Description:** {dataset_data.get('description', 'N/A')}")
 
 
-def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None):
+def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None):
     """
     Render dataset layer as a map using streamlit-folium.
 
@@ -340,7 +353,16 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
 
         # Lake County vector layer
         if layer_type == "FeatureServer" and layer_id:
-            _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data, project_list)
+            _render_lake_county_map(
+                dataset_data,
+                aoi_data,
+                show_title,
+                width,
+                height,
+                project_data,
+                project_list,
+                jurisdiction_boundary,
+            )
             return
 
         # Raster tile layer (default)
@@ -433,9 +455,9 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
         # Add layer control
         folium.LayerControl().add_to(m2)
 
-        # Display map in streamlit (title: Vizonomy AI; layer name only in map layer control)
+        # Display map in streamlit (title: Geo AI; layer name only in map layer control)
         if show_title:
-            st.subheader("Vizonomy AI")
+            st.subheader("Geo AI")
         folium_static(m2, width=width, height=height)
 
         # Show dataset info

@@ -11,6 +11,7 @@ from langgraph.types import Command
 
 from src.api.lake_county_service import (
     fetch_lake_county_domains,
+    fetch_municipality_boundary,
     query_lake_county_projects,
 )
 from src.shared.logging_config import get_logger
@@ -84,6 +85,10 @@ async def list_lake_county_projects(
     jurisdiction_val = jurisdiction.strip() if jurisdiction and str(jurisdiction).strip() else None
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
 
+    jurisdiction_boundary = None
+    if jurisdiction_val:
+        jurisdiction_boundary = await fetch_municipality_boundary(jurisdiction_val)
+
     result = await query_lake_county_projects(
         status=resolved_status,
         project_status=resolved_project_status,
@@ -123,14 +128,18 @@ async def list_lake_county_projects(
 
     tool_message = "\n".join(summary_lines)
 
+    project_result = {
+        "list": True,
+        "matches": matches,
+        "total_returned": len(matches),
+        "limit_exceeded": limit_exceeded,
+    }
+    if jurisdiction_boundary and jurisdiction_boundary.get("features"):
+        project_result["jurisdiction_boundary"] = jurisdiction_boundary
+
     return Command(
         update={
-            "project_result": {
-                "list": True,
-                "matches": matches,
-                "total_returned": len(matches),
-                "limit_exceeded": limit_exceeded,
-            },
+            "project_result": project_result,
             "messages": [ToolMessage(content=tool_message, tool_call_id=tool_call_id)],
         },
     )

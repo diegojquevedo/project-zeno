@@ -62,6 +62,9 @@ LAKE_COUNTY_SEARCH_LAYER_ID = "project_representative_points"
 # Lake County Boundary - use PoliticalBoundaries (services3 responds; maps.lakecountyil.gov times out)
 LC_BOUNDARY_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/2"
 
+# Municipal Boundaries - for highlighting jurisdiction outline when filtering by jurisdiction
+LC_MUNICIPALITIES_URL = f"{SMC_API_BASE}/LakeCounty_TaxDistricts/FeatureServer/10"
+
 # Map Geometry attribute (from layer 30) to geometry layer_id
 GEOMETRY_TYPE_TO_LAYER = {
     "Polygon": "project_areas",
