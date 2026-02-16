@@ -74,10 +74,11 @@ from src.api.schemas import (
     UserWithQuotaModel,
 )
 from src.api.lake_county_config import (
+    LAKE_COUNTY_BOUNDS,
     LAKE_COUNTY_LAYERS,
     LAKE_COUNTY_LAYERS_BY_ID,
 )
-from src.api.lake_county_service import search_lake_county_project
+from src.api.lake_county_service import fetch_lake_county_boundary, search_lake_county_project
 from src.api.user_profile_configs.sectors import SECTOR_ROLES, SECTORS
 from src.shared.database import (
     close_global_pool,
@@ -1500,6 +1501,31 @@ async def get_lake_county_layers():
     List available Lake County layers (Projects).
     """
     return {"layers": LAKE_COUNTY_LAYERS}
+
+
+@app.get("/api/lake_county/boundary")
+async def get_lake_county_boundary():
+    """
+    Fetch Lake County Boundary GeoJSON for map overlay.
+    Returns boundary geometry or falls back to bounds polygon.
+    """
+    boundary = await fetch_lake_county_boundary()
+    if boundary and boundary.get("features"):
+        return boundary
+    [[wx, sy], [ex, ny]] = LAKE_COUNTY_BOUNDS
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[wx, sy], [ex, sy], [ex, ny], [wx, ny], [wx, sy]]],
+                },
+                "properties": {},
+            }
+        ],
+    }
 
 
 @app.get("/api/lake_county/project/search")

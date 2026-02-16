@@ -9,11 +9,35 @@ from src.api.lake_county_config import (
     GEOMETRY_TYPE_TO_LAYER,
     LAKE_COUNTY_LAYERS_BY_ID,
     LAKE_COUNTY_SEARCH_LAYER_ID,
+    LC_BOUNDARY_URL,
 )
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
 MAX_MATCHES = 10
+
+
+async def fetch_lake_county_boundary() -> dict | None:
+    """Fetch Lake County Boundary GeoJSON from ArcGIS MapServer."""
+    query_url = f"{LC_BOUNDARY_URL}/query"
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "f": "geojson",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(query_url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("LC_BOUNDARY_FETCH_FAILED", error=str(e))
+        return None
+    if "error" in data or not data.get("features"):
+        return None
+    return data
 
 
 async def _fetch_project_geometry(client: httpx.AsyncClient, project_id: int, geom_type: str) -> dict | None:

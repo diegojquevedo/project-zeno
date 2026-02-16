@@ -104,6 +104,19 @@ class ZenoClient:
                     decoded_update = update.decode("utf-8")
                     yield json.loads(decoded_update)
 
+    def fetch_lake_county_boundary(self) -> Dict[str, Any]:
+        """Fetch Lake County Boundary GeoJSON for map overlay."""
+        url = f"{self.base_url}/api/lake_county/boundary"
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        with requests.get(url, headers=headers) as response:
+            if response.status_code != 200:
+                raise Exception(
+                    f"Request failed with status code {response.status_code}: {response.text}"
+                )
+            return response.json()
+
     def fetch_lake_county_layers(self) -> List[Dict[str, Any]]:
         """Fetch list of Lake County layers."""
         url = f"{self.base_url}/api/lake_county/layers"

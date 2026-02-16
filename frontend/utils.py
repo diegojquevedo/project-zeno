@@ -170,6 +170,24 @@ LAKE_COUNTY_BOUNDS = [[-88.33, 41.99], [-87.67, 42.69]]
 LAKE_COUNTY_CENTER = [42.34, -88.0]
 LAKE_COUNTY_ZOOM = 10
 
+# Match original platform: blue outline, transparent/minimal fill
+LC_BOUNDARY_STYLE = {
+    "color": "#004da8",
+    "weight": 2,
+    "fillColor": "#ffffff",
+    "fillOpacity": 0,
+}
+
+
+@st.cache_data(ttl=3600)
+def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict | None:
+    """Fetch Lake County Boundary (cached 1h)."""
+    try:
+        client = ZenoClient(base_url=base_url, token=token)
+        return client.fetch_lake_county_boundary()
+    except Exception:
+        return None
+
 
 def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None):
     """
@@ -219,6 +237,16 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         max_zoom=19,
         zoom_control=True,
     )
+
+    boundary_geojson = _fetch_lake_county_boundary_cached(
+        API_BASE_URL, st.session_state.get("token")
+    )
+    if boundary_geojson and boundary_geojson.get("features"):
+        folium.GeoJson(
+            boundary_geojson,
+            style_function=lambda f: LC_BOUNDARY_STYLE,
+            name="Lake County Boundary",
+        ).add_to(m2)
 
     projecttype = None
     if project_data and isinstance(project_data, dict):

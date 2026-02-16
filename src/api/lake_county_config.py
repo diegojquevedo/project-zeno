@@ -59,6 +59,9 @@ LAKE_COUNTY_LAYERS_BY_ID = {l["layer_id"]: l for l in LAKE_COUNTY_LAYERS}
 # Layer used for project search by name (has Name field)
 LAKE_COUNTY_SEARCH_LAYER_ID = "project_representative_points"
 
+# Lake County Boundary - use PoliticalBoundaries (services3 responds; maps.lakecountyil.gov times out)
+LC_BOUNDARY_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/2"
+
 # Map Geometry attribute (from layer 30) to geometry layer_id
 GEOMETRY_TYPE_TO_LAYER = {
     "Polygon": "project_areas",
