@@ -15,6 +15,143 @@ from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
 MAX_MATCHES = 10
+MAX_LIST_PROJECTS = 50
+
+# Fields we fetch unique values for (for filter resolution)
+DOMAIN_FIELDS = ["status", "ProjectStatus", "jurisdiction"]
+
+
+async def fetch_lake_county_domains() -> dict[str, list[str]]:
+    """
+    Fetch unique values for status, ProjectStatus, jurisdiction from Representative Points layer.
+    Used so the AI can map user terms (e.g. "submitted", "Under Review") to actual field values.
+    """
+    layer = LAKE_COUNTY_LAYERS_BY_ID.get(LAKE_COUNTY_SEARCH_LAYER_ID)
+    if not layer:
+        return {}
+    query_url = f"{layer['arcgis_url']}/query"
+    result: dict[str, list[str]] = {}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for field in DOMAIN_FIELDS:
+            params = {
+                "where": "1=1",
+                "outFields": field,
+                "returnGeometry": "false",
+                "returnDistinctValues": "true",
+                "returnExceededLimitFeatures": "true",
+                "f": "json",
+            }
+            try:
+                resp = await client.get(query_url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                logger.warning("LC_DOMAINS_FETCH_FAILED", field=field, error=str(e))
+                result[field] = []
+                continue
+            if "error" in data:
+                result[field] = []
+                continue
+            features = data.get("features", [])
+            values = []
+            for f in features:
+                attr = f.get("attributes", {})
+                v = attr.get(field)
+                if v is not None and str(v).strip():
+                    values.append(str(v).strip())
+            result[field] = sorted(set(values))
+
+    return result
+
+
+async def query_lake_county_projects(
+    *,
+    status: str | None = None,
+    project_status: str | None = None,
+    jurisdiction: str | None = None,
+    project_partners: str | None = None,
+    limit: int = MAX_LIST_PROJECTS,
+) -> dict[str, Any]:
+    """
+    Query Lake County projects by filters. Returns matches with PIN + geometry.
+    Uses CONTAINS/LIKE for jurisdiction and ProjectPartners; exact match for status/ProjectStatus.
+    """
+    layer = LAKE_COUNTY_LAYERS_BY_ID.get(LAKE_COUNTY_SEARCH_LAYER_ID)
+    if not layer:
+        return {"found": False, "matches": [], "limit_exceeded": False}
+
+    conditions = []
+    if status and str(status).strip():
+        safe = str(status).strip().replace("'", "''")
+        conditions.append(f"UPPER(status) = UPPER('{safe}')")
+    if project_status and str(project_status).strip():
+        safe = str(project_status).strip().replace("'", "''")
+        conditions.append(f"UPPER(ProjectStatus) = UPPER('{safe}')")
+    if jurisdiction and str(jurisdiction).strip():
+        safe = str(jurisdiction).strip().replace("'", "''")
+        conditions.append(f"UPPER(jurisdiction) LIKE UPPER('%{safe}%')")
+    if project_partners and str(project_partners).strip():
+        safe = str(project_partners).strip().replace("'", "''")
+        conditions.append(f"UPPER(ProjectPartners) LIKE UPPER('%{safe}%')")
+
+    if not conditions:
+        return {"found": False, "matches": [], "limit_exceeded": False, "message": "No filters provided."}
+
+    where = " AND ".join(conditions)
+    params = {
+        "where": where,
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "f": "geojson",
+        "resultRecordCount": limit + 1,
+    }
+
+    query_url = f"{layer['arcgis_url']}/query"
+    logger.info("LC_QUERY_PROJECTS", where=where, limit=limit)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(query_url, params=params)
+            resp.raise_for_status()
+            geojson = resp.json()
+    except Exception as e:
+        logger.exception("LC_QUERY_HTTP_ERROR", error=str(e))
+        return {"found": False, "matches": [], "limit_exceeded": False}
+
+    features = geojson.get("features", [])
+    if "error" in geojson:
+        return {"found": False, "matches": [], "limit_exceeded": False}
+
+    limit_exceeded = len(features) > limit
+    features = features[:limit]
+
+    matches = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for feat in features:
+            attrs = feat.get("properties", {})
+            rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
+            project_id = attrs.get("project_id")
+            geom_type = attrs.get("Geometry")
+            geometry_geojson = None
+            if project_id and geom_type:
+                geometry_geojson = await _fetch_project_geometry(client, project_id, geom_type)
+            rep_geom = feat.get("geometry")
+            geometry = None
+            if geometry_geojson and geometry_geojson.get("features"):
+                geometry = geometry_geojson["features"][0].get("geometry")
+            if not geometry:
+                geometry = rep_geom
+            matches.append({
+                "rep_point_geojson": rep_point_geojson,
+                "geometry_geojson": geometry_geojson,
+                "geojson": geometry_geojson or rep_point_geojson,
+                "attributes": attrs,
+                "geometry": geometry,
+            })
+
+    return {"found": True, "matches": matches, "limit_exceeded": limit_exceeded}
 
 
 async def fetch_lake_county_boundary() -> dict | None:

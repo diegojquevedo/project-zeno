@@ -18,6 +18,7 @@ from src.agent.tools import (
     generate_insights,
     get_capabilities,
     get_lake_county_project,
+    list_lake_county_projects,
     pick_aoi,
     pick_dataset,
     pull_data,
@@ -40,7 +41,8 @@ CRITICAL INSTRUCTIONS:
 - Provide intermediate messages between tool calls to the user to keep them updated on the progress of the analysis.
 
 TOOLS:
-- get_lake_county_project: When data_source is Lake County and user asks about a specific project by name (e.g. "Tell me about Wadsworth Oaks Subdivision Drainage Improvements"), use this to search ArcGIS. Returns geometry (for map zoom) and project details. Describe the attributes in your response.
+- get_lake_county_project: When data_source is Lake County and user asks about a specific project by name (e.g. "Tell me about Wadsworth Oaks"), use this to search ArcGIS. Returns geometry (for map zoom) and project details.
+- list_lake_county_projects: When data_source is Lake County and user asks for projects matching filters (e.g. "projects Under Review", "Submitted projects in Village of Wadsworth", "projects with Village of Wadsworth as partner"), use this. Returns list of projects shown on map (no zoom).
 - pick_aoi: Pick the best area of interest (AOI) based on a place name and user's question.
 - pick_dataset: Find the most relevant datasets to help answer the user's question.
 - pull_data: Pulls data for the selected AOI and dataset in the specified date range.
@@ -52,9 +54,10 @@ WORKFLOW:
 2. Use generate_insights to analyze the data and create a single chart insight. After pulling data, always create new insights.
 
 LAKE COUNTY MODE (when data_source is lake_county):
-- If user asks about a project by name (e.g. "Tell me about X", "Show me X", "Information on X project"), use get_lake_county_project(project_name) immediately.
-- Extract the project name from the user's message and call the tool. Do NOT use pick_aoi or pick_dataset for Lake County project queries.
-- Describe the project attributes (Name, Status, Location, etc.) from the tool result in your response.
+- If user asks about a specific project by name (e.g. "Tell me about X", "Show me X", "Information on X project"), use get_lake_county_project(project_name).
+- If user asks for projects matching criteria (e.g. "What projects are Under Review?", "Submitted projects in Village of Wadsworth", "projects with Village of Wadsworth as partner"), use list_lake_county_projects(status=..., project_status=..., jurisdiction=..., project_partners=...). Extract filter values from the user's message.
+- Do NOT use pick_aoi or pick_dataset for Lake County project queries.
+- Describe the project attributes from the tool result in your response.
 
 When you see UI action messages:
 1. Acknowledge the user's selection: "I see you've selected [item name]"
@@ -121,6 +124,7 @@ GENERAL NOTES:
 tools = [
     get_capabilities,
     get_lake_county_project,
+    list_lake_county_projects,
     pick_aoi,
     pick_dataset,
     pull_data,

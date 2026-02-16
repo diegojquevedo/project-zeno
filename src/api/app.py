@@ -78,7 +78,12 @@ from src.api.lake_county_config import (
     LAKE_COUNTY_LAYERS,
     LAKE_COUNTY_LAYERS_BY_ID,
 )
-from src.api.lake_county_service import fetch_lake_county_boundary, search_lake_county_project
+from src.api.lake_county_service import (
+    fetch_lake_county_boundary,
+    fetch_lake_county_domains,
+    query_lake_county_projects,
+    search_lake_county_project,
+)
 from src.api.user_profile_configs.sectors import SECTOR_ROLES, SECTORS
 from src.shared.database import (
     close_global_pool,
@@ -1526,6 +1531,38 @@ async def get_lake_county_boundary():
             }
         ],
     }
+
+
+@app.get("/api/lake_county/domains")
+async def get_lake_county_domains():
+    """
+    Fetch unique values for status, ProjectStatus, jurisdiction.
+    Used so the AI can map user terms to actual field values.
+    """
+    return await fetch_lake_county_domains()
+
+
+@app.get("/api/lake_county/projects")
+async def list_lake_county_projects_endpoint(
+    status: str | None = None,
+    project_status: str | None = None,
+    jurisdiction: str | None = None,
+    project_partners: str | None = None,
+    limit: int = 50,
+):
+    """
+    List Lake County projects by filters.
+    Max 50 results; if more, returns limit_exceeded=true.
+    """
+    if limit > 50:
+        limit = 50
+    return await query_lake_county_projects(
+        status=status,
+        project_status=project_status,
+        jurisdiction=jurisdiction,
+        project_partners=project_partners,
+        limit=limit,
+    )
 
 
 @app.get("/api/lake_county/project/search")

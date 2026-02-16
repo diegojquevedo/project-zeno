@@ -96,6 +96,8 @@ if "map_project_data" not in st.session_state:
     st.session_state.map_project_data = None
 if "map_project_matches" not in st.session_state:
     st.session_state.map_project_matches = None
+if "map_project_list" not in st.session_state:
+    st.session_state.map_project_list = None
 if "data_source" not in st.session_state:
     st.session_state.data_source = "forest_carbon"
 
@@ -139,7 +141,7 @@ st.markdown(
 chat_col, map_col = st.columns([1, 1])
 
 with chat_col:
-    st.header("Vizonomy AI")
+    st.header("Geo AI")
     st.write("This is a friendly prompt-based system to filter and analyze mapping data.")
 
     data_source = st.selectbox(
@@ -159,6 +161,7 @@ with chat_col:
             st.session_state.map_aoi_data = None
             st.session_state.map_project_data = None
             st.session_state.map_project_matches = None
+            st.session_state.map_project_list = None
 
     if st.session_state.data_source == "lake_county":
         st.caption("Ask about a project by name to see its geometry and details.")
@@ -247,12 +250,19 @@ with chat_col:
                         if pr is None:
                             st.session_state.map_project_data = None
                             st.session_state.map_project_matches = None
+                            st.session_state.map_project_list = None
+                        elif pr.get("list"):
+                            st.session_state.map_project_list = pr.get("matches", [])
+                            st.session_state.map_project_data = None
+                            st.session_state.map_project_matches = None
                         elif pr.get("multiple"):
                             st.session_state.map_project_matches = pr.get("matches", [])
                             st.session_state.map_project_data = None
+                            st.session_state.map_project_list = None
                         else:
                             st.session_state.map_project_data = pr
                             st.session_state.map_project_matches = None
+                            st.session_state.map_project_list = None
                     render_stream(stream, skip_maps=True)
                 except Exception as e:
                     st.error(f"Error processing stream: {e}")
@@ -260,7 +270,8 @@ with chat_col:
 with map_col:
     if st.session_state.data_source == "lake_county":
         matches = st.session_state.map_project_matches
-        if matches and not st.session_state.map_project_data:
+        project_list = st.session_state.map_project_list
+        if matches and not st.session_state.map_project_data and not project_list:
             st.write("**Select a project to view on the map:**")
             cols = st.columns(min(len(matches), 3))
             for i, m in enumerate(matches):
@@ -285,6 +296,9 @@ with map_col:
         width=1200,
         height=550,
         project_data=st.session_state.map_project_data
+        if st.session_state.data_source == "lake_county"
+        else None,
+        project_list=st.session_state.map_project_list
         if st.session_state.data_source == "lake_county"
         else None,
     )

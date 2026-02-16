@@ -189,18 +189,20 @@ def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict
         return None
 
 
-def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None):
+def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None):
     """
     Render Lake County map.
-    - If project_data: show rep point (PIN) + geometry (polygon/line/point) with blue style.
+    - If project_data (single): show rep point (PIN) + geometry, zoom to project.
+    - If project_list (multiple): show all PINs + geometries, no zoom (centered on LC).
     - Else: base map centered on Lake County.
     """
     center = LAKE_COUNTY_CENTER
     zoom = LAKE_COUNTY_ZOOM
     rep_point_geojson = None
     geometry_geojson = None
+    list_mode = bool(project_list and isinstance(project_list, list))
 
-    if project_data and isinstance(project_data, dict):
+    if project_data and isinstance(project_data, dict) and not list_mode:
         rep_point_geojson = project_data.get("rep_point_geojson")
         geometry_geojson = project_data.get("geometry_geojson")
         geojson = geometry_geojson or rep_point_geojson
@@ -248,37 +250,66 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
             name="Lake County Boundary",
         ).add_to(m2)
 
-    projecttype = None
-    if project_data and isinstance(project_data, dict):
-        projecttype = project_data.get("attributes", {}).get("projecttype")
-        if not projecttype and geometry_geojson and geometry_geojson.get("features"):
-            projecttype = geometry_geojson["features"][0].get("properties", {}).get("projecttype")
-    style = get_style_by_projecttype(projecttype)
-    pin_hex = style["fillColor"]
+    if list_mode:
+        for m in project_list:
+            m_geom = m.get("geometry_geojson")
+            m_rep = m.get("rep_point_geojson")
+            m_attrs = m.get("attributes", {})
+            m_projecttype = m_attrs.get("projecttype")
+            m_style = get_style_by_projecttype(m_projecttype)
+            m_pin_hex = m_style["fillColor"]
+            if m_geom and m_geom.get("features"):
+                folium.GeoJson(
+                    m_geom,
+                    style_function=lambda f, s=m_style: s,
+                ).add_to(m2)
+            if m_rep and m_rep.get("features"):
+                for feat in m_rep["features"]:
+                    geom = feat.get("geometry")
+                    if geom and geom.get("type") == "Point":
+                        coords = geom.get("coordinates", [])
+                        if len(coords) >= 2:
+                            folium.CircleMarker(
+                                location=[coords[1], coords[0]],
+                                radius=8,
+                                color=m_pin_hex,
+                                fill=True,
+                                fill_color=m_pin_hex,
+                                fill_opacity=0.6,
+                                weight=2,
+                            ).add_to(m2)
+    else:
+        projecttype = None
+        if project_data and isinstance(project_data, dict):
+            projecttype = project_data.get("attributes", {}).get("projecttype")
+            if not projecttype and geometry_geojson and geometry_geojson.get("features"):
+                projecttype = geometry_geojson["features"][0].get("properties", {}).get("projecttype")
+        style = get_style_by_projecttype(projecttype)
+        pin_hex = style["fillColor"]
 
-    if geometry_geojson and geometry_geojson.get("features"):
-        folium.GeoJson(
-            geometry_geojson,
-            style_function=lambda f: style,
-        ).add_to(m2)
+        if geometry_geojson and geometry_geojson.get("features"):
+            folium.GeoJson(
+                geometry_geojson,
+                style_function=lambda f: style,
+            ).add_to(m2)
 
-    if rep_point_geojson and rep_point_geojson.get("features"):
-        for feat in rep_point_geojson["features"]:
-            geom = feat.get("geometry")
-            if geom and geom.get("type") == "Point":
-                coords = geom.get("coordinates", [])
-                if len(coords) >= 2:
-                    folium.CircleMarker(
-                        location=[coords[1], coords[0]],
-                        radius=8,
-                        color=pin_hex,
-                        fill=True,
-                        fill_color=pin_hex,
-                        fill_opacity=0.6,
-                        weight=2,
-                    ).add_to(m2)
+        if rep_point_geojson and rep_point_geojson.get("features"):
+            for feat in rep_point_geojson["features"]:
+                geom = feat.get("geometry")
+                if geom and geom.get("type") == "Point":
+                    coords = geom.get("coordinates", [])
+                    if len(coords) >= 2:
+                        folium.CircleMarker(
+                            location=[coords[1], coords[0]],
+                            radius=8,
+                            color=pin_hex,
+                            fill=True,
+                            fill_color=pin_hex,
+                            fill_opacity=0.6,
+                            weight=2,
+                        ).add_to(m2)
 
-    if not rep_point_geojson and not geometry_geojson:
+    if not list_mode and not rep_point_geojson and not geometry_geojson:
         st.info("Ask about a project by name to see its geometry on the map.")
 
     if show_title:
@@ -295,7 +326,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         st.write(f"**Description:** {dataset_data.get('description', 'N/A')}")
 
 
-def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None):
+def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None):
     """
     Render dataset layer as a map using streamlit-folium.
 
@@ -309,7 +340,7 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
 
         # Lake County vector layer
         if layer_type == "FeatureServer" and layer_id:
-            _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data)
+            _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data, project_list)
             return
 
         # Raster tile layer (default)
