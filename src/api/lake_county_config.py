@@ -72,3 +72,20 @@ GEOMETRY_TYPE_TO_LAYER = {
     "Polyline": "project_lines",
     "Line": "project_lines",
 }
+
+# System purpose (for agent reasoning context)
+LAKE_COUNTY_SYSTEM_PURPOSE = (
+    "INFLOW! is the Lake County Stormwater Management Commission's intake platform for "
+    "stormwater projects. Projects address drainage, flood damages, water quality, and stormwater infrastructure."
+)
+
+# Project type definitions (for agent reasoning - maps user semantic queries to project_types)
+LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS = [
+    ("Capital", "Master planned improvements that resolve multi-jurisdictional drainage and flood damages and preserve water quality."),
+    ("WMB", "Plans to identify and help reduce flood damages and improve water quality."),
+    ("SIRF", "Plans to help improve and/or restore stormwater infrastructure."),
+    ("319", "Nonpoint Source Pollution Control program to protect water quality in Illinois."),
+    ("WMAG", "Plans to support local watershed partnerships in Lake County."),
+    ("Maintenance", "Restore existing infrastructure eligible for SMC participation."),
+    ("Other", "Any other effort for which SMC funds or staff time is requested."),
+]

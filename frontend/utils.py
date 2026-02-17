@@ -10,7 +10,7 @@ from shapely.geometry import shape
 from streamlit_folium import folium_static
 
 from client import ZenoClient
-from lake_county_constants import get_style_by_projecttype
+from lake_county_constants import FILL_OPACITY, get_style_by_projecttype
 
 API_BASE_URL = os.environ.get(
     "API_BASE_URL",
@@ -168,7 +168,7 @@ def render_aoi_map(aoi_data, subregion_data=None):
 # Lake County bounds (WGS84): [[west, south], [east, north]]
 LAKE_COUNTY_BOUNDS = [[-88.33, 41.99], [-87.67, 42.69]]
 LAKE_COUNTY_CENTER = [42.34, -88.0]
-LAKE_COUNTY_ZOOM = 10
+LAKE_COUNTY_ZOOM = 10.5
 
 # Match original platform: blue outline, transparent/minimal fill
 LC_BOUNDARY_STYLE = {
@@ -238,6 +238,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         tiles="CartoDB positron",
         max_zoom=19,
         zoom_control=True,
+        zoom_snap=0.5,  # allow half-level zoom (10.5, 11.5, etc.)
     )
 
     boundary_geojson = _fetch_lake_county_boundary_cached(
@@ -284,12 +285,13 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
                         if len(coords) >= 2:
                             folium.CircleMarker(
                                 location=[coords[1], coords[0]],
-                                radius=8,
+                                radius=6,
                                 color=m_pin_hex,
                                 fill=True,
                                 fill_color=m_pin_hex,
-                                fill_opacity=0.6,
-                                weight=2,
+                                fill_opacity=1.0,
+                                weight=10,
+                                opacity=FILL_OPACITY,
                             ).add_to(m2)
     else:
         projecttype = None
@@ -314,16 +316,17 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
                     if len(coords) >= 2:
                         folium.CircleMarker(
                             location=[coords[1], coords[0]],
-                            radius=8,
+                            radius=6,
                             color=pin_hex,
                             fill=True,
                             fill_color=pin_hex,
-                            fill_opacity=0.6,
-                            weight=2,
+                            fill_opacity=1.0,
+                            weight=10,
+                            opacity=FILL_OPACITY,
                         ).add_to(m2)
 
     if not list_mode and not rep_point_geojson and not geometry_geojson:
-        st.info("Ask about a project by name to see its geometry on the map.")
+        st.info("Search for a project by name or filter by status, jurisdiction, or project type.")
 
     if show_title:
         st.subheader("Geo AI")

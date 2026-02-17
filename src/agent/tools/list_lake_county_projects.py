@@ -47,6 +47,7 @@ def _format_attributes(attrs: dict) -> str:
 async def list_lake_county_projects(
     status: str | None = None,
     project_status: str | None = None,
+    project_types: list[str] | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
@@ -59,7 +60,9 @@ async def list_lake_county_projects(
     - "Projects in jurisdiction Village of Wadsworth" -> jurisdiction="Village of Wadsworth"
     - "Projects where Village of Wadsworth is a project partner" -> project_partners="Village of Wadsworth"
     - "Submitted projects in Village of Wadsworth" -> status="Submitted", jurisdiction="Village of Wadsworth"
+    - "Projects with flood areas in Wadsworth" -> project_types=["Capital","WMB","SIRF"], jurisdiction="Village of Wadsworth"
 
+    project_types: use the project type definitions from the prompt to reason. E.g. flood-related -> Capital, WMB, SIRF.
     Valid values are resolved automatically from the data. Pass the user's terms as-is.
     """
     domains = await fetch_lake_county_domains()
@@ -89,9 +92,12 @@ async def list_lake_county_projects(
     if jurisdiction_val:
         jurisdiction_boundary = await fetch_municipality_boundary(jurisdiction_val)
 
+    project_types_val = [t.strip() for t in project_types if t and str(t).strip()] if project_types else None
+
     result = await query_lake_county_projects(
         status=resolved_status,
         project_status=resolved_project_status,
+        project_types=project_types_val,
         jurisdiction=jurisdiction_val,
         project_partners=partners_val,
     )

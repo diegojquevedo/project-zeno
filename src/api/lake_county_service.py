@@ -70,6 +70,7 @@ async def query_lake_county_projects(
     *,
     status: str | None = None,
     project_status: str | None = None,
+    project_types: list[str] | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
     limit: int = MAX_LIST_PROJECTS,
@@ -77,12 +78,18 @@ async def query_lake_county_projects(
     """
     Query Lake County projects by filters. Returns matches with PIN + geometry.
     Uses CONTAINS/LIKE for jurisdiction and ProjectPartners; exact match for status/ProjectStatus.
+    project_types: filter by projecttype IN (...)
     """
     layer = LAKE_COUNTY_LAYERS_BY_ID.get(LAKE_COUNTY_SEARCH_LAYER_ID)
     if not layer:
         return {"found": False, "matches": [], "limit_exceeded": False}
 
     conditions = []
+    if project_types and len(project_types) > 0:
+        safe_types = [str(t).strip().replace("'", "''") for t in project_types if t and str(t).strip()]
+        if safe_types:
+            in_clause = ",".join(f"'{t}'" for t in safe_types)
+            conditions.append(f"projecttype IN ({in_clause})")
     if status and str(status).strip():
         safe = str(status).strip().replace("'", "''")
         conditions.append(f"UPPER(status) = UPPER('{safe}')")

@@ -167,7 +167,7 @@ with chat_col:
             st.session_state.map_jurisdiction_boundary = None
 
     if st.session_state.data_source == "lake_county":
-        st.caption("Ask about a project by name to see its geometry and details.")
+        st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
 
     st.divider()
 
@@ -188,7 +188,7 @@ with chat_col:
             st.session_state.map_chat_pending_input = current.strip()
 
     placeholder = (
-        "Ask about projects in Lake County"
+        "Search or filter Lake County projects"
         if st.session_state.data_source == "lake_county"
         else "Ask about carbon removal for a location"
     )
@@ -239,9 +239,6 @@ with chat_col:
             ):
                 try:
                     if stream.get("node") == "trace_info":
-                        update = json.loads(stream["update"])
-                        if "trace_id" in update:
-                            st.success(f"Trace ID: {update['trace_id']}")
                         continue
                     update = json.loads(stream["update"])
                     if "aoi" in update:

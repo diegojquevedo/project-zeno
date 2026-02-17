@@ -11,6 +11,10 @@ from langgraph.graph.state import CompiledStateGraph
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from src.api.lake_county_config import (
+    LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS,
+    LAKE_COUNTY_SYSTEM_PURPOSE,
+)
 from src.agent.llms import MODEL
 from src.agent.prompts import WORDING_INSTRUCTIONS
 from src.agent.state import AgentState
@@ -29,8 +33,17 @@ from src.shared.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _build_lake_county_project_types_block() -> str:
+    """Format project type definitions for the agent prompt."""
+    lines = []
+    for name, desc in LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS:
+        lines.append(f"  - {name}: {desc}")
+    return "\n".join(lines)
+
+
 def get_prompt(user: Optional[dict] = None) -> str:
     """Generate the prompt with current date. (Ignore user information)"""
+    project_types_block = _build_lake_county_project_types_block()
     return f"""You are a Global Nature Watch's Geospatial Agent with access to tools and user provided selections. Think step-by-step to help answer user queries.
 
 CRITICAL INSTRUCTIONS:
@@ -54,16 +67,23 @@ WORKFLOW:
 2. Use generate_insights to analyze the data and create a single chart insight. After pulling data, always create new insights.
 
 LAKE COUNTY MODE (when data_source is lake_county):
-- If user asks about a specific project by name (e.g. "Tell me about X", "Show me X", "Information on X project"), use get_lake_county_project(project_name).
-- If user asks for projects matching criteria (e.g. "What projects are Under Review?", "Submitted projects in Village of Wadsworth", "projects with Village of Wadsworth as partner"), use list_lake_county_projects(status=..., project_status=..., jurisdiction=..., project_partners=...). Extract filter values from the user's message.
+
+System purpose: {LAKE_COUNTY_SYSTEM_PURPOSE}
+
+Project type definitions (use these to reason about semantic queries like "flood areas", "water quality projects"):
+{project_types_block}
+
+- If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
+- If user asks for projects matching criteria, use list_lake_county_projects(status=..., project_status=..., project_types=..., jurisdiction=..., project_partners=...).
+- When the user asks by semantic criteria (e.g. "flood areas", "áreas de inundación", "water quality projects"), reason from the project type definitions above to decide which project_types apply. Example: "projects with flood areas" -> Capital, WMB, SIRF (they address flood damages or stormwater infrastructure).
+- In your response, explain what you deduced from the user's question ONLY when you actually inferred it. If the user explicitly names a project type (e.g. "SIRF projects"), do not say you "deduced" it; just show the results. If the user said something like "flood areas" and you inferred Capital/WMB/SIRF, then briefly state your reasoning.
 - Do NOT use pick_aoi or pick_dataset for Lake County project queries.
-- Describe the project attributes from the tool result in your response.
 
 When you see UI action messages:
-1. Acknowledge the user's selection: "I see you've selected [item name]"
-2. Check if you have all needed components (AOI + dataset + date range) before proceeding
-3. Use tools only for missing components
-4. If user asks to change selections, override UI selections
+1. Do NOT acknowledge obvious selections (e.g. "I see you've selected Lake County") — proceed directly to answering.
+2. Check if you have all needed components (AOI + dataset + date range) before proceeding.
+3. Use tools only for missing components.
+4. If user asks to change selections, override UI selections.
 
 PICK_AOI TOOL NOTES:
 - Use subregion parameter ONLY when the user wants to analyze or compare data ACROSS multiple administrative units within a parent area.

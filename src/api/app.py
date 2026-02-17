@@ -1561,19 +1561,23 @@ async def get_lake_county_domains():
 async def list_lake_county_projects_endpoint(
     status: str | None = None,
     project_status: str | None = None,
+    project_types: str | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
     limit: int = 50,
 ):
     """
     List Lake County projects by filters.
+    project_types: comma-separated (e.g. "Capital,WMB,SIRF").
     Max 50 results; if more, returns limit_exceeded=true.
     """
     if limit > 50:
         limit = 50
+    types_list = [t.strip() for t in (project_types or "").split(",") if t.strip()] or None
     return await query_lake_county_projects(
         status=status,
         project_status=project_status,
+        project_types=types_list,
         jurisdiction=jurisdiction,
         project_partners=project_partners,
         limit=limit,
