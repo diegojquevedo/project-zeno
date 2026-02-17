@@ -66,6 +66,9 @@ async def fetch_lake_county_domains() -> dict[str, list[str]]:
     return result
 
 
+MAX_PROJECTS_SEMANTIC_SEARCH = 200
+
+
 async def query_lake_county_projects(
     *,
     status: str | None = None,
@@ -74,11 +77,13 @@ async def query_lake_county_projects(
     jurisdiction: str | None = None,
     project_partners: str | None = None,
     limit: int = MAX_LIST_PROJECTS,
+    allow_no_filters: bool = False,
 ) -> dict[str, Any]:
     """
     Query Lake County projects by filters. Returns matches with PIN + geometry.
     Uses CONTAINS/LIKE for jurisdiction and ProjectPartners; exact match for status/ProjectStatus.
     project_types: filter by projecttype IN (...)
+    allow_no_filters: if True, fetch up to MAX_PROJECTS_SEMANTIC_SEARCH when no filters (for semantic search).
     """
     layer = LAKE_COUNTY_LAYERS_BY_ID.get(LAKE_COUNTY_SEARCH_LAYER_ID)
     if not layer:
@@ -103,21 +108,22 @@ async def query_lake_county_projects(
         safe = str(project_partners).strip().replace("'", "''")
         conditions.append(f"UPPER(ProjectPartners) LIKE UPPER('%{safe}%')")
 
-    if not conditions:
+    if not conditions and not allow_no_filters:
         return {"found": False, "matches": [], "limit_exceeded": False, "message": "No filters provided."}
 
-    where = " AND ".join(conditions)
+    where = " AND ".join(conditions) if conditions else "1=1"
+    effective_limit = MAX_PROJECTS_SEMANTIC_SEARCH if (allow_no_filters and not conditions) else limit
     params = {
         "where": where,
         "outFields": "*",
         "returnGeometry": "true",
         "outSR": 4326,
         "f": "geojson",
-        "resultRecordCount": limit + 1,
+        "resultRecordCount": effective_limit + 1,
     }
 
     query_url = f"{layer['arcgis_url']}/query"
-    logger.info("LC_QUERY_PROJECTS", where=where, limit=limit)
+    logger.info("LC_QUERY_PROJECTS", where=where, limit=effective_limit)
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -132,8 +138,8 @@ async def query_lake_county_projects(
     if "error" in geojson:
         return {"found": False, "matches": [], "limit_exceeded": False}
 
-    limit_exceeded = len(features) > limit
-    features = features[:limit]
+    limit_exceeded = len(features) > effective_limit
+    features = features[:effective_limit]
 
     matches = []
     async with httpx.AsyncClient(timeout=30.0) as client:

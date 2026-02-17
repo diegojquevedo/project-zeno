@@ -4,11 +4,13 @@ Uses domains to resolve user terms to actual field values.
 """
 from typing import Annotated
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 
+from src.agent.tools.lake_county_project_summary import build_project_summary_and_chart
 from src.api.lake_county_service import (
     fetch_lake_county_domains,
     fetch_municipality_boundary,
@@ -43,6 +45,15 @@ def _format_attributes(attrs: dict) -> str:
     return "\n".join(lines) if lines else "No attributes available."
 
 
+def _last_user_message(messages: list) -> str:
+    """Extract content from last HumanMessage in conversation."""
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            content = getattr(m, "content", None)
+            return str(content).strip() if content else ""
+    return ""
+
+
 @tool("list_lake_county_projects")
 async def list_lake_county_projects(
     status: str | None = None,
@@ -51,6 +62,7 @@ async def list_lake_county_projects(
     jurisdiction: str | None = None,
     project_partners: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
+    state: Annotated[dict, InjectedState] = None,
 ) -> Command:
     """
     List Lake County stormwater projects by filters.
@@ -118,21 +130,11 @@ async def list_lake_county_projects(
     matches = result["matches"]
     limit_exceeded = result.get("limit_exceeded", False)
 
-    summary_lines = [f"# Found {len(matches)} projects"]
-    if limit_exceeded:
-        summary_lines.append(
-            "\n**Note:** Results are limited to 50. Refine your filters (e.g. add jurisdiction or status) to see a complete list."
-        )
-    summary_lines.append("\n")
-    for i, m in enumerate(matches[:15], 1):
-        attrs = m.get("attributes", {})
-        name = attrs.get("Name", f"Project {i}")
-        summary_lines.append(f"{i}. {name}")
-    if len(matches) > 15:
-        summary_lines.append(f"... and {len(matches) - 15} more.")
-    summary_lines.append("\nAll projects are shown on the map. Zoom in to explore.")
+    user_query = _last_user_message((state or {}).get("messages", []))
+    tool_message, charts_data = await build_project_summary_and_chart(matches, user_query)
 
-    tool_message = "\n".join(summary_lines)
+    if limit_exceeded:
+        tool_message += "\n\n**Note:** Results are limited to 50. Refine your filters to see a complete list."
 
     project_result = {
         "list": True,
@@ -143,9 +145,11 @@ async def list_lake_county_projects(
     if jurisdiction_boundary and jurisdiction_boundary.get("features"):
         project_result["jurisdiction_boundary"] = jurisdiction_boundary
 
-    return Command(
-        update={
-            "project_result": project_result,
-            "messages": [ToolMessage(content=tool_message, tool_call_id=tool_call_id)],
-        },
-    )
+    update = {
+        "project_result": project_result,
+        "messages": [ToolMessage(content=tool_message, tool_call_id=tool_call_id)],
+    }
+    if charts_data:
+        update["charts_data"] = charts_data
+
+    return Command(update=update)

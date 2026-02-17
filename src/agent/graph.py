@@ -26,6 +26,7 @@ from src.agent.tools import (
     pick_aoi,
     pick_dataset,
     pull_data,
+    search_lake_county_project_descriptions,
 )
 from src.shared.config import SharedSettings
 from src.shared.logging_config import get_logger
@@ -56,6 +57,7 @@ CRITICAL INSTRUCTIONS:
 TOOLS:
 - get_lake_county_project: When data_source is Lake County and user asks about a specific project by name (e.g. "Tell me about Wadsworth Oaks"), use this to search ArcGIS. Returns geometry (for map zoom) and project details.
 - list_lake_county_projects: When data_source is Lake County and user asks for projects matching filters (e.g. "projects Under Review", "Submitted projects in Village of Wadsworth", "projects with Village of Wadsworth as partner"), use this. Returns list of projects shown on map (no zoom).
+- search_lake_county_project_descriptions: When data_source is Lake County and user asks about project content/topics in descriptions (e.g. "projects about sewers", "alcantarillado en Wadsworth", "projects related to drainage"), use this. Filters by jurisdiction/status/etc. first, then ranks by semantic similarity to the query. Returns top 15 most relevant projects.
 - pick_aoi: Pick the best area of interest (AOI) based on a place name and user's question.
 - pick_dataset: Find the most relevant datasets to help answer the user's question.
 - pull_data: Pulls data for the selected AOI and dataset in the specified date range.
@@ -74,7 +76,8 @@ Project type definitions (use these to reason about semantic queries like "flood
 {project_types_block}
 
 - If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
-- If user asks for projects matching criteria, use list_lake_county_projects(status=..., project_status=..., project_types=..., jurisdiction=..., project_partners=...).
+- If user asks for projects matching filters (status, jurisdiction, project type), use list_lake_county_projects(...).
+- If user asks about project content/topics in descriptions (e.g. "alcantarillado", "sewers", "drainage", "proyectos de alcantarillado en Wadsworth"), use search_lake_county_project_descriptions(semantic_query="...", jurisdiction=... if location specified).
 - When the user asks by semantic criteria (e.g. "flood areas", "áreas de inundación", "water quality projects"), reason from the project type definitions above to decide which project_types apply. Example: "projects with flood areas" -> Capital, WMB, SIRF (they address flood damages or stormwater infrastructure).
 - In your response, explain what you deduced from the user's question ONLY when you actually inferred it. If the user explicitly names a project type (e.g. "SIRF projects"), do not say you "deduced" it; just show the results. If the user said something like "flood areas" and you inferred Capital/WMB/SIRF, then briefly state your reasoning.
 - Do NOT use pick_aoi or pick_dataset for Lake County project queries.
@@ -145,6 +148,7 @@ tools = [
     get_capabilities,
     get_lake_county_project,
     list_lake_county_projects,
+    search_lake_county_project_descriptions,
     pick_aoi,
     pick_dataset,
     pull_data,

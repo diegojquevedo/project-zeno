@@ -5,6 +5,7 @@ from .list_lake_county_projects import list_lake_county_projects
 from .pick_aoi import pick_aoi
 from .pick_dataset import pick_dataset
 from .pull_data import pull_data
+from .search_lake_county_project_descriptions import search_lake_county_project_descriptions
 
 __all__ = [
     "pick_aoi",
@@ -14,4 +15,5 @@ __all__ = [
     "get_capabilities",
     "get_lake_county_project",
     "list_lake_county_projects",
+    "search_lake_county_project_descriptions",
 ]
