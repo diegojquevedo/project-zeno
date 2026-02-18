@@ -11,6 +11,11 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 
 from src.agent.tools.lake_county_project_summary import build_project_summary_and_chart
+from src.api.lake_county_config import (
+    PROJECT_CATEGORY_FLOOD_AUDITS,
+    PROJECT_CATEGORY_PROJECTS,
+    PROJECT_CATEGORY_STUDIES,
+)
 from src.api.lake_county_service import (
     fetch_lake_county_domains,
     fetch_municipality_boundary,
@@ -61,21 +66,28 @@ async def list_lake_county_projects(
     project_types: list[str] | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
+    subshed: str | None = None,
+    project_category: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
     state: Annotated[dict, InjectedState] = None,
 ) -> Command:
     """
     List Lake County stormwater projects by filters.
-    Use when data_source is Lake County and the user asks for projects matching criteria, e.g.:
-    - "What projects are Under Review?" -> project_status="Under Review"
-    - "Projects with status Submitted" -> status="Submitted"
-    - "Projects in jurisdiction Village of Wadsworth" -> jurisdiction="Village of Wadsworth"
-    - "Projects where Village of Wadsworth is a project partner" -> project_partners="Village of Wadsworth"
-    - "Submitted projects in Village of Wadsworth" -> status="Submitted", jurisdiction="Village of Wadsworth"
-    - "Projects with flood areas in Wadsworth" -> project_types=["Capital","WMB","SIRF"], jurisdiction="Village of Wadsworth"
+    Use when data_source is Lake County and the user asks for projects matching criteria.
 
-    project_types: use the project type definitions from the prompt to reason. E.g. flood-related -> Capital, WMB, SIRF.
-    Valid values are resolved automatically from the data. Pass the user's terms as-is.
+    project_category (IMPORTANT - matches INFLOW tabs):
+    - "projects": Normal projects only, EXCLUDES Flood Audit and Study (default when user asks "projects in Lake County")
+    - "studies": Studies only (is_study=1 or projectsubtype=Study)
+    - "flood_audits": Flood Audit projects only
+
+    Examples:
+    - "Show me projects in Lake County" -> project_category="projects"
+    - "Studies in Lake County" -> project_category="studies"
+    - "Flood audit projects" -> project_category="flood_audits"
+    - "Projects Under Review in Wadsworth" -> project_category="projects", project_status="Under Review", jurisdiction="Wadsworth"
+    - "Projects with sub-watershed in Lake Michigan" -> subshed="Lake Michigan"
+
+    project_types: filter by projecttype (Capital, WMB, SIRF, etc.). subshed: filter by sub-watershed.
     """
     domains = await fetch_lake_county_domains()
 
@@ -99,6 +111,7 @@ async def list_lake_county_projects(
 
     jurisdiction_val = jurisdiction.strip() if jurisdiction and str(jurisdiction).strip() else None
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
+    subshed_val = subshed.strip() if subshed and str(subshed).strip() else None
 
     jurisdiction_boundary = None
     if jurisdiction_val:
@@ -106,12 +119,38 @@ async def list_lake_county_projects(
 
     project_types_val = [t.strip() for t in project_types if t and str(t).strip()] if project_types else None
 
+    # Resolve project_category: "projects" | "studies" | "flood_audits"
+    category_val = None
+    if project_category and str(project_category).strip():
+        pc = str(project_category).strip().lower()
+        if pc in (PROJECT_CATEGORY_PROJECTS, "project"):
+            category_val = PROJECT_CATEGORY_PROJECTS
+        elif pc in (PROJECT_CATEGORY_STUDIES, "study"):
+            category_val = PROJECT_CATEGORY_STUDIES
+        elif pc in (PROJECT_CATEGORY_FLOOD_AUDITS, "flood_audit", "flood audit"):
+            category_val = PROJECT_CATEGORY_FLOOD_AUDITS
+
+    # If no filters, default to "projects" (exclude Flood Audit and Study) for "projects in Lake County"
+    has_filters = any([
+        resolved_status,
+        resolved_project_status,
+        project_types_val,
+        jurisdiction_val,
+        partners_val,
+        subshed_val,
+    ])
+    if not has_filters and not category_val:
+        category_val = PROJECT_CATEGORY_PROJECTS  # Default: normal projects only
+
     result = await query_lake_county_projects(
         status=resolved_status,
         project_status=resolved_project_status,
         project_types=project_types_val,
         jurisdiction=jurisdiction_val,
         project_partners=partners_val,
+        subshed=subshed_val,
+        project_category=category_val,
+        allow_no_filters=not has_filters and not category_val,
     )
 
     if not result["found"]:
@@ -134,7 +173,10 @@ async def list_lake_county_projects(
     tool_message, charts_data = await build_project_summary_and_chart(matches, user_query)
 
     if limit_exceeded:
-        tool_message += "\n\n**Note:** Results are limited to 50. Refine your filters to see a complete list."
+        max_shown = 200 if not has_filters else 50
+        tool_message += f"\n\n**Note:** Results are limited to {max_shown}. Refine your filters to see a complete list."
+    elif not has_filters:
+        tool_message += f"\n\n**Note:** Showing all {len(matches)} Lake County projects. All projects are displayed on the map."
 
     project_result = {
         "list": True,

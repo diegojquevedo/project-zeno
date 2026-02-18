@@ -14,6 +14,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langgraph.types import Command
 
 from src.agent.tools.lake_county_project_summary import build_project_summary_and_chart
+from src.api.lake_county_config import PROJECT_CATEGORY_PROJECTS
 from src.api.lake_county_service import (
     fetch_lake_county_domains,
     fetch_municipality_boundary,
@@ -73,6 +74,7 @@ async def search_lake_county_project_descriptions(
     project_types: list[str] | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
+    subshed: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
     state: Annotated[dict, InjectedState] = None,
 ) -> Command:
@@ -83,7 +85,7 @@ async def search_lake_county_project_descriptions(
     - "Alcantarillado en Wadsworth" -> semantic_query="alcantarillado sewer drainage", jurisdiction="Wadsworth"
     - "Projects related to drainage in Village of Wadsworth" -> semantic_query="drainage", jurisdiction="Village of Wadsworth"
 
-    First filters by jurisdiction, status, project_status, project_types, project_partners (if provided).
+    First filters by jurisdiction, status, project_status, project_types, project_partners, subshed (if provided).
     Then ranks projects by how well their Description/Name/Notes match the semantic query.
     Returns top 15 most relevant projects.
     """
@@ -117,6 +119,7 @@ async def search_lake_county_project_descriptions(
 
     jurisdiction_val = jurisdiction.strip() if jurisdiction and str(jurisdiction).strip() else None
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
+    subshed_val = subshed.strip() if subshed and str(subshed).strip() else None
 
     jurisdiction_boundary = None
     if jurisdiction_val:
@@ -124,12 +127,15 @@ async def search_lake_county_project_descriptions(
 
     project_types_val = [t.strip() for t in project_types if t and str(t).strip()] if project_types else None
 
+    # Default to normal projects (exclude Flood Audit and Study) for semantic search
     result = await query_lake_county_projects(
         status=resolved_status,
         project_status=resolved_project_status,
         project_types=project_types_val,
         jurisdiction=jurisdiction_val,
         project_partners=partners_val,
+        subshed=subshed_val,
+        project_category=PROJECT_CATEGORY_PROJECTS,
         allow_no_filters=True,
     )
 

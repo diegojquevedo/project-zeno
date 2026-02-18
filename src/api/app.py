@@ -1564,11 +1564,13 @@ async def list_lake_county_projects_endpoint(
     project_types: str | None = None,
     jurisdiction: str | None = None,
     project_partners: str | None = None,
+    project_category: str | None = None,
     limit: int = 50,
 ):
     """
     List Lake County projects by filters.
     project_types: comma-separated (e.g. "Capital,WMB,SIRF").
+    project_category: "projects" (exclude Flood Audit+Study), "studies", "flood_audits". Default "projects".
     Max 50 results; if more, returns limit_exceeded=true.
     """
     if limit > 50:
@@ -1580,6 +1582,7 @@ async def list_lake_county_projects_endpoint(
         project_types=types_list,
         jurisdiction=jurisdiction,
         project_partners=project_partners,
+        project_category=project_category or "projects",
         limit=limit,
     )
 

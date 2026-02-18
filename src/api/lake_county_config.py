@@ -65,6 +65,18 @@ LC_BOUNDARY_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/
 # Municipal Boundaries - for highlighting jurisdiction outline when filtering by jurisdiction
 LC_MUNICIPALITIES_URL = f"{SMC_API_BASE}/LakeCounty_TaxDistricts/FeatureServer/10"
 
+# Pre-Applications (PreApps) - status <> 'Archived'
+# Layer 98: metadata + points (one record per preapp)
+# Layer 99: polygon/line geometries (by preapp_id)
+PREAPP_POINT_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/98"
+PREAPP_GEOMETRY_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/99"
+
+# When user says "Chicago" in Lake County, they mean North Chicago (Chicago proper is in Cook County)
+JURISDICTION_ALIASES = {"chicago": "North Chicago"}
+
+# Concerns (CIRS) - status_CIRS <> 'Archived', point geometry only
+CIRS_POINT_URL = f"{SMC_API_BASE}/CIRS_Point/FeatureServer/6"
+
 # Map Geometry attribute (from layer 30) to geometry layer_id
 GEOMETRY_TYPE_TO_LAYER = {
     "Polygon": "project_areas",
@@ -78,6 +90,14 @@ LAKE_COUNTY_SYSTEM_PURPOSE = (
     "INFLOW! is the Lake County Stormwater Management Commission's intake platform for "
     "stormwater projects. Projects address drainage, flood damages, water quality, and stormwater infrastructure."
 )
+
+# INFLOW project categories (matches tabs: Projects, Studies, Flood Audits)
+# - projects: projectsubtype <> 'Flood Audit' AND projectsubtype <> 'Study' (and null)
+# - studies: is_study = 1 (projectsubtype not updated for studies)
+# - flood_audits: projectsubtype = 'Flood Audit'
+PROJECT_CATEGORY_PROJECTS = "projects"  # Normal projects (536 in INFLOW)
+PROJECT_CATEGORY_STUDIES = "studies"  # Studies (69 in INFLOW)
+PROJECT_CATEGORY_FLOOD_AUDITS = "flood_audits"  # Flood Audits (274 in INFLOW)
 
 # Project type definitions (for agent reasoning - maps user semantic queries to project_types)
 LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS = [

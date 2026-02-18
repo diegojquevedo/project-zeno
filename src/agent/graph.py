@@ -22,6 +22,8 @@ from src.agent.tools import (
     generate_insights,
     get_capabilities,
     get_lake_county_project,
+    list_lake_county_concerns,
+    list_lake_county_preapps,
     list_lake_county_projects,
     pick_aoi,
     pick_dataset,
@@ -56,8 +58,10 @@ CRITICAL INSTRUCTIONS:
 
 TOOLS:
 - get_lake_county_project: When data_source is Lake County and user asks about a specific project by name (e.g. "Tell me about Wadsworth Oaks"), use this to search ArcGIS. Returns geometry (for map zoom) and project details.
-- list_lake_county_projects: When data_source is Lake County and user asks for projects matching filters (e.g. "projects Under Review", "Submitted projects in Village of Wadsworth", "projects with Village of Wadsworth as partner"), use this. Returns list of projects shown on map (no zoom).
-- search_lake_county_project_descriptions: When data_source is Lake County and user asks about project content/topics in descriptions (e.g. "projects about sewers", "alcantarillado en Wadsworth", "projects related to drainage"), use this. Filters by jurisdiction/status/etc. first, then ranks by semantic similarity to the query. Returns top 15 most relevant projects.
+- list_lake_county_projects: When data_source is Lake County and user asks for projects matching filters (status, jurisdiction, project type, sub-watershed), use this. subshed=sub-watershed (e.g. Lake Michigan). Returns list of projects shown on map (no zoom).
+- list_lake_county_preapps: When data_source is Lake County and user asks for pre-applications (preapps), use this. jurisdiction=municipality (e.g. North Chicago, Zion). subshed=sub-watershed (e.g. Lake Michigan, North Branch Chicago River). Always excludes Archived.
+- list_lake_county_concerns: When data_source is Lake County and user asks for concerns, CIRS, or reported issues, use this. Always excludes Archived (status_CIRS <> 'Archived'). Filters: jurisdiction, category_report, problem, frequency_problem. For "all concerns in Lake County" or "concerns in LC", call with no filters to get all non-Archived concerns. Summaries use construction_issue and description.
+- search_lake_county_project_descriptions: When data_source is Lake County and user asks about project content/topics in descriptions (e.g. "projects about sewers", "alcantarillado en Wadsworth"), use this. Filters by jurisdiction/status/etc. first, then ranks by semantic similarity. Returns top 15 most relevant projects.
 - pick_aoi: Pick the best area of interest (AOI) based on a place name and user's question.
 - pick_dataset: Find the most relevant datasets to help answer the user's question.
 - pull_data: Pulls data for the selected AOI and dataset in the specified date range.
@@ -76,8 +80,13 @@ Project type definitions (use these to reason about semantic queries like "flood
 {project_types_block}
 
 - If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
-- If user asks for projects matching filters (status, jurisdiction, project type), use list_lake_county_projects(...).
-- If user asks about project content/topics in descriptions (e.g. "alcantarillado", "sewers", "drainage", "proyectos de alcantarillado en Wadsworth"), use search_lake_county_project_descriptions(semantic_query="...", jurisdiction=... if location specified).
+- If user asks for projects matching filters (status, jurisdiction, project type, sub-watershed), use list_lake_county_projects(...). Use subshed when they specify sub-watershed (e.g. "projects in Lake Michigan subshed").
+- If user asks for "projects in Lake County" or "projects across Lake County" WITHOUT specific filters, use list_lake_county_projects(project_category="projects") - returns normal projects only (~536).
+- If user asks for "studies" or "study projects", use list_lake_county_projects(project_category="studies").
+- If user asks for "flood audit" or "flood audit projects", use list_lake_county_projects(project_category="flood_audits").
+- If user asks for "preapps" or "pre-applications" in Lake County: use list_lake_county_preapps(). Use jurisdiction when they specify a municipality (e.g. "preapps in North Chicago"); use subshed when they specify sub-watershed (e.g. "preapps with sub-watershed in Lake Michigan", "preapps in Lake Michigan subshed"). When user says "Chicago", use jurisdiction="Chicago" (maps to North Chicago).
+- If user asks for "concerns", "CIRS", or "reported issues" in Lake County: use list_lake_county_concerns(). For "all concerns in Lake County" or "concerns in LC", call with no filters — returns all non-Archived concerns. Use jurisdiction, category_report, problem, or frequency_problem when the user specifies them. When user says "Chicago", use jurisdiction="Chicago" (maps to North Chicago).
+- If user asks about project content/topics in descriptions (e.g. "alcantarillado", "sewers", "drainage"), use search_lake_county_project_descriptions(semantic_query="...", jurisdiction=... or subshed=... if location specified).
 - When the user asks by semantic criteria (e.g. "flood areas", "áreas de inundación", "water quality projects"), reason from the project type definitions above to decide which project_types apply. Example: "projects with flood areas" -> Capital, WMB, SIRF (they address flood damages or stormwater infrastructure).
 - In your response, explain what you deduced from the user's question ONLY when you actually inferred it. If the user explicitly names a project type (e.g. "SIRF projects"), do not say you "deduced" it; just show the results. If the user said something like "flood areas" and you inferred Capital/WMB/SIRF, then briefly state your reasoning.
 - Do NOT use pick_aoi or pick_dataset for Lake County project queries.
@@ -147,6 +156,8 @@ GENERAL NOTES:
 tools = [
     get_capabilities,
     get_lake_county_project,
+    list_lake_county_concerns,
+    list_lake_county_preapps,
     list_lake_county_projects,
     search_lake_county_project_descriptions,
     pick_aoi,
