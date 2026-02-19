@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, Dict, List
+from typing import Annotated, Dict, List, Optional, Tuple
 
 import pandas as pd
 from langchain_core.messages import ToolMessage
@@ -26,6 +26,110 @@ def _get_available_datasets() -> str:
         dataset_names.append(dataset["dataset_name"])
 
     return ", ".join(dataset_names)
+
+
+def _build_fallback_chart_from_dataframes(
+    dataframes: List[Tuple[pd.DataFrame, str]],
+) -> Optional[Tuple[List[Dict], str, Dict]]:
+    """
+    Build chart data from raw dataframes when Gemini fails to produce chart CSV.
+
+    Returns (chart_data, chart_type, chart_config) or None if no suitable fallback.
+    chart_config has x_axis, y_axis, group_field, series_fields for ChartInsight.
+    """
+    for df, display_name in dataframes:
+        if df.empty or len(df) == 0:
+            continue
+        cols = [c for c in df.columns if str(c).lower() not in ("aoi_id", "name")]
+        numeric = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]
+        if not numeric:
+            continue
+
+        # Carbon flux fallback: Gross Emissions, Gross Removals, Net Flux (like Norway)
+        col_lower = {str(c).lower(): c for c in df.columns}
+        emission_col = next(
+            (col_lower[k] for k in col_lower if "emission" in k),
+            None,
+        )
+        removal_col = next(
+            (col_lower[k] for k in col_lower if "removal" in k),
+            None,
+        )
+        net_flux_col = next(
+            (col_lower[k] for k in col_lower if "net" in k and "flux" in k),
+            None,
+        )
+        if emission_col and removal_col and net_flux_col:
+            try:
+                rows = [
+                    {"metric": "Gross Emissions", "value": float(df[emission_col].sum())},
+                    {"metric": "Gross Removals", "value": float(df[removal_col].sum())},
+                    {"metric": "Net Flux", "value": float(df[net_flux_col].sum())},
+                ]
+                config = {
+                    "x_axis": "metric",
+                    "y_axis": "value",
+                    "group_field": "",
+                    "series_fields": [],
+                }
+                logger.info(
+                    f"Fallback chart: carbon flux bar (emissions, removals, net flux)"
+                )
+                return (rows, "bar", config)
+            except (TypeError, ValueError) as e:
+                logger.debug(f"Carbon flux fallback failed: {e}")
+                continue
+
+        # Generic fallback: year + value or first numeric
+        year_col = next(
+            (c for c in cols if str(c).lower() in ("year", "yr", "date")),
+            None,
+        )
+        if year_col and numeric:
+            val_col = next((n for n in numeric if n != year_col), numeric[0])
+            try:
+                sub = df[[year_col, val_col]].dropna().sort_values(by=year_col)
+                rows = [
+                    {"year": str(row[year_col]), "value": float(row[val_col])}
+                    for _, row in sub.iterrows()
+                ]
+                if rows:
+                    config = {
+                        "x_axis": "year",
+                        "y_axis": "value",
+                        "group_field": "",
+                        "series_fields": [],
+                    }
+                    logger.info("Fallback chart: time series (year, value)")
+                    return (rows, "line", config)
+            except (TypeError, ValueError, KeyError) as e:
+                logger.debug(f"Year fallback failed: {e}")
+
+        # Last resort: first 8 rows as bar chart (category, value)
+        try:
+            cat_col = next(
+                (c for c in cols if c in numeric or df[c].dtype == object),
+                cols[0],
+            )
+            val_col = next((n for n in numeric if n != cat_col), numeric[0])
+            sub = df[[cat_col, val_col]].head(8).dropna()
+            rows = [
+                {"category": str(row[cat_col]), "value": float(row[val_col])}
+                for _, row in sub.iterrows()
+            ]
+            if rows:
+                config = {
+                    "x_axis": "category",
+                    "y_axis": "value",
+                    "group_field": "",
+                    "series_fields": [],
+                }
+                logger.info("Fallback chart: generic bar (category, value)")
+                return (rows, "bar", config)
+        except (TypeError, ValueError, KeyError) as e:
+            logger.debug(f"Generic fallback failed: {e}")
+
+    return None
 
 
 def prepare_dataframes(raw_data: Dict) -> List[tuple[pd.DataFrame, str]]:
@@ -191,26 +295,29 @@ Now prepare the data for visualization in Recharts.js:
       4. **Date ordering**: Chronological order for time series, not alphabetical
       5. **Data format by chart type**:
          - **Single-series line/bar**: [{{"date": "2020-01", "value": 100}}]
-           → One metric column, use y_axis="value"
+           - One metric column, use y_axis="value"
 
          - **Multi-series line/bar/area**: [{{"year": "2020", "metric1": 100, "metric2": 50}}]
-           → Multiple metric columns in WIDE format
-           → Use series_fields=["metric1", "metric2"], leave y_axis empty
+           - Multiple metric columns in WIDE format
+           - Use series_fields=["metric1", "metric2"], leave y_axis empty
 
          - **Stacked-bar**: [{{"category": "Region A", "forest": 100, "grassland": 50, "urban": 30}}]
-           → Multiple metric columns in WIDE format (same as multi-series)
-           → Use series_fields=["forest", "grassland", "urban"], leave y_axis empty
-           → Bars will stack vertically to show composition
+           - Multiple metric columns in WIDE format (same as multi-series)
+           - Use series_fields=["forest", "grassland", "urban"], leave y_axis empty
+           - Bars will stack vertically to show composition
 
          - **Grouped-bar**: [{{"year": "2020", "metric": "forest_loss", "value": 100}}, {{"year": "2020", "metric": "forest_gain", "value": 50}}]
-           → LONG format with a grouping column
-           → Use group_field="metric", y_axis="value"
-           → Bars will appear side-by-side for comparison
+           - LONG format with a grouping column
+           - Use group_field="metric", y_axis="value"
+           - Bars will appear side-by-side for comparison
 
          - **Pie**: [{{"name": "Category A", "value": 100}}]
-           → Limited to 6-8 slices, use x_axis="name", y_axis="value"
+           - Limited to 6-8 slices, use x_axis="name", y_axis="value"
 
-   c) **SAVE THE DATA**: Save the DataFrame as `chart_data.csv` with column names for the frontend
+   c) **SAVE AND OUTPUT THE DATA** (REQUIRED):
+      1. Save: chart_data.to_csv("chart_data.csv", index=False)
+      2. Print to stdout so it can be captured: print("__CHART_CSV_START__"); print(chart_data.to_csv(index=False)); print("__CHART_CSV_END__")
+      Both steps are required. The print output is used to render the chart.
 
    d) **PRINT CHART TYPE**: Clearly state your recommended chart type in the output
 
@@ -341,22 +448,32 @@ async def generate_insights(
         ]
     )
 
-    # Check for chart data
-    if not result.chart_data:
-        logger.error("No chart data generated")
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"Failed to generate chart data. Feedback:{text_output}",
-                        tool_call_id=tool_call_id,
-                        status="error",
-                    )
-                ]
-            }
-        )
-
-    logger.info(f"Generated chart data with {len(result.chart_data)} rows")
+    # Use chart data from result, or fallback from raw data (guarantee chart)
+    chart_data = result.chart_data
+    fallback_config: Optional[Tuple[str, Dict]] = None  # (chart_type, field_config)
+    if not chart_data:
+        fallback_result = _build_fallback_chart_from_dataframes(dataframes)
+        if fallback_result:
+            chart_data, default_chart_type, field_config = fallback_result
+            fallback_config = (default_chart_type, field_config)
+            logger.info(
+                f"Using fallback chart (type={default_chart_type}) with {len(chart_data)} rows"
+            )
+        else:
+            logger.error("No chart data generated and no fallback available")
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"Failed to generate chart data. Feedback:{text_output}",
+                            tool_call_id=tool_call_id,
+                            status="error",
+                        )
+                    ]
+                }
+            )
+    else:
+        logger.info(f"Generated chart data with {len(chart_data)} rows")
 
     # 5.5. REPLACE CSV PATHS: Replace CSV file paths with URL-based loading
     # This makes the code blocks runnable in any environment.
@@ -367,7 +484,7 @@ async def generate_insights(
             )
 
     # 6. GENERATE CHART SCHEMA: Use LLM to create structured chart metadata
-    chart_data_df = pd.DataFrame(result.chart_data)
+    chart_data_df = pd.DataFrame(chart_data)
     available_datasets = _get_available_datasets()
     dataset_guidelines = state.get("dataset").get(
         "prompt_instructions", "No specific dataset guidelines provided."
@@ -395,6 +512,7 @@ async def generate_insights(
 ### Chart Data Preview (first 5 rows)
 {chart_data_df.head().to_csv(index=False)}
 Total rows: {len(chart_data_df)}
+{chr(10) + "### Use these exact field mappings: chart_type=" + fallback_config[0] + ", " + ", ".join(f"{k}={v!r}" for k, v in fallback_config[1].items()) if fallback_config else ""}
 
 ### Dataset Context
 Guidelines: {dataset_guidelines}
@@ -455,20 +573,34 @@ Cautions: {dataset_cautions}
     ):
         tool_message += f"\n{i}. {suggestion}"
 
-    # Store chart data for frontend
+    # Store chart data for frontend (use fallback config when available)
+    if fallback_config:
+        _chart_type, _cfg = fallback_config
+        chart_type = _chart_type
+        x_axis = _cfg.get("x_axis", chart_insight_response.x_axis)
+        y_axis = _cfg.get("y_axis", chart_insight_response.y_axis)
+        group_field = _cfg.get("group_field", chart_insight_response.group_field)
+        series_fields = _cfg.get("series_fields", chart_insight_response.series_fields)
+    else:
+        chart_type = chart_insight_response.chart_type
+        x_axis = chart_insight_response.x_axis
+        y_axis = chart_insight_response.y_axis
+        group_field = chart_insight_response.group_field
+        series_fields = chart_insight_response.series_fields
+
     charts_data = [
         {
             "id": "main_chart",
             "title": chart_insight_response.title,
-            "type": chart_insight_response.chart_type,
+            "type": chart_type,
             "insight": chart_insight_response.insight,
-            "data": result.chart_data,
-            "xAxis": chart_insight_response.x_axis,
-            "yAxis": chart_insight_response.y_axis,
+            "data": chart_data,
+            "xAxis": x_axis,
+            "yAxis": y_axis,
             "colorField": chart_insight_response.color_field,
             "stackField": chart_insight_response.stack_field,
-            "groupField": chart_insight_response.group_field,
-            "seriesFields": chart_insight_response.series_fields,
+            "groupField": group_field,
+            "seriesFields": series_fields,
         }
     ]
 

@@ -329,11 +329,14 @@ async def stream_chat(
     langfuse_metadata: Optional[Dict] = {},
     user: Optional[dict] = None,
 ):
-    langfuse_handler = CallbackHandler(update_trace=True)
     config = {
         "configurable": {"thread_id": thread_id},
-        "callbacks": [langfuse_handler],
-        "metadata": langfuse_metadata,
+        "callbacks": (
+            [CallbackHandler(update_trace=True)]
+            if APISettings.enable_langfuse
+            else []
+        ),
+        "metadata": langfuse_metadata if APISettings.enable_langfuse else {},
     }
 
     if not thread_id:
@@ -444,9 +447,11 @@ async def stream_chat(
                 # Continue processing other updates if possible
                 continue
 
-        # Send trace ID after stream completes
-        trace_id = getattr(langfuse_handler, "last_trace_id", None)
-        if trace_id:
+        # Send trace ID after stream completes (only when Langfuse enabled)
+        callbacks = config.get("callbacks") or []
+        langfuse_handler = callbacks[0] if callbacks else None
+        trace_id = getattr(langfuse_handler, "last_trace_id", None) if langfuse_handler else None
+        if trace_id and APISettings.enable_langfuse:
             try:
                 trace_url = langfuse_client.get_trace_url(trace_id=trace_id)
             except (AttributeError, Exception) as e:

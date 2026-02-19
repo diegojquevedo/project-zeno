@@ -82,7 +82,7 @@ async def search_lake_county_project_descriptions(
     Search Lake County projects by semantic similarity on descriptions.
     Use when data_source is Lake County and the user asks about project content/topics, e.g.:
     - "Projects about sewers" -> semantic_query="sewers"
-    - "Alcantarillado en Wadsworth" -> semantic_query="alcantarillado sewer drainage", jurisdiction="Wadsworth"
+    - "Sewers in Wadsworth" -> semantic_query="sewer drainage", jurisdiction="Wadsworth"
     - "Projects related to drainage in Village of Wadsworth" -> semantic_query="drainage", jurisdiction="Village of Wadsworth"
 
     First filters by jurisdiction, status, project_status, project_types, project_partners, subshed (if provided).
@@ -96,7 +96,7 @@ async def search_lake_county_project_descriptions(
                 "project_result": None,
                 "messages": [
                     ToolMessage(
-                        content="Please provide a semantic query (e.g. 'sewers', 'alcantarillado', 'drainage').",
+                        content="Please provide a semantic query (e.g. 'sewers', 'drainage', 'flood mitigation').",
                         tool_call_id=tool_call_id,
                     )
                 ],

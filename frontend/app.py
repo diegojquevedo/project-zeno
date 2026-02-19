@@ -3,6 +3,7 @@ Map Chat - Main entry point. Runs directly without redirect.
 """
 import json
 import os
+import time
 import uuid
 
 import streamlit as st
@@ -11,6 +12,9 @@ from dotenv import load_dotenv
 from utils import API_BASE_URL, render_dataset_map, render_stream
 
 load_dotenv()
+
+# Set True when response time < 30s to show timer in UI
+SHOW_RESPONSE_TIMER = False
 
 FOREST_CARBON_REMOVALS_DATASET = {
     "dataset_id": 10,
@@ -230,6 +234,8 @@ with chat_col:
         ui_context = {k: v for k, v in ui_context.items() if v is not None}
 
         with st.chat_message("assistant"):
+            timer_placeholder = st.empty()
+            start_time = time.perf_counter()
             for stream in client.chat(
                 query=user_input,
                 user_persona="Researcher",
@@ -267,9 +273,15 @@ with chat_col:
                             st.session_state.map_project_matches = None
                             st.session_state.map_project_list = None
                             st.session_state.map_jurisdiction_boundary = None
+                    elapsed = time.perf_counter() - start_time
+                    if SHOW_RESPONSE_TIMER:
+                        timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
                     render_stream(stream, skip_maps=True)
                 except Exception as e:
                     st.error(f"Error processing stream: {e}")
+            total_time = time.perf_counter() - start_time
+            if SHOW_RESPONSE_TIMER:
+                timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
 
 with map_col:
     if st.session_state.data_source == "lake_county":

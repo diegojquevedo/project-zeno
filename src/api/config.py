@@ -32,6 +32,7 @@ class _APISettings(BaseSettings):
         default=False, alias="ALLOW_ANONYMOUS_CHAT"
     )
     arcgis_api_key: Optional[str] = Field(default=None, alias="ARCGIS_API_KEY")
+    enable_langfuse: bool = Field(default=False, alias="ENABLE_LANGFUSE")
 
     @property
     def domains_allowlist(self) -> list[str]:

@@ -45,7 +45,7 @@ class GeminiCodeExecutor:
         """
         lines = []
         for i, (_, display_name) in enumerate(dataframes):
-            lines.append(f"- input_file_{i}.csv → {display_name}")
+            lines.append(f"- input_file_{i}.csv -> {display_name}")
         return "\n".join(lines)
 
     async def prepare_dataframes(
@@ -112,6 +112,7 @@ class GeminiCodeExecutor:
             # Parse response
             parts = []
             chart_data = None
+            all_execution_output = []
 
             for part in response.candidates[0].content.parts:
                 if part.text:
@@ -128,25 +129,40 @@ class GeminiCodeExecutor:
                         )
                     )
                 if part.code_execution_result:
+                    output = part.code_execution_result.output or ""
+                    all_execution_output.append(output)
                     parts.append(
                         CodeActPart(
                             type=PartType.EXECUTION_OUTPUT,
-                            content=part.code_execution_result.output,
+                            content=output,
                         )
                     )
                 if (
                     part.inline_data
                     and part.inline_data.mime_type == "text/csv"
                 ):
-                    # Parse chart_data.csv from response
                     try:
                         df = pd.read_csv(io.BytesIO(part.inline_data.data))
                         chart_data = df.to_dict("records")
                         logger.info(
-                            f"Parsed chart_data: {len(chart_data)} rows"
+                            f"Parsed chart_data from inline_data: {len(chart_data)} rows"
                         )
                     except Exception as e:
                         logger.error(f"Failed to parse chart_data: {e}")
+
+            # Fallback: parse chart data from code execution stdout (Gemini may not return CSV as inline_data)
+            if chart_data is None and all_execution_output:
+                combined = "\n".join(all_execution_output)
+                if "__CHART_CSV_START__" in combined and "__CHART_CSV_END__" in combined:
+                    try:
+                        csv_str = combined.split("__CHART_CSV_START__")[1].split("__CHART_CSV_END__")[0].strip()
+                        df = pd.read_csv(io.StringIO(csv_str))
+                        chart_data = df.to_dict("records")
+                        logger.info(
+                            f"Parsed chart_data from stdout: {len(chart_data)} rows"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to parse chart_data from stdout: {e}")
 
             return ExecutionResult(
                 parts=parts,

@@ -8,10 +8,10 @@ load_dotenv()
 class _AgentSettings(BaseSettings):
     """Agent-specific settings for model configuration."""
 
-    # Model configuration
-    model: str = Field(default="gemini", alias="MODEL")
-    small_model: str = Field(default="gemini-3-pro-preview", alias="SMALL_MODEL")
-    coding_model: str = Field(default="gemini-3-pro-preview", alias="CODING_MODEL")
+    # Model configuration - all use flash for speed
+    model: str = Field(default="gemini-3-flash-preview", alias="MODEL")
+    small_model: str = Field(default="gemini-3-flash-preview", alias="SMALL_MODEL")
+    coding_model: str = Field(default="gemini-3-flash-preview", alias="CODING_MODEL")
 
     model_config = {
         "env_file": ".env",

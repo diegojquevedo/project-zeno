@@ -799,6 +799,10 @@ datasets:
     - greenhouse gas
     - emissions
     - carbon
+    - carbon removal
+    - carbon removals
+    - carbon removal levels
+    - removal levels
     - sequestration
   analytics_api_endpoint: "/v0/land_change/carbon_flux/analytics"
   prompt_instructions: >
@@ -1198,8 +1202,13 @@ datasets:
   keywords:
     - carbon
     - removals
+    - carbon removal
+    - carbon removals
+    - carbon removal levels
+    - removal levels
     - sequestration
     - forest carbon
+    - carbon sequestration
   analytics_api_endpoint: "/v0/land_change/carbon_flux/analytics"
   prompt_instructions: >
     Shows cumulative forest carbon removals (sequestration) 2001-2023 in Mg CO2/ha.
