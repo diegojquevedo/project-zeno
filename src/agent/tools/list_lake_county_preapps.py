@@ -4,12 +4,13 @@ Shows preapps with status <> 'Archived'. Optional jurisdiction and subshed filte
 """
 from typing import Annotated
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 
+from src.agent.tools.lake_county_project_summary import build_preapp_summary_and_chart
 from src.api.lake_county_config import JURISDICTION_ALIASES
 from src.api.lake_county_service import (
     fetch_municipality_boundary,
@@ -20,21 +21,12 @@ from src.shared.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def _format_preapp_summary(matches: list) -> str:
-    """Build a short summary of preapps for the tool message."""
-    if not matches:
-        return "No pre-applications found."
-    lines = [f"Found **{len(matches)}** pre-application(s):"]
-    for i, m in enumerate(matches[:15], 1):
-        attrs = m.get("attributes", {})
-        name = attrs.get("Name") or attrs.get("Address") or f"PreApp #{attrs.get('preapp_id', '?')}"
-        jurisdiction = attrs.get("jurisdiction") or "—"
-        subshed_val = attrs.get("Subshed") or "—"
-        status_val = attrs.get("status") or "—"
-        lines.append(f"{i}. {name} — {jurisdiction} — {subshed_val} — {status_val}")
-    if len(matches) > 15:
-        lines.append(f"... and {len(matches) - 15} more.")
-    return "\n".join(lines)
+def _last_user_message(messages: list) -> str:
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            content = getattr(m, "content", None)
+            return str(content).strip() if content else ""
+    return ""
 
 
 @tool("list_lake_county_preapps")
@@ -90,18 +82,11 @@ async def list_lake_county_preapps(
     matches = result["matches"]
     limit_exceeded = result.get("limit_exceeded", False)
 
-    summary = _format_preapp_summary(matches)
-    filters_applied = []
-    if jurisdiction_val:
-        filters_applied.append(f"jurisdiction: **{jurisdiction_val}**")
-    if subshed_val:
-        filters_applied.append(f"sub-watershed: **{subshed_val}**")
-    if filters_applied:
-        summary += f"\n\nFiltered by {' | '.join(filters_applied)}."
+    user_query = _last_user_message((state or {}).get("messages", []))
+    tool_message, charts_data = await build_preapp_summary_and_chart(matches, user_query)
+
     if limit_exceeded:
-        summary += "\n\n**Note:** Results are limited. Refine jurisdiction to see a complete list."
-    else:
-        summary += "\n\nAll pre-applications are displayed on the map."
+        tool_message += "\n\n**Note:** Results are limited. Refine jurisdiction or sub-watershed to see a complete list."
 
     project_result = {
         "list": True,
@@ -113,9 +98,11 @@ async def list_lake_county_preapps(
     if jurisdiction_boundary and jurisdiction_boundary.get("features"):
         project_result["jurisdiction_boundary"] = jurisdiction_boundary
 
-    return Command(
-        update={
-            "project_result": project_result,
-            "messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)],
-        },
-    )
+    update = {
+        "project_result": project_result,
+        "messages": [ToolMessage(content=tool_message, tool_call_id=tool_call_id)],
+    }
+    if charts_data:
+        update["charts_data"] = charts_data
+
+    return Command(update=update)

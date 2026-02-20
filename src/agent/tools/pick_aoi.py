@@ -30,6 +30,8 @@ RESULT_LIMIT = 10
 load_dotenv()
 logger = get_logger(__name__)
 
+_existing_tables_cache: list[str] | None = None
+
 
 async def query_aoi_database(
     place_name: str,
@@ -44,58 +46,35 @@ async def query_aoi_database(
     Returns:
         DataFrame containing location information
     """
+    global _existing_tables_cache
+
     async with get_connection_from_pool() as conn:
-        # Enable pg_trgm extension for similarity function
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.execute(text("SET pg_trgm.similarity_threshold = 0.2;"))
         await conn.commit()
 
         user_id = structlog.contextvars.get_contextvars().get("user_id")
 
-        # Check which tables exist first
-        existing_tables = []
-
-        # Check GADM table
-        try:
-            await conn.execute(text(f"SELECT 1 FROM {GADM_TABLE} LIMIT 1"))
-            existing_tables.append("gadm")
-        except Exception:
-            logger.warning(f"Table {GADM_TABLE} does not exist")
-            await conn.rollback()
-
-        # Check KBA table
-        try:
-            await conn.execute(text(f"SELECT 1 FROM {KBA_TABLE} LIMIT 1"))
-            existing_tables.append("kba")
-        except Exception:
-            logger.warning(f"Table {KBA_TABLE} does not exist")
-            await conn.rollback()
-
-        # Check Landmark table
-        try:
-            await conn.execute(text(f"SELECT 1 FROM {LANDMARK_TABLE} LIMIT 1"))
-            existing_tables.append("landmark")
-        except Exception:
-            logger.warning(f"Table {LANDMARK_TABLE} does not exist")
-            await conn.rollback()
-
-        # Check WDPA table
-        try:
-            await conn.execute(text(f"SELECT 1 FROM {WDPA_TABLE} LIMIT 1"))
-            existing_tables.append("wdpa")
-        except Exception:
-            logger.warning(f"Table {WDPA_TABLE} does not exist")
-            await conn.rollback()
-
-        # Check Custom Areas table
-        try:
-            await conn.execute(
-                text(f"SELECT 1 FROM {CUSTOM_AREA_TABLE} LIMIT 1")
-            )
-            existing_tables.append("custom")
-        except Exception:
-            logger.warning(f"Table {CUSTOM_AREA_TABLE} does not exist")
-            await conn.rollback()
+        if _existing_tables_cache is not None:
+            existing_tables = _existing_tables_cache
+        else:
+            table_checks = {
+                "gadm": GADM_TABLE,
+                "kba": KBA_TABLE,
+                "landmark": LANDMARK_TABLE,
+                "wdpa": WDPA_TABLE,
+                "custom": CUSTOM_AREA_TABLE,
+            }
+            existing_tables = []
+            for table_key, table_name in table_checks.items():
+                try:
+                    await conn.execute(text(f"SELECT 1 FROM {table_name} LIMIT 1"))
+                    existing_tables.append(table_key)
+                except Exception:
+                    logger.warning(f"Table {table_name} does not exist")
+                    await conn.rollback()
+            _existing_tables_cache = existing_tables
+            logger.info(f"AOI table check cached: {existing_tables}")
 
         # Build the query based on existing tables
         union_parts = []

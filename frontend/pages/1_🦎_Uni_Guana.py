@@ -8,8 +8,7 @@ from app import API_BASE_URL, STREAMLIT_URL
 from client import ZenoClient
 from utils import display_sidebar_selections, render_stream
 
-# Set True when response time < 30s to show timer in UI
-SHOW_RESPONSE_TIMER = False
+SHOW_RESPONSE_TIMER = True
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
@@ -138,7 +137,10 @@ if user_input:
 
     with st.chat_message("assistant"):
         timer_placeholder = st.empty()
+        progress_placeholder = st.empty()
+        progress_placeholder.progress(0, text="Connecting...")
         start_time = time.perf_counter()
+        stream_count = 0
         for stream in client.chat(
             query=user_input,
             user_persona="Researcher",
@@ -146,10 +148,6 @@ if user_input:
             thread_id=st.session_state.session_id,
             user_id=st.session_state.get("user", {}).get("email", "anonymous"),
         ):
-            elapsed = time.perf_counter() - start_time
-            if SHOW_RESPONSE_TIMER:
-                timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
-            # Handle trace_info node to capture trace ID
             if stream.get("node") == "trace_info":
                 update = json.loads(stream["update"])
                 if "trace_id" in update:
@@ -157,7 +155,16 @@ if user_input:
                     st.success(f"Trace ID: {update['trace_id']}")
                 continue
 
+            stream_count += 1
+            progress_placeholder.progress(
+                min(0.95, 0.05 + stream_count * 0.08),
+                text=f"Generating... ({stream_count} updates)",
+            )
+            elapsed = time.perf_counter() - start_time
+            if SHOW_RESPONSE_TIMER:
+                timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
             render_stream(stream)
+        progress_placeholder.empty()
         total_time = time.perf_counter() - start_time
         if SHOW_RESPONSE_TIMER:
             timer_placeholder.caption(f"Total response time: {total_time:.1f}s")

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated, Dict, List
 
 from langchain_core.messages import ToolMessage
@@ -94,22 +95,30 @@ async def pull_data(
     if current_raw_data is None:
         current_raw_data = {}
 
-    tool_messages = []
-    for aoi in state["aoi_options"]:
-        # Use orchestrator to pull data
-        result = await data_pull_orchestrator.pull_data(
+    ds_original = [
+        ds for ds in DATASETS if ds["dataset_id"] == dataset.get("dataset_id")
+    ]
+    if not ds_original:
+        raise ValueError(f"Dataset not found: {dataset.get('dataset_id')}")
+    ds_original = ds_original[0]
+
+    aoi_options = state["aoi_options"]
+    results = await asyncio.gather(*[
+        data_pull_orchestrator.pull_data(
             query=query,
             dataset=dataset,
             start_date=start_date,
             end_date=end_date,
             **aoi,
         )
+        for aoi in aoi_options
+    ])
 
-        # Create tool message
+    tool_messages = []
+    for aoi, result in zip(aoi_options, results):
         tool_messages.append(result.message)
         logger.debug(f"Pull data tool message: {result.message}")
 
-        # Determine raw data format for backward compatibility
         if (
             result.success
             and isinstance(result.data, dict)
@@ -128,17 +137,7 @@ async def pull_data(
         if "name" in aoi["aoi"]:
             raw_data["aoi_name"] = aoi["aoi"]["name"]
         else:
-            # This handles the custom AOIs that might not have a name
             raw_data["aoi_name"] = aoi["aoi"]["src_id"]
-
-        ds_original = [
-            ds
-            for ds in DATASETS
-            if ds["dataset_id"] == dataset.get("dataset_id")
-        ]
-        if not ds_original:
-            raise ValueError(f"Dataset not found: {dataset.get('dataset_id')}")
-        ds_original = ds_original[0]
 
         if ds_original.get("content_date_fixed"):
             raw_data["start_date"] = ds_original.get("start_date")

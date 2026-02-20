@@ -204,11 +204,21 @@ if thread_id := st.session_state.get("selected_id"):
             client = ZenoClient(
                 base_url=API_BASE_URL, token=st.session_state.token
             )
-
+            progress_placeholder = st.empty()
+            progress_placeholder.progress(0, text="Connecting...")
+            stream_count = 0
             for stream in client.chat(
                 query=user_input,
                 user_persona="Researcher",
                 ui_context=ui_context,
                 thread_id=thread_id,
             ):
+                if stream.get("node") == "trace_info":
+                    continue
+                stream_count += 1
+                progress_placeholder.progress(
+                    min(0.95, 0.05 + stream_count * 0.08),
+                    text=f"Generating... ({stream_count} updates)",
+                )
                 render_stream(stream)
+            progress_placeholder.empty()

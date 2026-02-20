@@ -13,8 +13,7 @@ from utils import API_BASE_URL, render_dataset_map, render_stream
 
 load_dotenv()
 
-# Set True when response time < 30s to show timer in UI
-SHOW_RESPONSE_TIMER = False
+SHOW_RESPONSE_TIMER = True
 
 FOREST_CARBON_REMOVALS_DATASET = {
     "dataset_id": 10,
@@ -235,7 +234,10 @@ with chat_col:
 
         with st.chat_message("assistant"):
             timer_placeholder = st.empty()
+            progress_placeholder = st.empty()
+            progress_placeholder.progress(0, text="Connecting...")
             start_time = time.perf_counter()
+            stream_count = 0
             for stream in client.chat(
                 query=user_input,
                 user_persona="Researcher",
@@ -246,6 +248,11 @@ with chat_col:
                 try:
                     if stream.get("node") == "trace_info":
                         continue
+                    stream_count += 1
+                    progress_placeholder.progress(
+                        min(0.95, 0.05 + stream_count * 0.08),
+                        text=f"Generating... ({stream_count} updates)",
+                    )
                     update = json.loads(stream["update"])
                     if "aoi" in update:
                         st.session_state.map_aoi_data = update["aoi"]
@@ -279,6 +286,7 @@ with chat_col:
                     render_stream(stream, skip_maps=True)
                 except Exception as e:
                     st.error(f"Error processing stream: {e}")
+            progress_placeholder.empty()
             total_time = time.perf_counter() - start_time
             if SHOW_RESPONSE_TIMER:
                 timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
@@ -297,13 +305,22 @@ with map_col:
                         name[:60] + ("..." if len(name) > 60 else ""),
                         key=f"lc_project_{i}",
                     ):
+                        attrs = m.get("attributes", {})
                         st.session_state.map_project_data = {
                             "rep_point_geojson": m.get("rep_point_geojson"),
                             "geometry_geojson": m.get("geometry_geojson"),
                             "geojson": m.get("geometry_geojson") or m.get("rep_point_geojson"),
-                            "attributes": m.get("attributes", {}),
+                            "attributes": attrs,
                         }
                         st.session_state.map_project_matches = None
+                        detail_lines = [f"# {attrs.get('Name', name)}"]
+                        for k, v in sorted(attrs.items()):
+                            if v is not None and str(v).strip() and k not in ("OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"):
+                                label = k.replace("_", " ").title()
+                                detail_lines.append(f"- **{label}:** {v}")
+                        st.session_state.map_chat_messages.append(
+                            {"role": "assistant", "content": "\n".join(detail_lines)}
+                        )
                         st.rerun()
     render_dataset_map(
         st.session_state.map_dataset_data,

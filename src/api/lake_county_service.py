@@ -1,6 +1,8 @@
 """
 Lake County ArcGIS project search.
 """
+import asyncio
+import time
 from typing import Any
 
 import httpx
@@ -27,12 +29,21 @@ MAX_LIST_PROJECTS = 50
 # Fields we fetch unique values for (for filter resolution)
 DOMAIN_FIELDS = ["status", "ProjectStatus", "jurisdiction"]
 
+_domains_cache: dict[str, list[str]] | None = None
+_domains_cache_ts: float = 0.0
+_DOMAINS_CACHE_TTL = 600  # 10 minutes
+
 
 async def fetch_lake_county_domains() -> dict[str, list[str]]:
     """
     Fetch unique values for status, ProjectStatus, jurisdiction from Representative Points layer.
     Used so the AI can map user terms (e.g. "submitted", "Under Review") to actual field values.
+    Cached for 10 minutes to avoid repeated ArcGIS calls.
     """
+    global _domains_cache, _domains_cache_ts
+    if _domains_cache is not None and (time.monotonic() - _domains_cache_ts) < _DOMAINS_CACHE_TTL:
+        return _domains_cache
+
     layer = LAKE_COUNTY_LAYERS_BY_ID.get(LAKE_COUNTY_SEARCH_LAYER_ID)
     if not layer:
         return {}
@@ -40,7 +51,7 @@ async def fetch_lake_county_domains() -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for field in DOMAIN_FIELDS:
+        async def _fetch_domain(field: str) -> tuple[str, list[str]]:
             params = {
                 "where": "1=1",
                 "outFields": field,
@@ -55,11 +66,9 @@ async def fetch_lake_county_domains() -> dict[str, list[str]]:
                 data = resp.json()
             except Exception as e:
                 logger.warning("LC_DOMAINS_FETCH_FAILED", field=field, error=str(e))
-                result[field] = []
-                continue
+                return (field, [])
             if "error" in data:
-                result[field] = []
-                continue
+                return (field, [])
             features = data.get("features", [])
             values = []
             for f in features:
@@ -67,8 +76,14 @@ async def fetch_lake_county_domains() -> dict[str, list[str]]:
                 v = attr.get(field)
                 if v is not None and str(v).strip():
                     values.append(str(v).strip())
-            result[field] = sorted(set(values))
+            return (field, sorted(set(values)))
 
+        domain_results = await asyncio.gather(*[_fetch_domain(f) for f in DOMAIN_FIELDS])
+        for field, values in domain_results:
+            result[field] = values
+
+    _domains_cache = result
+    _domains_cache_ts = time.monotonic()
     return result
 
 
@@ -170,7 +185,7 @@ async def query_lake_county_projects(
     logger.info("LC_QUERY_PROJECTS", where=where, limit=effective_limit)
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.get(query_url, params=params)
             resp.raise_for_status()
             geojson = resp.json()
@@ -185,29 +200,39 @@ async def query_lake_county_projects(
     limit_exceeded = len(features) > effective_limit
     features = features[:effective_limit]
 
+    # Group project IDs by geometry layer for batch fetch (3 HTTP calls total)
+    project_ids_by_layer: dict[str, list[int]] = {}
+    for feat in features:
+        attrs = feat.get("properties", {})
+        project_id = attrs.get("project_id")
+        geom_type = attrs.get("Geometry")
+        if project_id and geom_type:
+            layer_id = GEOMETRY_TYPE_TO_LAYER.get(geom_type)
+            if layer_id:
+                project_ids_by_layer.setdefault(layer_id, []).append(project_id)
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        geom_by_pid = await _batch_fetch_geometries(client, project_ids_by_layer)
+
     matches = []
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for feat in features:
-            attrs = feat.get("properties", {})
-            rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
-            project_id = attrs.get("project_id")
-            geom_type = attrs.get("Geometry")
-            geometry_geojson = None
-            if project_id and geom_type:
-                geometry_geojson = await _fetch_project_geometry(client, project_id, geom_type)
-            rep_geom = feat.get("geometry")
-            geometry = None
-            if geometry_geojson and geometry_geojson.get("features"):
-                geometry = geometry_geojson["features"][0].get("geometry")
-            if not geometry:
-                geometry = rep_geom
-            matches.append({
-                "rep_point_geojson": rep_point_geojson,
-                "geometry_geojson": geometry_geojson,
-                "geojson": geometry_geojson or rep_point_geojson,
-                "attributes": attrs,
-                "geometry": geometry,
-            })
+    for feat in features:
+        attrs = feat.get("properties", {})
+        rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
+        rep_geom = feat.get("geometry")
+        project_id = attrs.get("project_id")
+        geometry_geojson = geom_by_pid.get(project_id) if project_id else None
+        geometry = None
+        if geometry_geojson and geometry_geojson.get("features"):
+            geometry = geometry_geojson["features"][0].get("geometry")
+        if not geometry:
+            geometry = rep_geom
+        matches.append({
+            "rep_point_geojson": rep_point_geojson,
+            "geometry_geojson": geometry_geojson,
+            "geojson": geometry_geojson or rep_point_geojson,
+            "attributes": attrs,
+            "geometry": geometry,
+        })
 
     return {"found": True, "matches": matches, "limit_exceeded": limit_exceeded}
 
@@ -294,6 +319,58 @@ async def _fetch_project_geometry(client: httpx.AsyncClient, project_id: int, ge
     return {"type": "FeatureCollection", "features": features}
 
 
+async def _batch_fetch_geometries(
+    client: httpx.AsyncClient,
+    project_ids_by_layer: dict[str, list[int]],
+) -> dict[int, dict]:
+    """
+    Fetch geometries for many projects in batch: one query per geometry layer
+    using `project_id IN (...)` instead of one HTTP call per project.
+    Returns {project_id: FeatureCollection GeoJSON}.
+    """
+    result: dict[int, dict] = {}
+
+    async def _fetch_layer(layer_id: str, pids: list[int]) -> None:
+        layer = LAKE_COUNTY_LAYERS_BY_ID.get(layer_id)
+        if not layer or not pids:
+            return
+        query_url = f"{layer['arcgis_url']}/query"
+        id_list = ",".join(str(p) for p in pids)
+        # POST avoids URL length limits that cause 404 on large IN clauses
+        form_data = {
+            "where": f"project_id IN ({id_list})",
+            "outFields": "project_id",
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "f": "geojson",
+            "resultRecordCount": "2000",
+        }
+        try:
+            resp = await client.post(query_url, data=form_data, timeout=120.0)
+            resp.raise_for_status()
+            geojson = resp.json()
+        except Exception as e:
+            logger.warning("LC_BATCH_GEOM_ERROR", layer_id=layer_id, count=len(pids), error=str(e))
+            return
+        if "error" in geojson:
+            logger.warning("LC_BATCH_GEOM_ARCGIS_ERROR", layer_id=layer_id, error=geojson.get("error"))
+            return
+        for feat in geojson.get("features", []):
+            pid = feat.get("properties", {}).get("project_id")
+            if pid is None:
+                continue
+            if pid not in result:
+                result[pid] = {"type": "FeatureCollection", "features": []}
+            result[pid]["features"].append(feat)
+
+    await asyncio.gather(*[
+        _fetch_layer(layer_id, pids)
+        for layer_id, pids in project_ids_by_layer.items()
+        if pids
+    ])
+    return result
+
+
 async def search_lake_county_project(name: str) -> dict[str, Any]:
     """
     Search for Lake County projects by name (partial match, CONTAINS).
@@ -363,7 +440,7 @@ async def search_lake_county_project(name: str) -> dict[str, Any]:
 
     matches = []
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for feat in features[:MAX_MATCHES]:
+        async def _fetch_search_match(feat):
             attrs = feat.get("properties", {})
             rep_geom = feat.get("geometry")
             rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
@@ -372,13 +449,14 @@ async def search_lake_county_project(name: str) -> dict[str, Any]:
             geometry_geojson = None
             if project_id and geom_type:
                 geometry_geojson = await _fetch_project_geometry(client, project_id, geom_type)
-            matches.append({
+            return {
                 "rep_point_geojson": rep_point_geojson,
                 "geometry_geojson": geometry_geojson,
                 "geojson": geometry_geojson or rep_point_geojson,
                 "attributes": attrs,
                 "geometry": geometry_geojson["features"][0]["geometry"] if geometry_geojson and geometry_geojson.get("features") else rep_geom,
-            })
+            }
+        matches = list(await asyncio.gather(*[_fetch_search_match(f) for f in features[:MAX_MATCHES]]))
 
     logger.info("LC_SEARCH_SUCCESS", matches_count=len(matches), first_name=matches[0]["attributes"].get("Name") if matches else None)
     return {"found": True, "matches": matches}
@@ -460,35 +538,60 @@ async def query_lake_county_preapps(
     limit_exceeded = len(features) > limit
     features = features[:limit]
 
+    # Batch fetch preapp geometries from layer 99 (single query)
+    preapp_ids = [
+        feat.get("properties", {}).get("preapp_id")
+        for feat in features
+        if feat.get("properties", {}).get("preapp_id") is not None
+    ]
+    geom_by_preapp: dict[int, dict] = {}
+    if preapp_ids:
+        id_list = ",".join(str(p) for p in preapp_ids)
+        geom_query_url = f"{PREAPP_GEOMETRY_URL}/query"
+        form_data = {
+            "where": f"preapp_id IN ({id_list})",
+            "outFields": "preapp_id",
+            "returnGeometry": "true",
+            "outSR": "4326",
+            "f": "geojson",
+            "resultRecordCount": "2000",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as geom_client:
+                geom_resp = await geom_client.post(geom_query_url, data=form_data)
+                geom_resp.raise_for_status()
+                geom_json = geom_resp.json()
+            for gfeat in geom_json.get("features", []):
+                pid = gfeat.get("properties", {}).get("preapp_id")
+                if pid is not None:
+                    if pid not in geom_by_preapp:
+                        geom_by_preapp[pid] = {"type": "FeatureCollection", "features": []}
+                    geom_by_preapp[pid]["features"].append(gfeat)
+        except Exception as e:
+            logger.warning("LC_BATCH_PREAPP_GEOM_ERROR", count=len(preapp_ids), error=str(e))
+
     matches = []
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for feat in features:
-            attrs = feat.get("properties", {})
-            preapp_id = attrs.get("preapp_id")
-            point_geom = feat.get("geometry")
-
-            rep_point_geojson = None
-            if point_geom and point_geom.get("type") == "Point":
-                rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
-
-            geometry_geojson = None
-            geometry = None
-            if preapp_id:
-                geometry_geojson = await _fetch_preapp_geometries(client, preapp_id)
-                if geometry_geojson and geometry_geojson.get("features"):
-                    geometry = geometry_geojson["features"][0].get("geometry")
-
-            if not geometry and point_geom:
-                geometry = point_geom
-
-            geojson_used = geometry_geojson or rep_point_geojson
-            matches.append({
-                "rep_point_geojson": rep_point_geojson,
-                "geometry_geojson": geometry_geojson,
-                "geojson": geojson_used,
-                "attributes": attrs,
-                "geometry": geometry,
-            })
+    for feat in features:
+        attrs = feat.get("properties", {})
+        preapp_id = attrs.get("preapp_id")
+        point_geom = feat.get("geometry")
+        rep_point_geojson = None
+        if point_geom and point_geom.get("type") == "Point":
+            rep_point_geojson = {"type": "FeatureCollection", "features": [feat]}
+        geometry_geojson = geom_by_preapp.get(preapp_id) if preapp_id else None
+        geometry = None
+        if geometry_geojson and geometry_geojson.get("features"):
+            geometry = geometry_geojson["features"][0].get("geometry")
+        if not geometry and point_geom:
+            geometry = point_geom
+        geojson_used = geometry_geojson or rep_point_geojson
+        matches.append({
+            "rep_point_geojson": rep_point_geojson,
+            "geometry_geojson": geometry_geojson,
+            "geojson": geojson_used,
+            "attributes": attrs,
+            "geometry": geometry,
+        })
 
     return {"found": True, "matches": matches, "limit_exceeded": limit_exceeded}
 
