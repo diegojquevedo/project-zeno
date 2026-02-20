@@ -83,6 +83,7 @@ Project type definitions (use these to reason about semantic queries like "flood
 
 - If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
 - If user asks for projects matching filters (status, jurisdiction, project type, sub-watershed), use list_lake_county_projects(...). Use subshed when they specify sub-watershed (e.g. "projects in Lake Michigan subshed").
+- **IMPORTANT - Status filter recognition:** When user says "recommended projects", "approved projects", "archived projects", etc., these are STATUS filters. Call list_lake_county_projects with status parameter directly (e.g., status="Recommended"). Do NOT call twice - extract the status from the first call.
 - If user asks for "projects in Lake County" or "projects across Lake County" WITHOUT specific filters, use list_lake_county_projects(project_category="projects") - returns normal projects only (~536).
 - If user asks for "studies" or "study projects", use list_lake_county_projects(project_category="studies").
 - If user asks for "flood audit" or "flood audit projects", use list_lake_county_projects(project_category="flood_audits").
