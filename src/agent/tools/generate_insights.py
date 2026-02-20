@@ -9,7 +9,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from src.agent.llms import GEMINI_FLASH
+from src.agent.llms import GEMINI_FLASH_LITE
 from src.agent.prompts import WORDING_INSTRUCTIONS
 from src.agent.tools.code_executors import GeminiCodeExecutor
 from src.agent.tools.code_executors.base import PartType
@@ -26,6 +26,25 @@ def _get_available_datasets() -> str:
         dataset_names.append(dataset["dataset_name"])
 
     return ", ".join(dataset_names)
+
+
+def _is_simple_for_fast_path(
+    dataframes: List[Tuple[pd.DataFrame, str]],
+) -> Optional[Tuple[List[Dict], str, Dict]]:
+    """
+    If data is simple (carbon flux or small time series), return fallback result.
+    Otherwise None. Used to skip Gemini executor and ChartInsight LLM (~24s saved).
+    """
+    fallback = _build_fallback_chart_from_dataframes(dataframes)
+    if not fallback:
+        return None
+    chart_data, chart_type, config = fallback
+    total_rows = sum(len(df) for df, _ in dataframes)
+    if chart_type == "bar" and config.get("x_axis") == "metric" and len(chart_data) == 3:
+        return fallback
+    if chart_type == "line" and total_rows <= 20:
+        return fallback
+    return None
 
 
 def _build_fallback_chart_from_dataframes(
@@ -73,7 +92,7 @@ def _build_fallback_chart_from_dataframes(
                     "series_fields": [],
                 }
                 logger.info(
-                    f"Fallback chart: carbon flux bar (emissions, removals, net flux)"
+                    "Fallback chart: carbon flux bar (emissions, removals, net flux)"
                 )
                 return (rows, "bar", config)
             except (TypeError, ValueError) as e:
@@ -418,87 +437,102 @@ async def generate_insights(
     analysis_prompt = build_analysis_prompt(query, file_references)
     logger.debug(f"Analysis prompt:\n{analysis_prompt}")
 
-    # 4. PREPARE DATA: Convert DataFrames to inline data format
-    file_refs = await executor.prepare_dataframes(dataframes)
-    logger.info(f"Prepared {len(file_refs)} inline data parts for Gemini")
-
-    # 5. EXECUTE CODE: Run analysis with Gemini
-    result = await executor.execute(analysis_prompt, file_refs)
-
-    # Check for errors
-    if result.error:
-        logger.error(f"Code execution error: {result.error}")
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"Analysis failed: {result.error}",
-                        tool_call_id=tool_call_id,
-                        status="error",
-                    )
-                ]
-            }
+    # FAST PATH: simple carbon flux or small time series — skip executor + ChartInsight LLM (~24s)
+    fast_path = _is_simple_for_fast_path(dataframes)
+    if fast_path:
+        chart_data, chart_type, field_config = fast_path
+        fallback_config = (chart_type, field_config)
+        logger.info(f"Fast path: using fallback chart (type={chart_type}) with {len(chart_data)} rows, skipping Gemini executor")
+        aoi_name = (dataframes[0][1].split(" — ")[0] if dataframes else "Area")
+        vals = {r["metric"]: r["value"] for r in chart_data} if chart_type == "bar" and field_config.get("x_axis") == "metric" else {}
+        template_title = f"Forest Carbon — {aoi_name}" if vals else f"Data Overview — {aoi_name}"
+        template_insight = (
+            f"Gross Emissions: {vals.get('Gross Emissions', 0):,.0f}, "
+            f"Gross Removals: {vals.get('Gross Removals', 0):,.0f}, "
+            f"Net Flux: {vals.get('Net Flux', 0):,.0f}."
+            if vals else "Data summarized from available metrics."
         )
+        template_follow_ups = ["Compare with another time period", "Analyze a different area"]
+        codeact_parts: list = []
+    else:
+        # 4. PREPARE DATA and 5. EXECUTE CODE
+        file_refs = await executor.prepare_dataframes(dataframes)
+        logger.info(f"Prepared {len(file_refs)} inline data parts for Gemini")
+        result = await executor.execute(analysis_prompt, file_refs)
 
-    text_output = " ".join(
-        [
-            part.content
-            for part in result.parts
-            if part.type == PartType.TEXT_OUTPUT
-        ]
-    )
-
-    # Use chart data from result, or fallback from raw data (guarantee chart)
-    chart_data = result.chart_data
-    fallback_config: Optional[Tuple[str, Dict]] = None  # (chart_type, field_config)
-    if not chart_data:
-        fallback_result = _build_fallback_chart_from_dataframes(dataframes)
-        if fallback_result:
-            chart_data, default_chart_type, field_config = fallback_result
-            fallback_config = (default_chart_type, field_config)
-            logger.info(
-                f"Using fallback chart (type={default_chart_type}) with {len(chart_data)} rows"
-            )
-        else:
-            logger.error("No chart data generated and no fallback available")
+        if result.error:
+            logger.error(f"Code execution error: {result.error}")
             return Command(
                 update={
                     "messages": [
                         ToolMessage(
-                            content=f"Failed to generate chart data. Feedback:{text_output}",
+                            content=f"Analysis failed: {result.error}",
                             tool_call_id=tool_call_id,
                             status="error",
                         )
                     ]
                 }
             )
-    else:
-        logger.info(f"Generated chart data with {len(chart_data)} rows")
 
-    # 5.5. REPLACE CSV PATHS: Replace CSV file paths with URL-based loading
-    # This makes the code blocks runnable in any environment.
-    for part in result.parts:
-        if part.type == PartType.CODE_BLOCK:
-            part.content = replace_csv_paths_with_urls(
-                part.content, source_urls
-            )
+        text_output = " ".join(
+            [part.content for part in result.parts if part.type == PartType.TEXT_OUTPUT]
+        )
 
-    # 6. GENERATE CHART SCHEMA: Use LLM to create structured chart metadata
+        chart_data = result.chart_data
+        fallback_config: Optional[Tuple[str, Dict]] = None
+        if not chart_data:
+            fallback_result = _build_fallback_chart_from_dataframes(dataframes)
+            if fallback_result:
+                chart_data, default_chart_type, field_config = fallback_result
+                fallback_config = (default_chart_type, field_config)
+                logger.info(f"Using fallback chart (type={default_chart_type}) with {len(chart_data)} rows")
+            else:
+                logger.error("No chart data generated and no fallback available")
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=f"Failed to generate chart data. Feedback:{text_output}",
+                                tool_call_id=tool_call_id,
+                                status="error",
+                            )
+                        ]
+                    }
+                )
+        else:
+            logger.info(f"Generated chart data with {len(chart_data)} rows")
+
+        for part in result.parts:
+            if part.type == PartType.CODE_BLOCK:
+                part.content = replace_csv_paths_with_urls(part.content, source_urls)
+        codeact_parts = result.get_encoded_parts()
+
     chart_data_df = pd.DataFrame(chart_data)
-    available_datasets = _get_available_datasets()
-    dataset_guidelines = state.get("dataset").get(
-        "prompt_instructions", "No specific dataset guidelines provided."
-    )
-    dataset_cautions = state.get("dataset").get(
-        "cautions", "No specific dataset cautions provided."
-    )
 
-    # Build dataset list
-    dataset_list = "\n".join(
-        [f"- {display_name}" for _, display_name in dataframes]
-    )
-
-    chart_insight_prompt = f"""Generate structured chart metadata from the analysis output below.
+    if fast_path:
+        chart_insight_response = ChartInsight(
+            title=template_title,
+            chart_type=fallback_config[0],
+            insight=template_insight,
+            x_axis=fallback_config[1].get("x_axis", ""),
+            y_axis=fallback_config[1].get("y_axis", ""),
+            group_field=fallback_config[1].get("group_field", ""),
+            series_fields=fallback_config[1].get("series_fields", []),
+            follow_up_suggestions=template_follow_ups,
+        )
+    else:
+        available_datasets = _get_available_datasets()
+        dataset_guidelines = state.get("dataset", {}).get(
+            "prompt_instructions", "No specific dataset guidelines provided."
+        )
+        dataset_cautions = state.get("dataset", {}).get(
+            "cautions", "No specific dataset cautions provided."
+        )
+        dataset_list = "\n".join([f"- {display_name}" for _, display_name in dataframes])
+        text_output = " ".join(
+            [part.content for part in result.parts if part.type == PartType.TEXT_OUTPUT]
+        )
+        chart_insight_prompt = f"""Generate structured chart metadata from the analysis output below.
 
 ### User Query
 {query}
@@ -559,10 +593,9 @@ Cautions: {dataset_cautions}
 
 {WORDING_INSTRUCTIONS}
 """
-
-    chart_insight_response = await GEMINI_FLASH.with_structured_output(
-        ChartInsight
-    ).ainvoke(chart_insight_prompt)
+        chart_insight_response = await GEMINI_FLASH_LITE.with_structured_output(
+            ChartInsight
+        ).ainvoke(chart_insight_prompt)
 
     # 7. BUILD RESPONSE
     tool_message = f"Title: {chart_insight_response.title}"
@@ -610,7 +643,7 @@ Cautions: {dataset_cautions}
         "follow_up_suggestions": chart_insight_response.model_dump()[
             "follow_up_suggestions"
         ],
-        "codeact_parts": result.get_encoded_parts(),
+        "codeact_parts": codeact_parts,
         "charts_data": charts_data,
         "messages": [
             ToolMessage(

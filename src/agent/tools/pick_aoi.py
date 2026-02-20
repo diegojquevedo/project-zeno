@@ -12,7 +12,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from src.agent.llms import MODEL, SMALL_MODEL
+from src.agent.llms import SMALL_MODEL
 from src.shared.database import get_connection_from_pool
 from src.shared.geocoding_helpers import (
     CUSTOM_AREA_TABLE,
@@ -55,26 +55,21 @@ async def query_aoi_database(
 
         user_id = structlog.contextvars.get_contextvars().get("user_id")
 
+        # Only check tables that exist in this deployment (gadm + custom).
+        # kba, landmark, wdpa are skipped to avoid failed queries and rollbacks.
         if _existing_tables_cache is not None:
             existing_tables = _existing_tables_cache
         else:
-            table_checks = {
-                "gadm": GADM_TABLE,
-                "kba": KBA_TABLE,
-                "landmark": LANDMARK_TABLE,
-                "wdpa": WDPA_TABLE,
-                "custom": CUSTOM_AREA_TABLE,
-            }
+            table_checks = {"gadm": GADM_TABLE, "custom": CUSTOM_AREA_TABLE}
             existing_tables = []
             for table_key, table_name in table_checks.items():
                 try:
                     await conn.execute(text(f"SELECT 1 FROM {table_name} LIMIT 1"))
                     existing_tables.append(table_key)
                 except Exception:
-                    logger.warning(f"Table {table_name} does not exist")
+                    logger.warning("AOI table missing", table=table_name)
                     await conn.rollback()
             _existing_tables_cache = existing_tables
-            logger.info(f"AOI table check cached: {existing_tables}")
 
         # Build the query based on existing tables
         union_parts = []
@@ -89,44 +84,6 @@ async def query_aoi_database(
             """
             )
 
-        if "kba" in existing_tables:
-            src_id = SOURCE_ID_MAPPING["kba"]["id_column"]
-            union_parts.append(
-                f"""
-                SELECT CAST({src_id} as TEXT) as src_id,
-                       name,
-                       subtype,
-                       'kba' as source
-                FROM {KBA_TABLE}
-                WHERE name IS NOT NULL AND name % :place_name
-            """
-            )
-
-        if "landmark" in existing_tables:
-            src_id = SOURCE_ID_MAPPING["landmark"]["id_column"]
-            union_parts.append(
-                f"""
-                SELECT CAST({src_id} as TEXT) as src_id,
-                       name,
-                       subtype,
-                       'landmark' as source
-                FROM {LANDMARK_TABLE}
-                WHERE name IS NOT NULL AND name % :place_name
-            """
-            )
-
-        if "wdpa" in existing_tables:
-            src_id = SOURCE_ID_MAPPING["wdpa"]["id_column"]
-            union_parts.append(
-                f"""
-                SELECT CAST({src_id} as TEXT) as src_id,
-                       name,
-                       subtype,
-                       'wdpa' as source
-                FROM {WDPA_TABLE}
-                WHERE name IS NOT NULL AND name % :place_name
-            """
-            )
         if "custom" in existing_tables and user_id:
             src_id = SOURCE_ID_MAPPING["custom"]["id_column"]
             union_parts.append(
@@ -311,8 +268,8 @@ async def select_best_aoi(question, candidate_aois):
         ]
     )
 
-    # Chain for selecting the best location match
-    AOI_SELECTION_CHAIN = AOI_SELECTION_PROMPT | MODEL.with_structured_output(
+    # Chain for selecting the best location match (use SMALL_MODEL for speed)
+    AOI_SELECTION_CHAIN = AOI_SELECTION_PROMPT | SMALL_MODEL.with_structured_output(
         AOIIndex
     )
 
@@ -325,8 +282,17 @@ async def select_best_aoi(question, candidate_aois):
     return selected_aoi
 
 
+def _likely_english(name: str) -> bool:
+    """Skip translation for plain ASCII names (e.g. Norway, Brazil)."""
+    if not name or len(name) > 60:
+        return False
+    return all(ord(c) < 128 for c in name)
+
+
 async def translate_to_english(question, place_name):
     """Translate place name to English if it's in a different language."""
+    if _likely_english(place_name):
+        return place_name
 
     class Place(BaseModel):
         name: str
@@ -424,13 +390,31 @@ async def pick_aoi(
         # Query the database for place & get top matches using similarity
         results = await query_aoi_database(place, RESULT_LIMIT)
 
-        # Convert results to CSV
-        candidate_aois = results.to_csv(
-            index=False
-        )  # results: id, name, subtype, source, src_id
 
-        # Select the best AOI based on user query
-        selected_aoi = await select_best_aoi(question, candidate_aois)
+        def _skip_llm() -> bool:
+            if len(results) == 1:
+                return True
+            row = results.iloc[0]
+            first_name = (row.get("name") or "").split(",")[0].strip().lower()
+            place_lower = (place or "").strip().lower()
+            if place_lower and first_name == place_lower:
+                return True
+            if place_lower and place_lower in first_name and "country" in str(row.get("subtype", "")).lower():
+                return True
+            return False
+
+        if _skip_llm():
+            row = results.iloc[0]
+            selected_aoi = type("_AOI", (), {
+                "source": str(row["source"]),
+                "src_id": str(row["src_id"]),
+                "name": str(row["name"]),
+                "subtype": str(row["subtype"]),
+            })()
+            logger.info(f"Unambiguous AOI, skipping LLM: {selected_aoi.name}")
+        else:
+            candidate_aois = results.to_csv(index=False)
+            selected_aoi = await select_best_aoi(question, candidate_aois)
         source = selected_aoi.source
         src_id = selected_aoi.src_id
         name = selected_aoi.name
@@ -562,7 +546,15 @@ async def pick_aoi(
                 )
 
         logger.debug(f"Pick AOI tool message: {tool_message}")
-        selected_aoi = selected_aoi.model_dump()
+        if hasattr(selected_aoi, "model_dump"):
+            selected_aoi = selected_aoi.model_dump()
+        else:
+            selected_aoi = {
+                "source": selected_aoi.source,
+                "src_id": selected_aoi.src_id,
+                "name": selected_aoi.name,
+                "subtype": selected_aoi.subtype,
+            }
         selected_aoi[SOURCE_ID_MAPPING[source]["id_column"]] = src_id
 
         logger.info(

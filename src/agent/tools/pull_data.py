@@ -90,10 +90,8 @@ async def pull_data(
     )
 
     dataset = state["dataset"]
-    current_raw_data = state.get("raw_data", {})
 
-    if current_raw_data is None:
-        current_raw_data = {}
+    current_raw_data = {}
 
     ds_original = [
         ds for ds in DATASETS if ds["dataset_id"] == dataset.get("dataset_id")
