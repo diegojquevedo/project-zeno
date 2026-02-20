@@ -216,29 +216,12 @@ async def pick_dataset(
         if ds["dataset_id"] == selection_result.dataset_id
     ][0]
 
-    tool_message = f"""# About the selection
-    Selected dataset name: {selection_result.dataset_name}
-    Selected context layer: {selection_result.context_layer}
-    Reasoning for selection: {selection_result.reason}
+    desc = (selected_dataset["description"] or "").strip()
+    if len(desc) > 280:
+        desc = desc[:277].rsplit(" ", 1)[0] + "..."
+    tool_message = f"""**{selection_result.dataset_name}**
 
-    # Additional dataset information
-
-    ## Description
-
-    {selected_dataset["description"]}
-
-    ## Function usage notes:
-
-    {selected_dataset["function_usage_notes"]}
-
-    ## Usage cautions
-
-    {selected_dataset["cautions"]}
-
-    ## Content date
-
-    {selected_dataset["content_date"]}
-    """
+{desc}"""
 
     logger.debug(f"Pick dataset tool message: {tool_message}")
 

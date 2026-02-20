@@ -393,8 +393,13 @@ async def translate_to_english(question, place_name):
             "place_name": place_name,
         }
     )
-    logger.info(f"English place name: {english_place_name.name}")
 
+    if english_place_name is None:
+        logger.warning(
+            "Translation returned None, using original place name as fallback"
+        )
+        return place_name
+    logger.info(f"English place name: {english_place_name.name}")
     return english_place_name.name
 
 

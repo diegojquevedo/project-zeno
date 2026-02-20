@@ -913,7 +913,13 @@ def render_stream(stream, skip_maps=False):
                 else:
                     st.markdown(content_item)
         else:
-            st.markdown(content)
+            tool_name = msg["kwargs"].get("name")
+            if tool_name == "pick_dataset" and content:
+                with st.container():
+                    st.markdown("**Selected dataset**")
+                    st.info(content)
+            else:
+                st.markdown(content)
     # Render map if this is a tool node with AOI data
     aoi_data = None
     if not skip_maps and "aoi" in update:

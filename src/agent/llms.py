@@ -20,7 +20,7 @@ HAIKU = ChatAnthropic(
 )
 
 # Google
-GEMINI = ChatGoogleGenerativeAI(
+GEMINI_3_PRO = ChatGoogleGenerativeAI(
     model="gemini-3-pro-preview",
     temperature=1.0,
     max_tokens=None,  # max_tokens=None means no limit
@@ -46,6 +46,15 @@ GEMINI_FLASH_LITE = ChatGoogleGenerativeAI(
     thinking_budget=0,
     timeout=300,
 )
+GEMINI_3_FLASH = ChatGoogleGenerativeAI(
+    model="gemini-3-flash-preview",
+    temperature=0.3,
+    max_tokens=None,  # max_tokens=None means no limit
+    include_thoughts=False,
+    max_retries=2,
+    thinking_budget=0,
+    timeout=300,
+)
 # OpenAI
 GPT = ChatOpenAI(
     model="gpt-4o",
@@ -57,10 +66,12 @@ GPT = ChatOpenAI(
 MODEL_REGISTRY = {
     "sonnet": SONNET,
     "haiku": HAIKU,
-    "gemini": GEMINI,
-    "gemini-3-pro-preview": GEMINI,  # alias for MODEL/SMALL_MODEL
-    "gemini-3-flash-preview": GEMINI_FLASH,
-    "gemini-flash": GEMINI_FLASH,
+    "gemini": GEMINI_3_PRO,
+    "gemini-3-pro": GEMINI_3_PRO,
+    "gemini-3-pro-preview": GEMINI_3_PRO,  # alias
+    "gemini-3-flash": GEMINI_3_FLASH,
+    "gemini-3-flash-preview": GEMINI_3_FLASH,  # alias
+    "gemini-flash": GEMINI_FLASH,  # Gemini 2.5 Flash
     "gemini-flash-lite": GEMINI_FLASH_LITE,
     "gpt": GPT,
 }
