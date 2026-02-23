@@ -1,3 +1,4 @@
+from src.core.logging import get_logger
 from src.ingest.utils import (
     create_geometry_index_if_not_exists,
     create_id_index_if_not_exists,
@@ -7,6 +8,7 @@ from src.ingest.utils import (
 )
 from src.shared.geocoding_helpers import SOURCE_ID_MAPPING
 
+logger = get_logger(__name__)
 LANDMARK_DATA_SOURCE = "s3://gfw-data-lake/landmark_ip_lc_and_indicative_poly/v20250625/vector/epsg-4326/default.ndjson"
 
 
@@ -14,7 +16,7 @@ def ingest_landmark() -> None:
     """
     Main function to download Landmark data and ingest it to PostGIS in chunks.
     """
-    print("Downloading and processing Landmark data in chunks...")
+    logger.info("Downloading and processing Landmark data in chunks")
 
     for i, gdf_chunk in enumerate(
         gdf_from_ndjson_chunked(LANDMARK_DATA_SOURCE)
@@ -64,7 +66,7 @@ def ingest_landmark() -> None:
         column=id_column,
     )
 
-    print("✓ Landmark ingestion completed successfully!")
+    logger.info("Landmark ingestion completed successfully")
 
 
 if __name__ == "__main__":

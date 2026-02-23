@@ -8,7 +8,9 @@ from sqlalchemy import create_engine, text
 
 import src.shared.env  # noqa: F401
 from src.core.config import settings
+from src.core.logging import get_logger
 
+logger = get_logger(__name__)
 DB_URL = settings.get_database_url_for_psycopg2()
 
 
@@ -20,24 +22,25 @@ def cached_ndjson_path(url: str, cache_dir: Path = Path("/tmp")) -> Path:
     """
     dest = cache_dir / Path(url).name
     if dest.exists():
-        print(f"✓ Using cached NDJSON → {dest}")
+        logger.info("Using cached NDJSON", path=str(dest))
         return dest
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     if url.startswith("s3://"):
         fs = s3fs.S3FileSystem(requester_pays=True)
-        print(f"⇣ Downloading {url} → {dest}")
+        logger.info("Downloading from S3", url=url, dest=str(dest))
         fs.get(url, str(dest), recursive=False)
-    else:  # HTTP/HTTPS
-        print(f"⇣ Downloading {url} → {dest}")
+    else:
+        logger.info("Downloading", url=url, dest=str(dest))
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
             with open(dest, "wb") as f:
                 for chunk in r.iter_content(1 << 20):
                     f.write(chunk)
 
-    print(f"✓ Downloaded {dest.stat().st_size / 1e6:.1f} MB")
+    size_mb = dest.stat().st_size / 1e6
+    logger.info("Downloaded", path=str(dest), size_mb=round(size_mb, 1))
     return dest
 
 
@@ -71,8 +74,7 @@ def gdf_from_ndjson_chunked(
 
                     yield gdf
 
-                    print(f"Processed {processed_records} records so far...")
-                    # Reset for next chunk
+                    logger.info("Processed chunk", records=processed_records)
                     features = []
 
     # Process remaining features
@@ -81,8 +83,10 @@ def gdf_from_ndjson_chunked(
         gdf["id"] = range(processed_records, processed_records + len(gdf))
 
         processed_records += len(features)
-        print(
-            f"✓ Yielding final chunk with {len(features)} records (total processed: {processed_records})"
+        logger.info(
+            "Yielding final chunk",
+            chunk_records=len(features),
+            total_processed=processed_records,
         )
 
         yield gdf
@@ -125,9 +129,7 @@ def ingest_to_postgis(
             )
         )
         conn.commit()
-    print(
-        f"✓ Ingested {total_records} records to PostGIS table '{table_name}'"
-    )
+    logger.info("Ingested to PostGIS", table=table_name, records=total_records)
 
 
 def create_geometry_index_if_not_exists(
@@ -144,7 +146,7 @@ def create_geometry_index_if_not_exists(
             )
         )
         conn.commit()
-        print(f"✓ Created spatial index {index_name} on {table_name}")
+        logger.info("Created spatial index", table=table_name, index=index_name)
 
 
 def create_text_search_index_if_not_exists(
@@ -165,8 +167,11 @@ def create_text_search_index_if_not_exists(
             )
         )
         conn.commit()
-        print(
-            f"✓ Created text search index {index_name} on {table_name}.{column}"
+        logger.info(
+            "Created text search index",
+            table=table_name,
+            index=index_name,
+            column=column,
         )
 
 
@@ -184,4 +189,4 @@ def create_id_index_if_not_exists(
             )
         )
         conn.commit()
-        print(f"✓ Created ID index {index_name} on {table_name}.{column}")
+        logger.info("Created ID index", table=table_name, index=index_name, column=column)

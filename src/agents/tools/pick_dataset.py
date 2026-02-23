@@ -21,7 +21,7 @@ from src.agents.tools.data_handlers.analytics_handler import (
     TREE_COVER_LOSS_ID,
 )
 from src.agents.tools.datasets_config import DATASETS
-from src.shared.config import SharedSettings
+from src.core.config import settings
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -36,11 +36,11 @@ async def _get_retriever():
     if retriever_cache is None:
         logger.debug("Loading retriever for the first time...")
         embeddings = GoogleGenerativeAIEmbeddings(
-            model=SharedSettings.dataset_embeddings_model,
-            task_type=SharedSettings.dataset_embeddings_task_type,
+            model=settings.dataset_embeddings_model,
+            task_type=settings.dataset_embeddings_task_type,
         )
         index = InMemoryVectorStore.load(
-            data_dir / SharedSettings.dataset_embeddings_db,
+            data_dir / settings.dataset_embeddings_db,
             embedding=embeddings,
         )
         retriever_cache = index.as_retriever(
@@ -187,7 +187,7 @@ async def pick_dataset(
 
     if not selection_result.tile_url.startswith("http"):
         selection_result.tile_url = (
-            SharedSettings.eoapi_base_url + selection_result.tile_url
+            settings.eoapi_base_url + selection_result.tile_url
         )
 
     if selection_result.dataset_id == DIST_ALERT_ID:

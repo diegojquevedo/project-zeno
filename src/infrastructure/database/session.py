@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.shared.config import SharedSettings
-from src.shared.logging_config import get_logger
+from src.core.config import settings
+from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,7 +27,7 @@ async def initialize_global_pool(database_url: Optional[str] = None) -> None:
             logger.warning("Global database pool already initialized")
             return
 
-        raw_url = database_url or SharedSettings.database_url
+        raw_url = database_url or settings.database_url
         if raw_url.startswith("postgresql://") and not raw_url.startswith(
             "postgresql+asyncpg://"
         ):
@@ -37,11 +37,11 @@ async def initialize_global_pool(database_url: Optional[str] = None) -> None:
 
         _global_engine = create_async_engine(
             db_url,
-            pool_size=SharedSettings.db_pool_size,
-            max_overflow=SharedSettings.db_max_overflow,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
             pool_pre_ping=True,
-            pool_recycle=SharedSettings.db_pool_recycle,
-            pool_timeout=SharedSettings.db_pool_timeout,
+            pool_recycle=settings.db_pool_recycle,
+            pool_timeout=settings.db_pool_timeout,
             echo=False,
         )
 
@@ -51,10 +51,9 @@ async def initialize_global_pool(database_url: Optional[str] = None) -> None:
 
         logger.info(
             "Global database pool initialized",
-            pool_size=SharedSettings.db_pool_size,
-            max_overflow=SharedSettings.db_max_overflow,
-            total_connections=SharedSettings.db_pool_size
-            + SharedSettings.db_max_overflow,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            total_connections=settings.db_pool_size + settings.db_max_overflow,
         )
 
 

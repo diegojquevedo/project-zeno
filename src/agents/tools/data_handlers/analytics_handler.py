@@ -10,7 +10,7 @@ from src.agents.tools.data_handlers.base import (
     DataSourceHandler,
 )
 from src.agents.tools.datasets_config import DATASETS
-from src.shared.config import SharedSettings
+from src.core.config import settings
 from src.shared.geocoding_helpers import (
     SUBREGION_TO_AOI_TYPE_MAPPING,
     format_id,
@@ -151,7 +151,7 @@ async def check_for_composition(query: str) -> bool:
 
 
 class AnalyticsHandler(DataSourceHandler):
-    BASE_URL = SharedSettings.analytics_base_url
+    BASE_URL = settings.analytics_base_url
 
     HEADERS = {
         "Accept": "application/json",

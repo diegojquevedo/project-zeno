@@ -7,7 +7,6 @@ def _load_datasets_info() -> str:
     """Load dataset information from the datasets configuration."""
     datasets_info = []
     for dataset in DATASETS:
-        print(dataset.get("dataset_name"))
         name = dataset.get("dataset_name", "Unknown")
         content_date = dataset.get("content_date", "Unknown")
         resolution = dataset.get("resolution", "Unknown")

@@ -6,10 +6,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 import src.shared.env  # noqa: F401
 from src.agents.tools.datasets_config import DATASETS
-from src.shared.config import SharedSettings
+from src.core.config import settings
 
 embeddings = GoogleGenerativeAIEmbeddings(
-    model=SharedSettings.dataset_embeddings_model,
+    model=settings.dataset_embeddings_model,
     task_type="RETRIEVAL_DOCUMENT",
 )
 index = InMemoryVectorStore(embeddings)
@@ -44,4 +44,4 @@ for ds in DATASETS:
 
 index.add_documents(documents=analytics_docs)
 
-index.dump(data_dir / SharedSettings.dataset_embeddings_db)
+index.dump(data_dir / settings.dataset_embeddings_db)

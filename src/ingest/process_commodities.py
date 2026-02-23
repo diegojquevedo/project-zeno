@@ -1,5 +1,8 @@
 import pandas as pd
 
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
 CODE_TO_COMMODITY = {
     "BANA": "Banana",
     "BARL": "Barley",
@@ -36,27 +39,25 @@ CODE_TO_COMMODITY = {
     "YAMS": "Yams",
 }
 
-# Drop geometry
 for admin_level in range(3):
-    print(f"Admin level {admin_level}")
+    logger.info("Processing admin level", admin_level=admin_level)
 
     tab = pd.read_csv(
         f"data/emission_factors_CO2e_ADM{admin_level}_master.csv"
     )
-    print(tab.head())
+    logger.debug("Table head", shape=tab.shape)
 
-    # Melt and save to parquet
     for i in range(admin_level):
-        print(f"Dropping column {i}")
+        logger.debug("Dropping column", column=f"GID_{i}")
         tab = tab.drop(columns=f"GID_{i}")
 
     index = [f"GID_{admin_level}", "crop_type"]
 
     tab = tab.set_index(index).melt(ignore_index=False)
 
-    print(f"Count before dropping {tab.shape}")
+    logger.info("Before dropna", shape=tab.shape)
     tab = tab.dropna(how="all")
-    print(f"Count after dropping {tab.shape}")
+    logger.info("After dropna", shape=tab.shape)
 
     split = tab.variable.str.split("_", expand=True)
 

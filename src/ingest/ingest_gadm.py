@@ -7,6 +7,7 @@ import requests
 from sqlalchemy import create_engine, text
 
 import src.shared.env  # noqa: F401
+from src.core.logging import get_logger
 from src.ingest.utils import (
     create_geometry_index_if_not_exists,
     create_id_index_if_not_exists,
@@ -14,6 +15,7 @@ from src.ingest.utils import (
 )
 from src.shared.geocoding_helpers import GADM_LEVELS, SOURCE_ID_MAPPING
 
+logger = get_logger(__name__)
 GADM_ZIP_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-levels.zip"
 
 
@@ -41,28 +43,29 @@ def download(url: str, dest: str) -> str:
     """Stream-download *url* into *dest* (skips if already present)."""
     dest = Path(dest)
     if dest.exists():
-        print(f"✓ Using cached file → {dest}")
+        logger.info("Using cached file", path=str(dest))
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading {url} to {dest}...")
+    logger.info("Downloading", url=url, dest=str(dest))
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         with open(dest, "wb") as f:
             for chunk in r.iter_content(1 << 20):
                 f.write(chunk)
-    print(f"✓ Downloaded {dest.stat().st_size / 1e6:.1f} MB")
+    size_mb = dest.stat().st_size / 1e6
+    logger.info("Downloaded", path=str(dest), size_mb=round(size_mb, 1))
     return dest
 
 
 def extract_gpkg(zip_path: Path, out_dir: Path) -> Path:
     """Unzip and return the GeoPackage path."""
-    print(f"Extracting {zip_path} to {out_dir}...")
+    logger.info("Extracting", zip_path=str(zip_path), out_dir=str(out_dir))
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(out_dir)
     gpkg = out_dir / "gadm_410-levels.gpkg"
     if not gpkg.exists():
         raise FileNotFoundError("GeoPackage not found after extraction.")
-    print(f"✓ Extracted → {gpkg}")
+    logger.info("Extracted", gpkg=str(gpkg))
     return gpkg
 
 
@@ -113,11 +116,11 @@ def get_unified_schema(gpkg: Path) -> set:
     all_columns = set()
 
     for layer in LAYER_SUBTYPES.keys():
-        print(f"Sampling schema from layer {layer}...")
+        logger.info("Sampling schema", layer=layer)
         sample = gpd.read_file(gpkg, layer=layer, rows=1)
         all_columns.update(sample.columns)
 
-    print(f"✓ Found {len(all_columns)} unique columns across all layers")
+    logger.info("Found columns", count=len(all_columns))
     return all_columns
 
 
@@ -144,15 +147,13 @@ def ingest_gadm_chunked(
     total_processed = 0
 
     for layer, subtype in LAYER_SUBTYPES.items():
-        print(f"Processing layer {layer}...")
+        logger.info("Processing layer", layer=layer)
 
-        # Use layer-specific chunk size, fallback to default if not specified
         layer_chunk_size = LAYER_CHUNK_SIZES.get(layer, chunk_size)
-        print(f"  Using chunk size: {layer_chunk_size} for layer {layer}")
+        logger.debug("Chunk size", layer=layer, chunk_size=layer_chunk_size)
 
-        # Get total rows for this layer
         total_rows = len(gpd.read_file(gpkg, layer=layer, rows=0))
-        print(f"  Layer {layer} has {total_rows} records")
+        logger.info("Layer stats", layer=layer, total_rows=total_rows)
 
         # Process layer in chunks
         for start_idx in range(0, total_rows, layer_chunk_size):
@@ -174,13 +175,15 @@ def ingest_gadm_chunked(
             first_chunk = False
 
             total_processed += len(processed_chunk)
-            print(
-                f"  ✓ Processed {end_idx}/{total_rows} records for layer {layer} (Total: {total_processed})"
+            logger.info(
+                "Processed layer chunk",
+                layer=layer,
+                end_idx=end_idx,
+                total_rows=total_rows,
+                total_processed=total_processed,
             )
 
-    print(
-        f"✓ Ingested {total_processed} records to PostGIS table '{table_name}'"
-    )
+    logger.info("Ingested to PostGIS", table=table_name, records=total_processed)
 
     # Create spatial index on geometry column
     create_geometry_index_if_not_exists(
@@ -220,7 +223,7 @@ def ingest_to_postgis(
     gdf_copy["geometry"] = gpd.GeoSeries.from_wkb(gdf_copy["geometry"])
 
     total_records = len(gdf_copy)
-    print(f"Ingesting {total_records} records in chunks of {chunk_size}...")
+    logger.info("Ingesting", records=total_records, chunk_size=chunk_size)
 
     # Process in chunks
     for i in range(0, total_records, chunk_size):
@@ -232,11 +235,9 @@ def ingest_to_postgis(
         )
 
         records_processed = min(i + chunk_size, total_records)
-        print(f"✓ Processed {records_processed}/{total_records} records")
+        logger.info("Processed chunk", records=records_processed, total=total_records)
 
-    print(
-        f"✓ Ingested {total_records} records to PostGIS table '{table_name}'"
-    )
+    logger.info("Ingested to PostGIS", table=table_name, records=total_records)
 
 
 def main():
@@ -245,11 +246,9 @@ def main():
     zip_path = download(GADM_ZIP_URL, "data/gadm_410-levels.zip")
     gpkg_path = extract_gpkg(Path(zip_path), Path("data"))
 
-    # Ingest to PostGIS in chunks
-    print("Ingesting GADM data to PostGIS in chunks...")
+    logger.info("Ingesting GADM data to PostGIS in chunks")
     ingest_gadm_chunked(gpkg_path)
-
-    print("✓ GADM ingestion completed successfully!")
+    logger.info("GADM ingestion completed successfully")
 
 
 if __name__ == "__main__":

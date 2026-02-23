@@ -13,12 +13,12 @@ from src.agents.tools.lake_county_project_summary import (
     build_project_summary_and_chart,
 )
 from src.api.lake_county_config import PROJECT_CATEGORY_PROJECTS
+from src.core.config import settings
 from src.services.lake_county_service import (
     fetch_lake_county_domains,
     fetch_municipality_boundary,
     query_lake_county_projects,
 )
-from src.shared.config import SharedSettings
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -173,8 +173,8 @@ async def search_lake_county_project_descriptions(
         )
 
     embeddings = GoogleGenerativeAIEmbeddings(
-        model=SharedSettings.dataset_embeddings_model,
-        task_type=SharedSettings.dataset_embeddings_task_type,
+        model=settings.dataset_embeddings_model,
+        task_type=settings.dataset_embeddings_task_type,
     )
     store = InMemoryVectorStore(embeddings)
     store.add_documents(docs)

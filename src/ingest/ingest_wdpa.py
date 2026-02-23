@@ -1,3 +1,4 @@
+from src.core.logging import get_logger
 from src.ingest.utils import (
     create_geometry_index_if_not_exists,
     create_id_index_if_not_exists,
@@ -7,6 +8,7 @@ from src.ingest.utils import (
 )
 from src.shared.geocoding_helpers import SOURCE_ID_MAPPING
 
+logger = get_logger(__name__)
 WDPA_DATA_SOURCE = "s3://gfw-data-lake/wdpa_protected_areas/v202407/vector/epsg-4326/wdpa_protected_areas_v202407.ndjson"
 
 
@@ -14,7 +16,7 @@ def ingest_wdpa() -> None:
     """
     Main function to download WDPA data and ingest it to PostGIS in chunks.
     """
-    print("Downloading and processing WDPA data in chunks...")
+    logger.info("Downloading and processing WDPA data in chunks")
 
     for i, gdf_chunk in enumerate(gdf_from_ndjson_chunked(WDPA_DATA_SOURCE)):
         # Rename columns
@@ -90,7 +92,7 @@ def ingest_wdpa() -> None:
         index_name=f"idx_geometries_wdpa_{id_column}",
         column=id_column,
     )
-    print("✓ WDPA ingestion completed successfully!")
+    logger.info("WDPA ingestion completed successfully")
 
 
 if __name__ == "__main__":
