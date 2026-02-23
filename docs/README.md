@@ -121,16 +121,16 @@ The chat API returns a streaming response with `application/x-ndjson` media type
 
 ### Trace Information
 
-At the end of each conversation, a `trace_info` node is sent containing the Langfuse trace ID:
+At the end of each conversation, a `trace_info` node is sent containing a trace ID:
 
 ```json
 {
     "node": "trace_info",
-    "update": "{\"trace_id\": \"langfuse-trace-id\"}"
+    "update": "{\"trace_id\": \"uuid\"}"
 }
 ```
 
-This trace ID can be used for feedback collection and conversation analytics.
+This trace ID can be used for feedback collection (e.g. when users rate responses).
 
 ### Error Handling
 

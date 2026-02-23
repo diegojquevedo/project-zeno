@@ -1,18 +1,12 @@
-"""
-https://onewri.sharepoint.com/:x:/s/LandandCarbonWatch/ESllWse7dmFAnobmcA4IMXABbyDYhta0p81qnPH3-XUsBw
-"""
-
 from pathlib import Path
 
-from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from src.agent.tools.data_handlers.analytics_handler import DATASETS
+import src.shared.env  # noqa: F401
+from src.agents.tools.datasets_config import DATASETS
 from src.shared.config import SharedSettings
-
-load_dotenv()
 
 embeddings = GoogleGenerativeAIEmbeddings(
     model=SharedSettings.dataset_embeddings_model,

@@ -1,18 +1,15 @@
 import json
-import os
 from pathlib import Path
 
 import geopandas as gpd
 import requests
 import s3fs
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-load_dotenv()
+import src.shared.env  # noqa: F401
+from src.core.config import settings
 
-DB_URL = os.environ["DATABASE_URL"].replace(
-    "postgresql+asyncpg://", "postgresql+psycopg2://"
-)
+DB_URL = settings.get_database_url_for_psycopg2()
 
 
 def cached_ndjson_path(url: str, cache_dir: Path = Path("/tmp")) -> Path:

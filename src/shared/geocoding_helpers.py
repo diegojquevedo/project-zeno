@@ -5,7 +5,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select, text
 
-from src.api.data_models import CustomAreaOrm
+from src.models import CustomAreaOrm
 from src.shared.database import get_session_from_pool
 
 GADM_TABLE = "geometries_gadm"

@@ -11,7 +11,7 @@ help: ## Show available commands
 	@echo "  make dev          - Start full development environment (infrastructure + API + frontend)"
 	@echo ""
 	@echo "Infrastructure Management:"
-	@echo "  make up           - Start Docker services (PostgreSQL + Langfuse)"
+	@echo "  make up           - Start Docker services (PostgreSQL)"
 	@echo "  make down         - Stop Docker services"
 	@echo "  make restart      - Restart Docker services"
 	@echo "  make logs         - Show Docker service logs"
@@ -33,7 +33,6 @@ help: ## Show available commands
 # Development Workflows
 dev: up ## Start full development environment
 	@echo "🚀 Starting full development environment..."
-	@echo "📊 Langfuse: http://localhost:3000"
 	@echo "🗄️  PostgreSQL: localhost:5432"
 	@echo "🔧 API: http://localhost:8000"
 	@echo "🎨 Frontend: http://localhost:8501"
@@ -42,7 +41,7 @@ dev: up ## Start full development environment
 	@$(MAKE) -j2 api frontend
 
 # Infrastructure Management
-up: ## Start Docker services (PostgreSQL + Langfuse)
+up: ## Start Docker services (PostgreSQL)
 	@echo "🐳 Starting infrastructure services..."
 	@docker-compose -f docker-compose.dev.yaml up -d
 	@echo "⏳ Waiting for services to be ready..."

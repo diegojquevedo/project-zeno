@@ -7,12 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.api.data_models import MachineUserKeyOrm, UserOrm, UserType
-from src.api.schemas import UserModel
+from src.core.constants import MACHINE_USER_PREFIX
+from src.models import MachineUserKeyOrm, UserOrm, UserType
+from src.schemas import UserModel
 
 logger = structlog.get_logger()
 
-MACHINE_USER_PREFIX = "zeno-key"
 
 
 async def validate_machine_user_token(

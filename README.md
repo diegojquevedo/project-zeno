@@ -30,7 +30,6 @@ For detailed technical architecture, see [Agent Architecture Documentation](docs
 To enable that, the project relies on a set of services being deployed with it.
 
 - eoAPI to provide access to the LCL data in a STAC catalog and serving tiles
-- Langfuse for tracing of the agent interactions
 - PostgreSQL for the API data and geographic search of AOIs
 - FastAPI deployment for the API
 
@@ -101,7 +100,7 @@ for running the sytem locally.
 4. **Start infrastructure services:**
 
    ```bash
-   make up       # Start Docker services (PostgreSQL + Langfuse + ClickHouse)
+   make up       # Start Docker services (PostgreSQL)
    ```
 
 5. **Ingest data (required after starting database):**
@@ -134,41 +133,10 @@ for running the sytem locally.
    make dev      # Starts API + frontend (requires infrastructure already running)
    ```
 
-7. **Setup Local Langfuse:**
-   a. Clone the Langfuse repository outside your current project directory
-
-   ```bash
-   cd ..
-   git clone https://github.com/langfuse/langfuse.git
-   cd langfuse
-   ```
-
-   b. Start the Langfuse server
-
-   ```bash
-   docker compose up -d
-   ```
-
-   c. Access the Langfuse UI at <http://localhost:3000>
-   1. Create an account
-   2. Create a new project
-   3. Copy the API keys from your project settings
-
-   d. Return to your project directory and update your .env.local file
-
-   ```bash
-   cd ../project-zeno
-   # Update these values in your .env.local file:
-   LANGFUSE_HOST=http://localhost:3000
-   LANGFUSE_PUBLIC_KEY=your_public_key_here
-   LANGFUSE_SECRET_KEY=your_secret_key_here
-   ```
-
-8. **Access the application:**
+7. **Access the application:**
 
    - Frontend: <http://localhost:8501>
    - API: <http://localhost:8000>
-   - Langfuse: <http://localhost:3000>
 
 ## Development Commands
 
@@ -252,10 +220,3 @@ uv run streamlit run src/frontend/app.py
    DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/zeno-data-local
    ```
 
-## Configure localhost Langfuse
-
-1. `docker compose up langfuse-server` (or just spin up the whole backend with `docker compose up`)
-2. Open your browser and navigate to <http://localhost:3000> to create a Langfuse account.
-3. Within the Langfuse UI, create an organization and then a project.
-4. Copy the API keys (public and secret) generated for your project.
-5. Update the `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables in your `docker-compose.yml` file with the copied keys.

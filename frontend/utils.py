@@ -1,20 +1,25 @@
 import json
-import os
 from datetime import datetime
 
 import altair as alt
 import folium
 import pandas as pd
 import streamlit as st
+from lake_county_constants import FILL_OPACITY, get_style_by_projecttype
 from shapely.geometry import shape
 from streamlit_folium import folium_static
+from zeno_client import ZenoClient
 
-from client import ZenoClient
-from lake_county_constants import FILL_OPACITY, get_style_by_projecttype
-
-API_BASE_URL = os.environ.get(
-    "API_BASE_URL",
-    os.environ.get("LOCAL_API_BASE_URL", "http://localhost:8000"),
+from constants import (
+    API_BASE_URL,
+    CACHE_TTL_LAKE_COUNTY_BOUNDARY,
+    CHART_HEIGHT,
+    CHART_WIDTH,
+    LAKE_COUNTY_ZOOM,
+    LC_BOUNDARY_STYLE,
+)
+from src.shared.lake_county_constants import (
+    LAKE_COUNTY_CENTER,
 )
 
 
@@ -165,21 +170,7 @@ def render_aoi_map(aoi_data, subregion_data=None):
         st.json(aoi_data)  # Fallback to show raw data
 
 
-# Lake County bounds (WGS84): [[west, south], [east, north]]
-LAKE_COUNTY_BOUNDS = [[-88.33, 41.99], [-87.67, 42.69]]
-LAKE_COUNTY_CENTER = [42.34, -88.0]
-LAKE_COUNTY_ZOOM = 10.5
-
-# Match original platform: blue outline, transparent/minimal fill
-LC_BOUNDARY_STYLE = {
-    "color": "#004da8",
-    "weight": 2,
-    "fillColor": "#ffffff",
-    "fillOpacity": 0,
-}
-
-
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=CACHE_TTL_LAKE_COUNTY_BOUNDARY)
 def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict | None:
     """Fetch Lake County Boundary (cached 1h)."""
     try:
@@ -587,7 +578,7 @@ def render_charts(charts_data):
                             xOffset=alt.XOffset("series:N"),
                             tooltip=[f"{xAxis}:N", "series:N", "value:Q"],
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
                     # Single-series bar chart
@@ -609,7 +600,7 @@ def render_charts(charts_data):
                                 else alt.value("steelblue")
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "line":
@@ -641,7 +632,7 @@ def render_charts(charts_data):
                             ),
                             tooltip=[f"{xAxis}:O", "series:N", "value:Q"],
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
                     # Single-series line chart
@@ -663,7 +654,7 @@ def render_charts(charts_data):
                                 else alt.value("steelblue")
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "pie":
@@ -678,7 +669,7 @@ def render_charts(charts_data):
                         ),
                         tooltip=[f"{xAxis}:N", f"{yAxis}:Q"],
                     )
-                    .properties(width=400, height=400, title=chart_title)
+                    .properties(width=CHART_HEIGHT, height=CHART_HEIGHT, title=chart_title)
                 )
 
             elif chart_type == "area":
@@ -710,7 +701,7 @@ def render_charts(charts_data):
                             ),
                             tooltip=[f"{xAxis}:O", "series:N", "value:Q"],
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
                     # Single-series area chart
@@ -732,7 +723,7 @@ def render_charts(charts_data):
                                 else alt.value("steelblue")
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "scatter":
@@ -754,7 +745,7 @@ def render_charts(charts_data):
                             else alt.value("steelblue")
                         ),
                     )
-                    .properties(width=600, height=400, title=chart_title)
+                    .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                 )
 
             elif chart_type == "stacked-bar":
@@ -785,7 +776,7 @@ def render_charts(charts_data):
                                 title="Category",
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
                     # Use stackField if provided, otherwise use colorField for stacking
@@ -813,7 +804,7 @@ def render_charts(charts_data):
                                 else alt.value("steelblue")
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "grouped-bar":
@@ -837,7 +828,7 @@ def render_charts(charts_data):
                             ),
                             xOffset=alt.XOffset(f"{groupField}:N"),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
                     # Fallback to regular bar chart if no groupField
@@ -859,7 +850,7 @@ def render_charts(charts_data):
                                 else alt.value("steelblue")
                             ),
                         )
-                        .properties(width=600, height=400, title=chart_title)
+                        .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "table":

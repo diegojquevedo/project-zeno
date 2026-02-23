@@ -1,0 +1,21 @@
+MAX_MATCHES = 10
+MAX_LIST_PROJECTS = 50
+MAX_PROJECTS_SEMANTIC_SEARCH = 200
+MAX_PROJECTS_BY_CATEGORY = 1000
+MAX_PREAPPS = 200
+MAX_CONCERNS = 200
+
+# Domain fields we fetch unique values for (filter resolution)
+DOMAIN_FIELDS = ["status", "ProjectStatus", "jurisdiction"]
+
+# Domains cache TTL in seconds (10 minutes)
+DOMAINS_CACHE_TTL = 600
+
+# HTTP timeouts (seconds)
+HTTP_TIMEOUT_DOMAINS = 30.0
+HTTP_TIMEOUT_QUERY = 120.0
+HTTP_TIMEOUT_MUNICIPALITY = 15.0
+
+# ArcGIS params
+ARCGIS_SRID = 4326
+ARCGIS_RESULT_RECORD_COUNT_BATCH = 2000

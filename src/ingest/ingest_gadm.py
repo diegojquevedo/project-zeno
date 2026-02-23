@@ -1,22 +1,18 @@
-import os
 import zipfile
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 import requests
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+import src.shared.env  # noqa: F401
 from src.ingest.utils import (
     create_geometry_index_if_not_exists,
     create_id_index_if_not_exists,
     create_text_search_index_if_not_exists,
 )
 from src.shared.geocoding_helpers import GADM_LEVELS, SOURCE_ID_MAPPING
-
-load_dotenv()
-
 
 GADM_ZIP_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/gadm_410-levels.zip"
 
@@ -131,9 +127,9 @@ def ingest_gadm_chunked(
     """Read GADM layers in chunks and ingest directly to PostGIS.
     Uses layer-specific chunk sizes to handle large geometries at higher admin levels.
     """
-    database_url = os.environ["DATABASE_URL"].replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
-    )
+    from src.core.config import settings
+
+    database_url = settings.get_database_url_for_psycopg2()
     engine = create_engine(database_url)
 
     # Ensure PostGIS extension is enabled
@@ -215,9 +211,9 @@ def ingest_to_postgis(
     chunk_size: int = 10000,
 ) -> None:
     """Ingest the GeoDataFrame to PostGIS database in chunks."""
-    database_url = os.environ["DATABASE_URL"].replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
-    )
+    from src.core.config import settings
+
+    database_url = settings.get_database_url_for_psycopg2()
     engine = create_engine(database_url)
 
     gdf_copy = gdf.copy()

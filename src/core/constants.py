@@ -1,0 +1,49 @@
+from enum import StrEnum
+
+NEXTJS_API_KEY_HEADER = "X-API-KEY"
+NEXTJS_IP_HEADER = "X-ZENO-FORWARDED-FOR"
+ANONYMOUS_USER_PREFIX = "noauth"
+MACHINE_USER_PREFIX = "zeno-key"
+
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+SUBREGION_LIMIT = 50
+RESULT_LIMIT_AOI = 10
+MAX_RETRIES = 3
+
+MAX_MATCHES = 10
+MAX_LIST_PROJECTS = 50
+MAX_PROJECTS_SEMANTIC_SEARCH = 200
+MAX_PROJECTS_BY_CATEGORY = 1000
+MAX_PREAPPS = 200
+MAX_CONCERNS = 200
+DOMAINS_CACHE_TTL = 600
+HTTP_TIMEOUT_DOMAINS = 30.0
+HTTP_TIMEOUT_QUERY = 120.0
+HTTP_TIMEOUT_MUNICIPALITY = 15.0
+ARCGIS_SRID = 4326
+ARCGIS_RESULT_RECORD_COUNT_BATCH = 2000
+
+GRAPH_RECURSION_LIMIT = 25
+
+CACHE_MAX_SIZE = 1024
+CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
+
+
+class AnalysisStatus(StrEnum):
+    """Status of an analysis or agent run."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class UserRole(StrEnum):
+    """User roles for access control."""
+
+    ADMIN = "admin"
+    REGULAR = "regular"
+    PRO = "pro"
+    VIEWER = "viewer"
+    MACHINE = "machine"
