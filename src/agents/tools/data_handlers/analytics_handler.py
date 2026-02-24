@@ -1,16 +1,21 @@
 import asyncio
 from typing import Any, Dict, List
 
-import httpx
-
 from src.agents.llms import SMALL_MODEL
 from src.agents.schemas import BooleanResponse
+from src.agents.tools.data_handlers.analytics_constants import (
+    ADMIN_SUBTYPES,
+    SLUC_CROPS,
+    SLUC_GADM_LEVELS,
+    SLUC_GAS_TYPES,
+)
 from src.agents.tools.data_handlers.base import (
     DataPullResult,
     DataSourceHandler,
 )
 from src.agents.tools.datasets_config import DATASETS
 from src.core.config import settings
+from src.infrastructure.external.analytics_client import get_analytics_client
 from src.shared.geocoding_helpers import (
     SUBREGION_TO_AOI_TYPE_MAPPING,
     format_id,
@@ -19,82 +24,6 @@ from src.shared.geocoding_helpers import (
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
-
-_analytics_client: httpx.AsyncClient | None = None
-
-
-def _get_analytics_client() -> httpx.AsyncClient:
-    """Return a shared AsyncClient for Analytics API with connection pooling."""
-    global _analytics_client
-    if _analytics_client is None:
-        _analytics_client = httpx.AsyncClient(
-            limits=httpx.Limits(
-                max_connections=20,
-                max_keepalive_connections=10,
-                keepalive_expiry=30.0,
-            ),
-            timeout=httpx.Timeout(60.0),
-        )
-    return _analytics_client
-
-ADMIN_SUBTYPES = (
-    "country",
-    "state-province",
-    "district-county",
-    "municipality",
-    "locality",
-    "neighbourhood",
-)
-SLUC_GADM_LEVELS = ["country", "state-province", "district-county"]
-
-SLUC_CROPS = [
-    "Banana",
-    "Barley",
-    "Bean",
-    "Cassava",
-    "Chickpea",
-    "Coconut",
-    "Cocoa",
-    "Arabica Coffee",
-    "Robusta Coffee",
-    "Cotton",
-    "Cowpea",
-    "Groundnut",
-    "Lentil",
-    "Maize",
-    "Pearl Millet",
-    "Small Millet",
-    "Oil Palm",
-    "Pigeon Pea",
-    "Plantain",
-    "Potato",
-    "Rapeseed",
-    "Rice",
-    "Sesame Seed",
-    "Sorghum",
-    "Soybean",
-    "Sugarbeet",
-    "Sugarcane",
-    "Sunflower",
-    "Sweet Potato",
-    "Tea",
-    "Tobacco",
-    "Wheat",
-    "Yams",
-    "Other Cereals",
-    "Other Fibre Crops",
-    "Other Oil Crops",
-    "Other Pulses",
-    "Other Roots",
-    "Rest of Crops",
-    "Temperate Fruit",
-    "Tropical Fruit",
-    "Vegetables",
-]
-
-SLUC_GAS_TYPES = ["CO2e", "CO2", "CH4", "N20"]
-
-# Add dataset-specific parameters
 DIST_ALERT_ID = [
     ds["dataset_id"]
     for ds in DATASETS
@@ -380,7 +309,7 @@ class AnalyticsHandler(DataSourceHandler):
             await asyncio.sleep(poll_interval * (attempt + 1))
 
             try:
-                client = _get_analytics_client()
+                client = get_analytics_client()
                 response = await client.post(
                     endpoint_url, headers=self.HEADERS, json=payload
                 )
@@ -435,7 +364,7 @@ class AnalyticsHandler(DataSourceHandler):
             )
 
         download_link = data_section["link"]
-        client = _get_analytics_client()
+        client = get_analytics_client()
         response = await client.get(download_link)
         data = response.json()
 
@@ -543,7 +472,7 @@ class AnalyticsHandler(DataSourceHandler):
             logger.info(f"Analytics API Request - Headers: {self.HEADERS}")
             logger.info(f"Analytics API Request - Payload: {payload}")
 
-            client = _get_analytics_client()
+            client = get_analytics_client()
             response = await client.post(
                 endpoint_url, headers=self.HEADERS, json=payload
             )
