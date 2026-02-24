@@ -77,6 +77,9 @@ MODEL_REGISTRY = {
 AVAILABLE_MODELS = list(MODEL_REGISTRY.keys())
 
 
+MAX_RESPONSE_TOKENS = 2048
+
+
 def get_model():
     """Get the configured model from environment or default to sonnet."""
     model_name = AgentSettings.model.lower()
@@ -84,7 +87,10 @@ def get_model():
         raise ValueError(
             f"Unknown model: {model_name}. Available models: {AVAILABLE_MODELS}"
         )
-    return MODEL_REGISTRY[model_name]
+    base = MODEL_REGISTRY[model_name]
+    if "gemini" in model_name:
+        return base.bind(max_output_tokens=MAX_RESPONSE_TOKENS)
+    return base.bind(max_tokens=MAX_RESPONSE_TOKENS)
 
 
 def get_small_model():

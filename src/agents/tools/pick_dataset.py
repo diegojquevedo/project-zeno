@@ -31,6 +31,12 @@ data_dir = Path("data")
 retriever_cache = None
 
 
+async def prewarm_dataset_retriever() -> None:
+    """Load the dataset retriever at startup to avoid cold start on first request."""
+    await _get_retriever()
+    logger.info("Dataset retriever pre-warmed")
+
+
 async def _get_retriever():
     global retriever_cache
     if retriever_cache is None:

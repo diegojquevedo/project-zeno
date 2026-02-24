@@ -8,6 +8,7 @@ from src.agents.graph import (
     close_checkpointer_pool,
     get_checkpointer_pool,
 )
+from src.agents.tools.pick_dataset import prewarm_dataset_retriever
 from src.api.v1.router import api_router
 from src.core.exceptions import ResourceNotFoundError
 from src.core.middleware import request_logging_middleware
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan: init and cleanup."""
     await initialize_global_pool()
     await get_checkpointer_pool()
+    await prewarm_dataset_retriever()
     yield
     await close_global_pool()
     await close_checkpointer_pool()

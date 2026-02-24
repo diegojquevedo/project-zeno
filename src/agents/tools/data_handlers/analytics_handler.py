@@ -20,6 +20,23 @@ from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+_analytics_client: httpx.AsyncClient | None = None
+
+
+def _get_analytics_client() -> httpx.AsyncClient:
+    """Return a shared AsyncClient for Analytics API with connection pooling."""
+    global _analytics_client
+    if _analytics_client is None:
+        _analytics_client = httpx.AsyncClient(
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10,
+                keepalive_expiry=30.0,
+            ),
+            timeout=httpx.Timeout(60.0),
+        )
+    return _analytics_client
+
 ADMIN_SUBTYPES = (
     "country",
     "state-province",
@@ -363,10 +380,10 @@ class AnalyticsHandler(DataSourceHandler):
             await asyncio.sleep(poll_interval * (attempt + 1))
 
             try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        endpoint_url, headers=self.HEADERS, json=payload
-                    )
+                client = _get_analytics_client()
+                response = await client.post(
+                    endpoint_url, headers=self.HEADERS, json=payload
+                )
                 if response.status_code >= 400:
                     logger.warning(
                         f"Poll attempt {attempt + 1} failed with status {response.status_code}"
@@ -418,9 +435,9 @@ class AnalyticsHandler(DataSourceHandler):
             )
 
         download_link = data_section["link"]
-        async with httpx.AsyncClient() as client:
-            response = await client.get(download_link)
-            data = response.json()
+        client = _get_analytics_client()
+        response = await client.get(download_link)
+        data = response.json()
 
         if "data" not in data:
             raise ValueError(
@@ -526,10 +543,10 @@ class AnalyticsHandler(DataSourceHandler):
             logger.info(f"Analytics API Request - Headers: {self.HEADERS}")
             logger.info(f"Analytics API Request - Payload: {payload}")
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    endpoint_url, headers=self.HEADERS, json=payload
-                )
+            client = _get_analytics_client()
+            response = await client.post(
+                endpoint_url, headers=self.HEADERS, json=payload
+            )
 
             # Debug logging for response
             logger.info(
