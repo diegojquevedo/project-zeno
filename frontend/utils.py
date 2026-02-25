@@ -180,7 +180,7 @@ def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict
         return None
 
 
-def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None, jurisdiction_boundary=None):
+def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
     """
     Render Lake County map.
     - If project_data (single): show rep point (PIN) + geometry, zoom to project.
@@ -242,7 +242,6 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
             name="Lake County Boundary",
         ).add_to(m2)
 
-    # Jurisdiction boundary (municipality outline) when filtering by jurisdiction
     if jurisdiction_boundary and jurisdiction_boundary.get("features"):
         folium.GeoJson(
             jurisdiction_boundary,
@@ -253,6 +252,18 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
                 "fillOpacity": 0,
             },
             name="Jurisdiction",
+        ).add_to(m2)
+
+    if county_board_district_boundary and county_board_district_boundary.get("features"):
+        folium.GeoJson(
+            county_board_district_boundary,
+            style_function=lambda f: {
+                "color": "#00e6a9",
+                "weight": 3,
+                "fillColor": "#ffffff",
+                "fillOpacity": 0,
+            },
+            name="District",
         ).add_to(m2)
 
     if list_mode:
@@ -333,7 +344,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         st.write(f"**Description:** {dataset_data.get('description', 'N/A')}")
 
 
-def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None):
+def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
     """
     Render dataset layer as a map using streamlit-folium.
 
@@ -345,7 +356,6 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
         layer_type = dataset_data.get("layer_type")
         layer_id = dataset_data.get("layer_id")
 
-        # Lake County vector layer
         if layer_type == "FeatureServer" and layer_id:
             _render_lake_county_map(
                 dataset_data,
@@ -356,6 +366,7 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
                 project_data,
                 project_list,
                 jurisdiction_boundary,
+                county_board_district_boundary,
             )
             return
 

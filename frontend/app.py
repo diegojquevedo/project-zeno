@@ -2,9 +2,15 @@ import json
 import os
 import time
 import uuid
+from collections import Counter
 
 import streamlit as st
-from utils import API_BASE_URL, render_dataset_map, render_stream
+from utils import (
+    API_BASE_URL,
+    render_charts,
+    render_dataset_map,
+    render_stream,
+)
 from zeno_client import ZenoClient
 
 import src.shared.env  # noqa: F401
@@ -13,10 +19,12 @@ from constants import (
     FOREST_CARBON_REMOVALS_DATASET,
     SESSION_KEY_DATA_SOURCE,
     SESSION_KEY_MAP_AOI_DATA,
+    SESSION_KEY_MAP_CHARTS_DATA,
     SESSION_KEY_MAP_CHAT_MESSAGES,
     SESSION_KEY_MAP_CHAT_PENDING_INPUT,
     SESSION_KEY_MAP_CHAT_SESSION_ID,
     SESSION_KEY_MAP_CHAT_USER_INPUT,
+    SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY,
     SESSION_KEY_MAP_DATASET_DATA,
     SESSION_KEY_MAP_JURISDICTION_BOUNDARY,
     SESSION_KEY_MAP_PROJECT_DATA,
@@ -47,8 +55,12 @@ if SESSION_KEY_MAP_PROJECT_MATCHES not in st.session_state:
     st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
 if SESSION_KEY_MAP_PROJECT_LIST not in st.session_state:
     st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+if SESSION_KEY_MAP_CHARTS_DATA not in st.session_state:
+    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
 if SESSION_KEY_MAP_JURISDICTION_BOUNDARY not in st.session_state:
     st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+if SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY not in st.session_state:
+    st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
 if SESSION_KEY_DATA_SOURCE not in st.session_state:
     st.session_state[SESSION_KEY_DATA_SOURCE] = "forest_carbon"
 
@@ -113,7 +125,9 @@ with chat_col:
             st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
             st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
 
     if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
         st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
@@ -123,6 +137,25 @@ with chat_col:
     for message in st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
+    # Persistent project count/summary and charts when we have a list (e.g. district query)
+    if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+        project_list = st.session_state.get(SESSION_KEY_MAP_PROJECT_LIST)
+        charts_data = st.session_state.get(SESSION_KEY_MAP_CHARTS_DATA)
+        if project_list and isinstance(project_list, list) and len(project_list) > 0:
+            n = len(project_list)
+            by_type = Counter(
+                m.get("attributes", {}).get("projecttype") or "(blank)"
+                for m in project_list
+            )
+            top_types = ", ".join(f"{c} {t}" for t, c in by_type.most_common(5))
+            st.markdown(f"**Found {n} project{'s' if n != 1 else ''}**")
+            if top_types:
+                st.caption(f"By type: {top_types}")
+            if charts_data and isinstance(charts_data, list):
+                st.divider()
+                render_charts(charts_data)
+            st.divider()
 
     client = ZenoClient(base_url=API_BASE_URL, token=st.session_state[SESSION_KEY_TOKEN])
     quota_info = client.get_quota_info()
@@ -210,22 +243,44 @@ with chat_col:
                             st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
                             st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
                             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                         elif pr.get("list"):
                             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = pr.get("matches", [])
                             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = pr.get("jurisdiction_boundary")
+                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
+                                pr.get("district_boundary") or pr.get("county_board_district_boundary")
+                            )
                             st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
                             st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                            if update.get("charts_data"):
+                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
+                            # Persist assistant summary in chat so it does not "compress" on rerun
+                            messages_in_update = update.get("messages") or []
+                            for msg in messages_in_update:
+                                if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
+                                    content = msg["kwargs"]["content"]
+                                    chat_msgs = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
+                                    if chat_msgs and chat_msgs[-1].get("role") == "user":
+                                        st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
+                                            {"role": "assistant", "content": content}
+                                        )
+                                    break
                         elif pr.get("multiple"):
                             st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = pr.get("matches", [])
                             st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
                             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                         else:
                             st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = pr
                             st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
                             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                     elapsed = time.perf_counter() - start_time
                     if SHOW_RESPONSE_TIMER:
                         timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
@@ -281,6 +336,9 @@ with map_col:
         if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
         else None,
         jurisdiction_boundary=st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY]
+        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+        else None,
+        county_board_district_boundary=st.session_state.get(SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY)
         if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
         else None,
     )

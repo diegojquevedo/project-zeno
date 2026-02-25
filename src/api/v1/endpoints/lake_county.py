@@ -8,6 +8,7 @@ from src.api.lake_county_config import (
 )
 from src.core.config import settings
 from src.services.lake_county_service import (
+    fetch_county_board_district_boundary,
     fetch_lake_county_boundary,
     fetch_lake_county_domains,
     fetch_municipality_boundary,
@@ -61,6 +62,21 @@ async def get_lake_county_municipality(name: str = ""):
     raise HTTPException(
         status_code=404,
         detail=f"No municipality found matching '{name}'",
+    )
+
+
+@router.get("/county_board_district")
+async def get_lake_county_board_district(name: str = "", district: str = ""):
+    """Fetch County Board District boundary GeoJSON by name or district number."""
+    identifier = (district or name or "").strip()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="name or district parameter required")
+    boundary = await fetch_county_board_district_boundary(identifier)
+    if boundary and boundary.get("features"):
+        return boundary
+    raise HTTPException(
+        status_code=404,
+        detail=f"No County Board District found matching '{identifier}'",
     )
 
 

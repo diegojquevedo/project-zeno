@@ -61,6 +61,12 @@ LC_BOUNDARY_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/
 
 LC_MUNICIPALITIES_URL = f"{SMC_API_BASE}/LakeCounty_TaxDistricts/FeatureServer/10"
 
+LC_COUNTY_BOARD_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/0"
+LC_DRAINAGE_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_TaxDistricts/FeatureServer/1"
+LC_STATE_SENATE_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/5"
+LC_STATE_REP_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/4"
+LC_US_CONGRESSIONAL_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/6"
+
 PREAPP_POINT_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/98"
 PREAPP_GEOMETRY_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/99"
 

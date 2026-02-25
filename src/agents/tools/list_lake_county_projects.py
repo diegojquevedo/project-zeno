@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -15,8 +16,14 @@ from src.api.lake_county_config import (
     PROJECT_CATEGORY_STUDIES,
 )
 from src.services.lake_county_service import (
+    district_geometry_to_esri,
+    fetch_county_board_district_boundary,
+    fetch_drainage_district_boundary,
     fetch_lake_county_domains,
     fetch_municipality_boundary,
+    fetch_state_representative_district_boundary,
+    fetch_state_senate_district_boundary,
+    fetch_us_congressional_district_boundary,
     query_lake_county_projects,
 )
 from src.shared.logging_config import get_logger
@@ -63,6 +70,11 @@ async def list_lake_county_projects(
     project_status: str | None = None,
     project_types: list[str] | None = None,
     jurisdiction: str | None = None,
+    county_board_district: str | None = None,
+    drainage_district: str | None = None,
+    state_senate_district: str | None = None,
+    state_representative_district: str | None = None,
+    us_congressional_district: str | None = None,
     project_partners: str | None = None,
     subshed: str | None = None,
     project_category: str | None = None,
@@ -83,9 +95,19 @@ async def list_lake_county_projects(
     - "Studies in Lake County" -> project_category="studies"
     - "Flood audit projects" -> project_category="flood_audits"
     - "Projects Under Review in Wadsworth" -> project_category="projects", project_status="Under Review", jurisdiction="Wadsworth"
+    - "Projects in county board district 5" -> project_category="projects", county_board_district="5"
+    - "Projects in drainage district Union No 1" -> drainage_district="Union No 1"
+    - "Projects in state senate district 31" -> state_senate_district="31"
+    - "Projects in state rep district 59" -> state_representative_district="59"
+    - "Projects in US congressional district 10" -> us_congressional_district="10"
     - "Projects with sub-watershed in Lake Michigan" -> subshed="Lake Michigan"
 
     project_types: filter by projecttype (Capital, WMB, SIRF, etc.). subshed: filter by sub-watershed.
+    county_board_district: filter by County Board District (number or name).
+    drainage_district: filter by Drainage District (CODE or NAME).
+    state_senate_district: filter by State Senate District (number or name).
+    state_representative_district: filter by State Representative District (number or name).
+    us_congressional_district: filter by U.S. Congressional District (number or name).
     """
     domains = await fetch_lake_county_domains()
 
@@ -108,12 +130,49 @@ async def list_lake_county_projects(
             resolved_project_status = str(project_status).strip()
 
     jurisdiction_val = jurisdiction.strip() if jurisdiction and str(jurisdiction).strip() else None
+    county_board_district_val = county_board_district.strip() if county_board_district and str(county_board_district).strip() else None
+    drainage_district_val = drainage_district.strip() if drainage_district and str(drainage_district).strip() else None
+    state_senate_district_val = state_senate_district.strip() if state_senate_district and str(state_senate_district).strip() else None
+    state_rep_district_val = state_representative_district.strip() if state_representative_district and str(state_representative_district).strip() else None
+    us_cong_district_val = us_congressional_district.strip() if us_congressional_district and str(us_congressional_district).strip() else None
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
     subshed_val = subshed.strip() if subshed and str(subshed).strip() else None
 
     jurisdiction_boundary = None
     if jurisdiction_val:
         jurisdiction_boundary = await fetch_municipality_boundary(jurisdiction_val)
+
+    district_boundary_geojson = None
+    district_geometry = None
+    if county_board_district_val:
+        district_boundary_geojson = await fetch_county_board_district_boundary(county_board_district_val)
+    elif drainage_district_val:
+        drainage_result = await fetch_drainage_district_boundary(drainage_district_val)
+        if drainage_result:
+            district_boundary_geojson = drainage_result.get("geojson") or drainage_result
+            if drainage_result.get("esri_geometry"):
+                district_geometry = drainage_result.get("esri_geometry")
+    elif state_senate_district_val:
+        district_boundary_geojson = await fetch_state_senate_district_boundary(state_senate_district_val)
+    elif state_rep_district_val:
+        district_boundary_geojson = await fetch_state_representative_district_boundary(state_rep_district_val)
+    elif us_cong_district_val:
+        district_boundary_geojson = await fetch_us_congressional_district_boundary(us_cong_district_val)
+    if district_boundary_geojson and district_boundary_geojson.get("features") and not district_geometry:
+        # Use first feature that has a geometry convertible to Esri (in case first feature has null/different format)
+        for feat in district_boundary_geojson["features"]:
+            g = feat.get("geometry")
+            if g is None and feat.get("geom") is not None:
+                g = feat.get("geom")
+            if isinstance(g, str):
+                try:
+                    g = json.loads(g)
+                except Exception:
+                    g = None
+            if g and isinstance(g, dict) and district_geometry_to_esri(g):
+                district_geometry = g
+                break
+    county_board_district_boundary = district_boundary_geojson if county_board_district_val else None
 
     project_types_val = [t.strip() for t in project_types if t and str(t).strip()] if project_types else None
 
@@ -128,17 +187,23 @@ async def list_lake_county_projects(
         elif pc in (PROJECT_CATEGORY_FLOOD_AUDITS, "flood_audit", "flood audit"):
             category_val = PROJECT_CATEGORY_FLOOD_AUDITS
 
-    # If no filters, default to "projects" (exclude Flood Audit and Study) for "projects in Lake County"
     has_filters = any([
         resolved_status,
         resolved_project_status,
         project_types_val,
         jurisdiction_val,
+        county_board_district_val,
+        drainage_district_val,
+        state_senate_district_val,
+        state_rep_district_val,
+        us_cong_district_val,
         partners_val,
         subshed_val,
     ])
     if not has_filters and not category_val:
-        category_val = PROJECT_CATEGORY_PROJECTS  # Default: normal projects only
+        category_val = PROJECT_CATEGORY_PROJECTS
+    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val) and not category_val:
+        category_val = PROJECT_CATEGORY_PROJECTS
 
     result = await query_lake_county_projects(
         status=resolved_status,
@@ -148,7 +213,8 @@ async def list_lake_county_projects(
         project_partners=partners_val,
         subshed=subshed_val,
         project_category=category_val,
-        allow_no_filters=not has_filters and not category_val,
+        county_board_district_geometry=district_geometry,
+        allow_no_filters=not has_filters and not category_val and not district_geometry,
     )
 
     if not result["found"]:
@@ -184,6 +250,10 @@ async def list_lake_county_projects(
     }
     if jurisdiction_boundary and jurisdiction_boundary.get("features"):
         project_result["jurisdiction_boundary"] = jurisdiction_boundary
+    if district_boundary_geojson and district_boundary_geojson.get("features"):
+        project_result["district_boundary"] = district_boundary_geojson
+    if county_board_district_boundary and county_board_district_boundary.get("features"):
+        project_result["county_board_district_boundary"] = county_board_district_boundary
 
     update = {
         "project_result": project_result,
