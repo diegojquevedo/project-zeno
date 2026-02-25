@@ -4,6 +4,10 @@ import re
 import time
 from typing import Any
 
+from pyproj import Transformer
+from shapely.geometry import Point, shape
+from shapely.ops import transform as shapely_transform
+
 from src.api.lake_county_config import (
     CIRS_POINT_URL,
     GEOMETRY_TYPE_TO_LAYER,
@@ -271,6 +275,53 @@ async def fetch_municipality_boundary(jurisdiction_name: str) -> dict | None:
     if "error" in data or not data.get("features"):
         return None
     return data
+
+
+async def get_place_center(place_name: str) -> tuple[float, float] | None:
+    """
+    Resolve a place name (e.g. Gurnee) to (longitude, latitude) using Lake County
+    municipality boundaries. Returns the centroid of the matching municipality.
+    """
+    if not place_name or not str(place_name).strip():
+        return None
+    boundary = await fetch_municipality_boundary(place_name.strip())
+    if not boundary or not boundary.get("features"):
+        return None
+    feat = boundary["features"][0]
+    geom_dict = feat.get("geometry") or feat.get("geom")
+    if not geom_dict:
+        return None
+    try:
+        geom = shape(geom_dict)
+        cent = geom.centroid
+        return (float(cent.x), float(cent.y))
+    except Exception as e:
+        logger.warning("LC_PLACE_CENTER_FAILED", place=place_name, error=str(e))
+        return None
+
+
+def buffer_point_km(lon: float, lat: float, radius_km: float) -> dict | None:
+    """
+    Create a circular polygon (buffer) of radius_km around (lon, lat) in WGS84.
+    Returns GeoJSON Polygon suitable for spatial query and map display.
+    """
+    if radius_km <= 0 or radius_km > 200:
+        return None
+    radius_m = radius_km * 1000.0
+    try:
+        aeqd = f"+proj=aeqd +lat_0={lat} +lon_0={lon} +x_0=0 +y_0=0 +datum=WGS84 +units=m"
+        transformer = Transformer.from_proj(aeqd, "EPSG:4326", always_xy=True)
+        circle = Point(0, 0).buffer(radius_m)
+        wgs84 = shapely_transform(transformer.transform, circle)
+        # GeoJSON: Polygon coordinates = [exterior ring]; ring = list of [x,y] (lon, lat)
+        ext = wgs84.exterior
+        ring = [[float(x), float(y)] for x, y in ext.coords]
+        if not ring or len(ring) < 3:
+            return None
+        return {"type": "Polygon", "coordinates": [ring]}
+    except Exception as e:
+        logger.warning("LC_BUFFER_FAILED", lon=lon, lat=lat, radius_km=radius_km, error=str(e))
+        return None
 
 
 def district_geometry_to_esri(geom: dict) -> dict | None:

@@ -16,6 +16,7 @@ from src.api.lake_county_config import (
     PROJECT_CATEGORY_STUDIES,
 )
 from src.services.lake_county_service import (
+    buffer_point_km,
     district_geometry_to_esri,
     fetch_county_board_district_boundary,
     fetch_drainage_district_boundary,
@@ -24,6 +25,7 @@ from src.services.lake_county_service import (
     fetch_state_representative_district_boundary,
     fetch_state_senate_district_boundary,
     fetch_us_congressional_district_boundary,
+    get_place_center,
     query_lake_county_projects,
 )
 from src.shared.logging_config import get_logger
@@ -78,12 +80,18 @@ async def list_lake_county_projects(
     project_partners: str | None = None,
     subshed: str | None = None,
     project_category: str | None = None,
+    place_name: str | None = None,
+    radius_km: float | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
     state: Annotated[dict, InjectedState] = None,
 ) -> Command:
     """
     List Lake County stormwater projects by filters.
     Use when data_source is Lake County and the user asks for projects matching criteria.
+
+    For "projects within X km of [place]" or "projects near [place]": use place_name and radius_km.
+    place_name: municipality or place in Lake County (e.g. Gurnee, Waukegan). radius_km: distance in kilometers (e.g. 5).
+    If user says miles, convert: 5 miles ≈ 8 km.
 
     project_category (IMPORTANT - matches INFLOW tabs):
     - "projects": Normal projects only, EXCLUDES Flood Audit and Study (default when user asks "projects in Lake County")
@@ -101,6 +109,8 @@ async def list_lake_county_projects(
     - "Projects in state rep district 59" -> state_representative_district="59"
     - "Projects in US congressional district 10" -> us_congressional_district="10"
     - "Projects with sub-watershed in Lake Michigan" -> subshed="Lake Michigan"
+    - "Show me projects 5 km from Gurnee" -> place_name="Gurnee", radius_km=5
+    - "Projects within 10 miles of Waukegan" -> place_name="Waukegan", radius_km=16
 
     project_types: filter by projecttype (Capital, WMB, SIRF, etc.). subshed: filter by sub-watershed.
     county_board_district: filter by County Board District (number or name).
@@ -142,9 +152,42 @@ async def list_lake_county_projects(
     if jurisdiction_val:
         jurisdiction_boundary = await fetch_municipality_boundary(jurisdiction_val)
 
+    place_name_val = place_name.strip() if place_name and str(place_name).strip() else None
+    radius_km_val = float(radius_km) if radius_km is not None else None
+    if radius_km_val is not None and (radius_km_val <= 0 or radius_km_val > 200):
+        radius_km_val = None
+
     district_boundary_geojson = None
     district_geometry = None
-    if county_board_district_val:
+    if place_name_val and radius_km_val is not None:
+        center = await get_place_center(place_name_val)
+        if center:
+            lon, lat = center
+            buffer_poly = buffer_point_km(lon, lat, radius_km_val)
+            if buffer_poly:
+                district_geometry = buffer_poly
+                district_boundary_geojson = {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": buffer_poly,
+                            "properties": {"place": place_name_val, "radius_km": radius_km_val},
+                        }
+                    ],
+                }
+        if not district_geometry:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"Could not find place '{place_name_val}' in Lake County or could not create the radius. Try a municipality name (e.g. Gurnee, Waukegan).",
+                            tool_call_id=tool_call_id,
+                        )
+                    ],
+                },
+            )
+    elif county_board_district_val:
         district_boundary_geojson = await fetch_county_board_district_boundary(county_board_district_val)
     elif drainage_district_val:
         drainage_result = await fetch_drainage_district_boundary(drainage_district_val)
@@ -199,10 +242,11 @@ async def list_lake_county_projects(
         us_cong_district_val,
         partners_val,
         subshed_val,
+        bool(place_name_val and radius_km_val is not None),
     ])
     if not has_filters and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
-    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val) and not category_val:
+    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val or (place_name_val and radius_km_val is not None)) and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
 
     result = await query_lake_county_projects(
