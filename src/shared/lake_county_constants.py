@@ -67,6 +67,10 @@ LC_STATE_SENATE_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/
 LC_STATE_REP_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/4"
 LC_US_CONGRESSIONAL_DISTRICTS_URL = f"{SMC_API_BASE}/LakeCounty_PoliticalBoundaries/FeatureServer/6"
 
+WAB_DRAINAGE_MAP_SERVER = "https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABDrainage/MapServer"
+LC_WATERSHEDS_URL = f"{WAB_DRAINAGE_MAP_SERVER}/7"
+LC_SUBWATERSHEDS_URL = f"{WAB_DRAINAGE_MAP_SERVER}/8"
+
 PREAPP_POINT_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/98"
 PREAPP_GEOMETRY_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/99"
 

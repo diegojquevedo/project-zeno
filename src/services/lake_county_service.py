@@ -19,7 +19,9 @@ from src.api.lake_county_config import (
     LC_MUNICIPALITIES_URL,
     LC_STATE_REP_DISTRICTS_URL,
     LC_STATE_SENATE_DISTRICTS_URL,
+    LC_SUBWATERSHEDS_URL,
     LC_US_CONGRESSIONAL_DISTRICTS_URL,
+    LC_WATERSHEDS_URL,
     PREAPP_GEOMETRY_URL,
     PREAPP_POINT_URL,
     PROJECT_CATEGORY_FLOOD_AUDITS,
@@ -34,6 +36,8 @@ from src.api.lake_county_constants import (
     HTTP_TIMEOUT_DOMAINS,
     HTTP_TIMEOUT_MUNICIPALITY,
     HTTP_TIMEOUT_QUERY,
+    HTTP_TIMEOUT_WABDRAINAGE,
+    HTTP_TIMEOUT_WATERSHED,
     MAX_CONCERNS,
     MAX_LIST_PROJECTS,
     MAX_MATCHES,
@@ -170,19 +174,12 @@ async def query_lake_county_projects(
         effective_limit = limit
 
     query_url = f"{layer['arcgis_url']}/query"
-    logger.info(
-        "LC_QUERY_PROJECTS",
-        where=where,
-        limit=effective_limit,
-        spatial_filter=bool(county_board_district_geometry),
-    )
 
     try:
         client = _arcgis_client(HTTP_TIMEOUT_QUERY)
         if county_board_district_geometry:
             esri_geom = district_geometry_to_esri(county_board_district_geometry)
             if not esri_geom:
-                logger.warning("LC_QUERY_SPATIAL_SKIPPED", reason="district_geometry_to_esri returned None")
                 return {"found": False, "matches": [], "limit_exceeded": False}
             form_data = {
                 "where": where,
@@ -324,6 +321,54 @@ def buffer_point_km(lon: float, lat: float, radius_km: float) -> dict | None:
         return None
 
 
+def _is_web_mercator_coords(ring: list) -> bool:
+    if not ring or len(ring) < 2:
+        return False
+    x, y = ring[0][0], ring[0][1]
+    return abs(x) > 180 or abs(y) > 90
+
+
+def _reproject_ring_3857_to_4326(ring: list) -> list:
+    transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+    return [[float(transformer.transform(x, y)[0]), float(transformer.transform(x, y)[1])] for x, y in ring]
+
+
+def _reproject_geojson_3857_to_4326(geom: dict) -> dict | None:
+    if not geom or not isinstance(geom, dict):
+        return geom
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if not coords:
+        return geom
+    try:
+        if gtype == "Polygon" and coords and coords[0]:
+            if not _is_web_mercator_coords(coords[0]):
+                return geom
+            new_coords = [_reproject_ring_3857_to_4326(ring) for ring in coords]
+            return {"type": "Polygon", "coordinates": new_coords}
+        if gtype == "MultiPolygon" and coords:
+            first_ring = coords[0][0] if coords[0] else []
+            if not first_ring or not _is_web_mercator_coords(first_ring):
+                return geom
+            new_coords = [[_reproject_ring_3857_to_4326(ring) for ring in poly] for poly in coords]
+            return {"type": "MultiPolygon", "coordinates": new_coords}
+    except Exception:
+        pass
+    return geom
+
+
+def _ensure_feature_collection_wgs84(data: dict | None) -> dict | None:
+    if not data or not data.get("features"):
+        return data
+    out = {"type": data.get("type", "FeatureCollection"), "features": [], "crs": data.get("crs")}
+    for feat in data["features"]:
+        g = feat.get("geometry")
+        if g and isinstance(g, dict):
+            g = _reproject_geojson_3857_to_4326(g)
+        out["features"].append({**feat, "geometry": g} if g else feat)
+    return out
+
+
 def district_geometry_to_esri(geom: dict) -> dict | None:
     """Convert district boundary geometry to Esri format for spatial query. Accepts GeoJSON or Esri format."""
     if not geom or not isinstance(geom, dict):
@@ -414,8 +459,9 @@ def _district_where_clause(
 
 
 async def _fetch_district_boundary_by_where(
-    base_url: str, where: str, out_fields: str
+    base_url: str, where: str, out_fields: str, timeout: float | None = None
 ) -> dict | None:
+    timeout = timeout if timeout is not None else HTTP_TIMEOUT_MUNICIPALITY
     query_url = f"{base_url}/query"
     params = {
         "where": where,
@@ -425,8 +471,11 @@ async def _fetch_district_boundary_by_where(
         "f": "geojson",
     }
     try:
-        client = _arcgis_client(HTTP_TIMEOUT_MUNICIPALITY)
-        return await client.get(query_url, params, HTTP_TIMEOUT_MUNICIPALITY)
+        client = _arcgis_client(timeout)
+        data = await client.get(query_url, params, timeout)
+        if data and "error" in data:
+            return None
+        return data
     except Exception:
         return None
 
@@ -439,19 +488,14 @@ async def _fetch_district_boundary(
     out_fields: str,
     log_prefix: str,
     id_field_is_string: bool = False,
+    timeout: float | None = None,
 ) -> dict | None:
     where = _district_where_clause(identifier, id_field, name_field, id_field_is_string)
     if not where:
         return None
     try:
-        data = await _fetch_district_boundary_by_where(base_url, where, out_fields)
-    except Exception as e:
-        logger.warning(
-            f"{log_prefix}_FETCH_FAILED",
-            identifier=identifier,
-            exc_type=type(e).__name__,
-            error=str(e),
-        )
+        data = await _fetch_district_boundary_by_where(base_url, where, out_fields, timeout=timeout)
+    except Exception:
         return None
     if not data or "error" in data or not data.get("features"):
         return None
@@ -620,6 +664,34 @@ async def fetch_us_congressional_district_boundary(identifier: str) -> dict | No
         "NAME,US_REP,DISTRICT",
         "LC_US_CONG_DISTRICT",
     )
+
+
+async def fetch_watershed_boundary(identifier: str) -> dict | None:
+    data = await _fetch_district_boundary(
+        LC_WATERSHEDS_URL,
+        identifier,
+        "SHED",
+        "SHED",
+        "SHED",
+        "LC_WATERSHED",
+        id_field_is_string=True,
+        timeout=HTTP_TIMEOUT_WATERSHED,
+    )
+    return _ensure_feature_collection_wgs84(data)
+
+
+async def fetch_subwatershed_boundary(identifier: str) -> dict | None:
+    data = await _fetch_district_boundary(
+        LC_SUBWATERSHEDS_URL,
+        identifier,
+        "SUB_BASIN",
+        "SUB_BASIN",
+        "SUB_BASIN,SHED",
+        "LC_SUBWATERSHED",
+        id_field_is_string=True,
+        timeout=HTTP_TIMEOUT_WABDRAINAGE,
+    )
+    return _ensure_feature_collection_wgs84(data)
 
 
 async def fetch_lake_county_boundary() -> dict | None:

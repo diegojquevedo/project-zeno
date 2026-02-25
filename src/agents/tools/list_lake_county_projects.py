@@ -24,13 +24,12 @@ from src.services.lake_county_service import (
     fetch_municipality_boundary,
     fetch_state_representative_district_boundary,
     fetch_state_senate_district_boundary,
+    fetch_subwatershed_boundary,
     fetch_us_congressional_district_boundary,
+    fetch_watershed_boundary,
     get_place_center,
     query_lake_county_projects,
 )
-from src.shared.logging_config import get_logger
-
-logger = get_logger(__name__)
 
 
 def _resolve_value(user_value: str, domain_values: list[str]) -> str | None:
@@ -77,6 +76,8 @@ async def list_lake_county_projects(
     state_senate_district: str | None = None,
     state_representative_district: str | None = None,
     us_congressional_district: str | None = None,
+    watershed: str | None = None,
+    subwatershed: str | None = None,
     project_partners: str | None = None,
     subshed: str | None = None,
     project_category: str | None = None,
@@ -108,6 +109,8 @@ async def list_lake_county_projects(
     - "Projects in state senate district 31" -> state_senate_district="31"
     - "Projects in state rep district 59" -> state_representative_district="59"
     - "Projects in US congressional district 10" -> us_congressional_district="10"
+    - "Projects in Fox River Watershed" -> watershed="Fox River"
+    - "Projects in Upper Fox River Subwatershed" -> subwatershed="Upper Fox River"
     - "Projects with sub-watershed in Lake Michigan" -> subshed="Lake Michigan"
     - "Show me projects 5 km from Gurnee" -> place_name="Gurnee", radius_km=5
     - "Projects within 10 miles of Waukegan" -> place_name="Waukegan", radius_km=16
@@ -118,6 +121,8 @@ async def list_lake_county_projects(
     state_senate_district: filter by State Senate District (number or name).
     state_representative_district: filter by State Representative District (number or name).
     us_congressional_district: filter by U.S. Congressional District (number or name).
+    watershed: filter by watershed boundary (spatial). Use when user says "in the X Watershed" (e.g. "Fox River Watershed" -> watershed="Fox River"). Do NOT use subshed for watershed; use this parameter.
+    subwatershed: filter by subwatershed boundary (spatial). Use when user says "in the X Subwatershed" (e.g. "Upper Fox River Subwatershed" -> subwatershed="Upper Fox River").
     """
     domains = await fetch_lake_county_domains()
 
@@ -145,6 +150,8 @@ async def list_lake_county_projects(
     state_senate_district_val = state_senate_district.strip() if state_senate_district and str(state_senate_district).strip() else None
     state_rep_district_val = state_representative_district.strip() if state_representative_district and str(state_representative_district).strip() else None
     us_cong_district_val = us_congressional_district.strip() if us_congressional_district and str(us_congressional_district).strip() else None
+    watershed_val = watershed.strip() if watershed and str(watershed).strip() else None
+    subwatershed_val = subwatershed.strip() if subwatershed and str(subwatershed).strip() else None
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
     subshed_val = subshed.strip() if subshed and str(subshed).strip() else None
 
@@ -201,8 +208,13 @@ async def list_lake_county_projects(
         district_boundary_geojson = await fetch_state_representative_district_boundary(state_rep_district_val)
     elif us_cong_district_val:
         district_boundary_geojson = await fetch_us_congressional_district_boundary(us_cong_district_val)
-    if district_boundary_geojson and district_boundary_geojson.get("features") and not district_geometry:
-        # Use first feature that has a geometry convertible to Esri (in case first feature has null/different format)
+    elif watershed_val:
+        district_boundary_geojson = await fetch_watershed_boundary(watershed_val)
+        subshed_val = watershed_val
+    elif subwatershed_val:
+        district_boundary_geojson = await fetch_subwatershed_boundary(subwatershed_val)
+        subshed_val = subwatershed_val
+    if district_boundary_geojson and district_boundary_geojson.get("features") and not district_geometry and not watershed_val and not subwatershed_val:
         for feat in district_boundary_geojson["features"]:
             g = feat.get("geometry")
             if g is None and feat.get("geom") is not None:
@@ -219,7 +231,6 @@ async def list_lake_county_projects(
 
     project_types_val = [t.strip() for t in project_types if t and str(t).strip()] if project_types else None
 
-    # Resolve project_category: "projects" | "studies" | "flood_audits"
     category_val = None
     if project_category and str(project_category).strip():
         pc = str(project_category).strip().lower()
@@ -240,13 +251,15 @@ async def list_lake_county_projects(
         state_senate_district_val,
         state_rep_district_val,
         us_cong_district_val,
+        watershed_val,
+        subwatershed_val,
         partners_val,
         subshed_val,
         bool(place_name_val and radius_km_val is not None),
     ])
     if not has_filters and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
-    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val or (place_name_val and radius_km_val is not None)) and not category_val:
+    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val or watershed_val or subwatershed_val or (place_name_val and radius_km_val is not None)) and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
 
     result = await query_lake_county_projects(
