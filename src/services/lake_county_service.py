@@ -5,8 +5,9 @@ import time
 from typing import Any
 
 from pyproj import Transformer
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, mapping, shape
 from shapely.ops import transform as shapely_transform
+from shapely.ops import unary_union
 
 from src.api.lake_county_config import (
     CIRS_POINT_URL,
@@ -17,6 +18,8 @@ from src.api.lake_county_config import (
     LC_COUNTY_BOARD_DISTRICTS_URL,
     LC_DRAINAGE_DISTRICTS_URL,
     LC_MUNICIPALITIES_URL,
+    LC_NFHL_FLOOD_ZONES_URL,
+    LC_SOILS_URL,
     LC_STATE_REP_DISTRICTS_URL,
     LC_STATE_SENATE_DISTRICTS_URL,
     LC_SUBWATERSHEDS_URL,
@@ -369,34 +372,38 @@ def _ensure_feature_collection_wgs84(data: dict | None) -> dict | None:
     return out
 
 
-def district_geometry_to_esri(geom: dict) -> dict | None:
-    """Convert district boundary geometry to Esri format for spatial query. Accepts GeoJSON or Esri format."""
-    if not geom or not isinstance(geom, dict):
-        return None
-    # Esri format: "rings" (polygon) or "paths" (same as rings for polygon)
-    rings = geom.get("rings") or geom.get("paths")
-    if rings and isinstance(rings, list) and len(rings) > 0:
-        sr = geom.get("spatialReference") or {"wkid": ARCGIS_SRID}
-        return {"rings": rings, "spatialReference": sr}
-    # GeoJSON format
+def _geojson_to_esri_rings(geom: dict) -> list | None:
     gtype = geom.get("type")
     coords = geom.get("coordinates")
     if not coords or not isinstance(coords, (list, tuple)):
         return None
-    ring = None
+    rings: list = []
     if gtype == "Polygon":
-        if coords and len(coords) > 0:
-            ring = coords[0]
+        for part in coords:
+            if part and len(part) >= 3:
+                rings.append(part)
     elif gtype == "MultiPolygon":
-        if coords and coords[0] and coords[0][0]:
-            ring = coords[0][0]
-    if not ring or not isinstance(ring, (list, tuple)) or len(ring) < 3:
+        for poly in coords:
+            if poly and poly[0] and len(poly[0]) >= 3:
+                for part in poly:
+                    if part and len(part) >= 3:
+                        rings.append(part)
+    if not rings:
         return None
-    # Esri expects rings; each point [x,y] or [x,y,z] is fine
-    return {
-        "rings": [ring],
-        "spatialReference": {"wkid": ARCGIS_SRID},
-    }
+    return rings
+
+
+def district_geometry_to_esri(geom: dict) -> dict | None:
+    if not geom or not isinstance(geom, dict):
+        return None
+    rings = geom.get("rings") or geom.get("paths")
+    if rings and isinstance(rings, list) and len(rings) > 0:
+        sr = geom.get("spatialReference") or {"wkid": ARCGIS_SRID}
+        return {"rings": rings, "spatialReference": sr}
+    rings = _geojson_to_esri_rings(geom)
+    if not rings:
+        return None
+    return {"rings": rings, "spatialReference": {"wkid": ARCGIS_SRID}}
 
 
 async def fetch_county_board_district_boundary(identifier: str) -> dict | None:
@@ -692,6 +699,93 @@ async def fetch_subwatershed_boundary(identifier: str) -> dict | None:
         timeout=HTTP_TIMEOUT_WABDRAINAGE,
     )
     return _ensure_feature_collection_wgs84(data)
+
+
+async def _fetch_polygons_union(
+    base_url: str,
+    where: str,
+    result_record_count: int,
+    timeout: float = HTTP_TIMEOUT_WABDRAINAGE,
+) -> dict | None:
+    query_url = f"{base_url}/query"
+    params = {
+        "where": where,
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": ARCGIS_SRID,
+        "f": "geojson",
+        "resultRecordCount": result_record_count,
+    }
+    try:
+        client = _arcgis_client(timeout)
+        data = await client.get(query_url, params, timeout)
+    except Exception:
+        return None
+    if not data or "error" in data or not data.get("features"):
+        return None
+    data = _ensure_feature_collection_wgs84(data)
+    if not data or not data.get("features"):
+        return None
+    geoms = []
+    for feat in data["features"]:
+        g = feat.get("geometry")
+        if g and isinstance(g, dict) and g.get("coordinates"):
+            try:
+                geoms.append(shape(g))
+            except Exception:
+                pass
+    if not geoms:
+        return None
+    union_geom = unary_union(geoms)
+    if union_geom is None or union_geom.is_empty:
+        return None
+    if hasattr(union_geom, "__iter__") and not hasattr(union_geom, "exterior"):
+        union_geom = unary_union(union_geom)
+    geom_dict = None
+    if hasattr(union_geom, "exterior") or hasattr(union_geom, "geoms"):
+        geom_dict = mapping(union_geom)
+    if not geom_dict:
+        return None
+    return {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "geometry": geom_dict, "properties": {}}],
+    }
+
+
+async def fetch_soil_polygons(
+    soil_code: str | None = None,
+    hydric: bool | None = None,
+) -> dict | None:
+    conditions = []
+    if soil_code and str(soil_code).strip():
+        safe = str(soil_code).strip().replace("'", "''")
+        conditions.append(f"UPPER(SOILCODE) LIKE UPPER('%{safe}%')")
+    if hydric is True:
+        conditions.append("HYDRIC = 'Y'")
+    if not conditions:
+        return None
+    where = " AND ".join(conditions)
+    return await _fetch_polygons_union(LC_SOILS_URL, where, 1000)
+
+
+async def fetch_flood_zone_polygons(
+    flood_zone: str | None = None,
+    zone_subtype: str | None = None,
+    special_flood_hazard: bool | None = None,
+) -> dict | None:
+    conditions = []
+    if flood_zone and str(flood_zone).strip():
+        safe = str(flood_zone).strip().replace("'", "''")
+        conditions.append(f"UPPER(FLD_ZONE) LIKE UPPER('%{safe}%')")
+    if zone_subtype and str(zone_subtype).strip():
+        safe = str(zone_subtype).strip().replace("'", "''")
+        conditions.append(f"UPPER(ZONE_SUBTY) LIKE UPPER('%{safe}%')")
+    if special_flood_hazard is True:
+        conditions.append("SFHA_TF = 'T'")
+    if not conditions:
+        return None
+    where = " AND ".join(conditions)
+    return await _fetch_polygons_union(LC_NFHL_FLOOD_ZONES_URL, where, 2000)
 
 
 async def fetch_lake_county_boundary() -> dict | None:

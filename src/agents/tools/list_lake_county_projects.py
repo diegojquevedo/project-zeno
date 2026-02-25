@@ -20,8 +20,10 @@ from src.services.lake_county_service import (
     district_geometry_to_esri,
     fetch_county_board_district_boundary,
     fetch_drainage_district_boundary,
+    fetch_flood_zone_polygons,
     fetch_lake_county_domains,
     fetch_municipality_boundary,
+    fetch_soil_polygons,
     fetch_state_representative_district_boundary,
     fetch_state_senate_district_boundary,
     fetch_subwatershed_boundary,
@@ -78,6 +80,11 @@ async def list_lake_county_projects(
     us_congressional_district: str | None = None,
     watershed: str | None = None,
     subwatershed: str | None = None,
+    soil_code: str | None = None,
+    hydric_soils: bool | None = None,
+    flood_zone: str | None = None,
+    flood_zone_subtype: str | None = None,
+    special_flood_hazard_area: bool | None = None,
     project_partners: str | None = None,
     subshed: str | None = None,
     project_category: str | None = None,
@@ -112,6 +119,11 @@ async def list_lake_county_projects(
     - "Projects in Fox River Watershed" -> watershed="Fox River"
     - "Projects in Upper Fox River Subwatershed" -> subwatershed="Upper Fox River"
     - "Projects with sub-watershed in Lake Michigan" -> subshed="Lake Michigan"
+    - "Projects on soil type 1210A" -> soil_code="1210A"
+    - "Projects on hydric soils" -> hydric_soils=True
+    - "Projects in FEMA Zone AE" -> flood_zone="AE"
+    - "Projects in coastal floodplain" -> flood_zone_subtype="coastal floodplain"
+    - "Projects in Special Flood Hazard Area" -> special_flood_hazard_area=True
     - "Show me projects 5 km from Gurnee" -> place_name="Gurnee", radius_km=5
     - "Projects within 10 miles of Waukegan" -> place_name="Waukegan", radius_km=16
 
@@ -123,6 +135,11 @@ async def list_lake_county_projects(
     us_congressional_district: filter by U.S. Congressional District (number or name).
     watershed: filter by watershed boundary (spatial). Use when user says "in the X Watershed" (e.g. "Fox River Watershed" -> watershed="Fox River"). Do NOT use subshed for watershed; use this parameter.
     subwatershed: filter by subwatershed boundary (spatial). Use when user says "in the X Subwatershed" (e.g. "Upper Fox River Subwatershed" -> subwatershed="Upper Fox River").
+    soil_code: filter by NRCS soil type (spatial). Use SOILCODE (e.g. "1210A", "103A").
+    hydric_soils: filter projects on hydric soils (HYDRIC='Y').
+    flood_zone: filter by FEMA flood zone (spatial). Use FLD_ZONE (e.g. "AE", "X").
+    flood_zone_subtype: filter by flood zone subtype (e.g. "COASTAL FLOODPLAIN").
+    special_flood_hazard_area: filter projects in Special Flood Hazard Area (SFHA_TF='T').
     """
     domains = await fetch_lake_county_domains()
 
@@ -152,6 +169,11 @@ async def list_lake_county_projects(
     us_cong_district_val = us_congressional_district.strip() if us_congressional_district and str(us_congressional_district).strip() else None
     watershed_val = watershed.strip() if watershed and str(watershed).strip() else None
     subwatershed_val = subwatershed.strip() if subwatershed and str(subwatershed).strip() else None
+    soil_code_val = soil_code.strip() if soil_code and str(soil_code).strip() else None
+    hydric_soils_val = hydric_soils is True
+    flood_zone_val = flood_zone.strip() if flood_zone and str(flood_zone).strip() else None
+    flood_zone_subtype_val = flood_zone_subtype.strip() if flood_zone_subtype and str(flood_zone_subtype).strip() else None
+    special_flood_hazard_val = special_flood_hazard_area is True
     partners_val = project_partners.strip() if project_partners and str(project_partners).strip() else None
     subshed_val = subshed.strip() if subshed and str(subshed).strip() else None
 
@@ -214,6 +236,17 @@ async def list_lake_county_projects(
     elif subwatershed_val:
         district_boundary_geojson = await fetch_subwatershed_boundary(subwatershed_val)
         subshed_val = subwatershed_val
+    elif soil_code_val or hydric_soils_val:
+        district_boundary_geojson = await fetch_soil_polygons(
+            soil_code=soil_code_val,
+            hydric=hydric_soils_val if hydric_soils_val else None,
+        )
+    elif flood_zone_val or flood_zone_subtype_val or special_flood_hazard_val:
+        district_boundary_geojson = await fetch_flood_zone_polygons(
+            flood_zone=flood_zone_val,
+            zone_subtype=flood_zone_subtype_val,
+            special_flood_hazard=special_flood_hazard_val if special_flood_hazard_val else None,
+        )
     if district_boundary_geojson and district_boundary_geojson.get("features") and not district_geometry and not watershed_val and not subwatershed_val:
         for feat in district_boundary_geojson["features"]:
             g = feat.get("geometry")
@@ -253,13 +286,24 @@ async def list_lake_county_projects(
         us_cong_district_val,
         watershed_val,
         subwatershed_val,
+        soil_code_val,
+        hydric_soils_val,
+        flood_zone_val,
+        flood_zone_subtype_val,
+        special_flood_hazard_val,
         partners_val,
         subshed_val,
         bool(place_name_val and radius_km_val is not None),
     ])
     if not has_filters and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
-    if (county_board_district_val or drainage_district_val or state_senate_district_val or state_rep_district_val or us_cong_district_val or watershed_val or subwatershed_val or (place_name_val and radius_km_val is not None)) and not category_val:
+    spatial_filters = (
+        county_board_district_val or drainage_district_val or state_senate_district_val
+        or state_rep_district_val or us_cong_district_val or watershed_val or subwatershed_val
+        or soil_code_val or hydric_soils_val or flood_zone_val or flood_zone_subtype_val or special_flood_hazard_val
+        or (place_name_val and radius_km_val is not None)
+    )
+    if spatial_filters and not category_val:
         category_val = PROJECT_CATEGORY_PROJECTS
 
     result = await query_lake_county_projects(

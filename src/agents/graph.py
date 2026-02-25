@@ -80,7 +80,7 @@ Project type definitions (use these to reason about semantic queries like "flood
 {project_types_block}
 
 - If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
-- If user asks for projects matching filters (status, jurisdiction, project type, sub-watershed, or any district), use list_lake_county_projects(...). **When the user says "in the X Watershed" or "in X watershed" (e.g. "Fox River Watershed", "Lake Michigan watershed"), you MUST use the watershed= parameter (e.g. watershed="Fox River"). Do NOT use subshed= for that — subshed= is only a text filter on a project attribute; watershed= fetches the watershed boundary and filters by geometry.** For "in the X Subwatershed" use subwatershed= (e.g. subwatershed="Upper Fox River"). Use subshed only when they say "sub-watershed" as an attribute filter (e.g. "projects in Lake Michigan subshed"). For districts use exactly one of: county_board_district, drainage_district, state_senate_district, state_representative_district, us_congressional_district, watershed, subwatershed. Examples: "projects in the Fox River Watershed" -> watershed="Fox River"; "projects in Upper Fox River Subwatershed" -> subwatershed="Upper Fox River".
+- If user asks for projects matching filters (status, jurisdiction, project type, sub-watershed, or any district), use list_lake_county_projects(...). **When the user says "in the X Watershed" or "in X watershed" (e.g. "Fox River Watershed", "Lake Michigan watershed"), you MUST use the watershed= parameter (e.g. watershed="Fox River"). Do NOT use subshed= for that — subshed= is only a text filter on a project attribute; watershed= fetches the watershed boundary and filters by geometry.** For "in the X Subwatershed" use subwatershed= (e.g. subwatershed="Upper Fox River"). Use subshed only when they say "sub-watershed" as an attribute filter (e.g. "projects in Lake Michigan subshed"). For districts use exactly one of: county_board_district, drainage_district, state_senate_district, state_representative_district, us_congressional_district, watershed, subwatershed. For soil and flood zone filters use: soil_code (NRCS SOILCODE e.g. "1210A"), hydric_soils (projects on hydric soils), flood_zone (FLD_ZONE e.g. "AE"), flood_zone_subtype (e.g. "coastal floodplain"), special_flood_hazard_area (Special Flood Hazard Area). Examples: "projects in the Fox River Watershed" -> watershed="Fox River"; "projects in Upper Fox River Subwatershed" -> subwatershed="Upper Fox River"; "projects on soil type 1210A" -> soil_code="1210A"; "projects on hydric soils" -> hydric_soils=True; "projects in FEMA Zone AE" -> flood_zone="AE"; "projects in Special Flood Hazard Area" -> special_flood_hazard_area=True.
 - If user asks for projects within a distance of a place (e.g. "projects 5 km from Gurnee", "projects five kilometers away from Gurnee", "within 10 miles of Waukegan"), use list_lake_county_projects(place_name="Gurnee", radius_km=5). Convert miles to km when needed (1 mile ≈ 1.6 km; 5 miles ≈ 8 km; 10 miles ≈ 16 km). place_name must be a Lake County municipality or place (e.g. Gurnee, Waukegan, Libertyville).
 - **IMPORTANT - Status filter recognition:** When user says "recommended projects", "approved projects", "archived projects", etc., these are STATUS filters. Call list_lake_county_projects with status parameter directly (e.g., status="Recommended"). Do NOT call twice - extract the status from the first call.
 - If user asks for "projects in Lake County" or "projects across Lake County" WITHOUT specific filters, use list_lake_county_projects(project_category="projects") - returns normal projects only (~536).
@@ -153,6 +153,15 @@ GENERAL NOTES:
 - Never include json data or code blocks in your response. The data is rendered from the state updates directly, separately from your own response.
 
 {WORDING_INSTRUCTIONS}
+
+Example prompts for Lake County:
+- Show me projects in the Fox River Watershed
+- Projects in Upper Fox River Subwatershed
+- Projects on soil type 1210A
+- Projects on hydric soils
+- Projects in FEMA Zone AE
+- Projects in coastal floodplain
+- Projects in Special Flood Hazard Area
 """
 
 
