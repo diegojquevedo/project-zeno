@@ -300,6 +300,29 @@ async def get_place_center(place_name: str) -> tuple[float, float] | None:
         return None
 
 
+def buffer_geometry_meters(geom: dict, radius_m: float) -> dict | None:
+    if not geom or not isinstance(geom, dict) or radius_m <= 0 or radius_m > 5000:
+        return None
+    try:
+        shp = shape(geom)
+        if shp.is_empty:
+            return None
+        cent = shp.centroid
+        lat, lon = float(cent.y), float(cent.x)
+        aeqd = f"+proj=aeqd +lat_0={lat} +lon_0={lon} +x_0=0 +y_0=0 +datum=WGS84 +units=m"
+        transformer_to = Transformer.from_proj("EPSG:4326", aeqd, always_xy=True)
+        transformer_from = Transformer.from_proj(aeqd, "EPSG:4326", always_xy=True)
+        shp_aeqd = shapely_transform(transformer_to.transform, shp)
+        buffered = shp_aeqd.buffer(radius_m)
+        wgs84 = shapely_transform(transformer_from.transform, buffered)
+        result = mapping(wgs84)
+        if result.get("type") in ("Polygon", "MultiPolygon") and result.get("coordinates"):
+            return result
+        return None
+    except Exception:
+        return None
+
+
 def buffer_point_km(lon: float, lat: float, radius_km: float) -> dict | None:
     """
     Create a circular polygon (buffer) of radius_km around (lon, lat) in WGS84.
@@ -404,6 +427,35 @@ def district_geometry_to_esri(geom: dict) -> dict | None:
     if not rings:
         return None
     return {"rings": rings, "spatialReference": {"wkid": ARCGIS_SRID}}
+
+
+def _geojson_to_esri_for_spatial_query(
+    geom: dict,
+) -> tuple[dict, str] | None:
+    """Convert GeoJSON geometry to Esri JSON for spatial query. Returns (esri_geom, geometry_type) or None."""
+    if not geom or not isinstance(geom, dict):
+        return None
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if coords is None:
+        return None
+    sr = {"wkid": ARCGIS_SRID}
+    if gtype == "Point":
+        if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+            return None
+        lon, lat = float(coords[0]), float(coords[1])
+        return ({"x": lon, "y": lat, "spatialReference": sr}, "esriGeometryPoint")
+    if gtype == "LineString":
+        if not coords or len(coords) < 2:
+            return None
+        paths = [[[float(c[0]), float(c[1])] for c in coords]]
+        return ({"paths": paths, "spatialReference": sr}, "esriGeometryPolyline")
+    if gtype in ("Polygon", "MultiPolygon"):
+        rings = _geojson_to_esri_rings(geom)
+        if not rings:
+            return None
+        return ({"rings": rings, "spatialReference": sr}, "esriGeometryPolygon")
+    return None
 
 
 async def fetch_county_board_district_boundary(identifier: str) -> dict | None:
@@ -768,6 +820,134 @@ async def fetch_soil_polygons(
     return await _fetch_polygons_union(LC_SOILS_URL, where, 1000)
 
 
+async def _fetch_soils_intersecting_geometry(geom_geojson: dict) -> list[str]:
+    """Query soils layer for features intersecting the geometry. Returns unique SOILCODE values."""
+    if not geom_geojson or not isinstance(geom_geojson, dict):
+        return []
+    parsed = _geojson_to_esri_for_spatial_query(geom_geojson)
+    if not parsed:
+        return []
+    esri_geom, geom_type = parsed
+    query_url = f"{LC_SOILS_URL}/query"
+    form_data = {
+        "where": "1=1",
+        "outFields": "SOILCODE",
+        "returnGeometry": "false",
+        "returnDistinctValues": "true",
+        "geometry": json.dumps(esri_geom),
+        "geometryType": geom_type,
+        "spatialRel": "esriSpatialRelIntersects",
+        "f": "json",
+        "resultRecordCount": "500",
+    }
+    try:
+        client = _arcgis_client(HTTP_TIMEOUT_WABDRAINAGE)
+        data = await client.post(query_url, form_data, HTTP_TIMEOUT_WABDRAINAGE)
+    except Exception:
+        return []
+    if not data or "error" in data:
+        return []
+    features = data.get("features", [])
+    codes = []
+    for f in features:
+        v = (f.get("attributes") or {}).get("SOILCODE")
+        if v is not None and str(v).strip():
+            codes.append(str(v).strip())
+    return sorted(set(codes))
+
+
+async def fetch_soil_polygons_intersecting_geometry(geom_geojson: dict) -> dict | None:
+    """Fetch soil polygons that intersect the geometry. Returns GeoJSON FeatureCollection for map display."""
+    if not geom_geojson or not isinstance(geom_geojson, dict):
+        return None
+    parsed = _geojson_to_esri_for_spatial_query(geom_geojson)
+    if not parsed:
+        return None
+    esri_geom, geom_type = parsed
+    query_url = f"{LC_SOILS_URL}/query"
+    form_data = {
+        "where": "1=1",
+        "outFields": "SOILCODE,HYDRIC",
+        "returnGeometry": "true",
+        "outSR": str(ARCGIS_SRID),
+        "geometry": json.dumps(esri_geom),
+        "geometryType": geom_type,
+        "spatialRel": "esriSpatialRelIntersects",
+        "f": "geojson",
+        "resultRecordCount": "500",
+    }
+    try:
+        client = _arcgis_client(HTTP_TIMEOUT_WABDRAINAGE)
+        data = await client.post(query_url, form_data, HTTP_TIMEOUT_WABDRAINAGE)
+    except Exception:
+        return None
+    if not data or "error" in data or not data.get("features"):
+        return None
+    return _ensure_feature_collection_wgs84(data)
+
+
+async def get_soil_types_for_project(
+    project_name: str,
+    radius_meters: float | None = None,
+) -> dict[str, Any]:
+    """
+    Get soil types (SOILCODE) that intersect or are near a Lake County project.
+    If radius_meters is given, creates a buffer around the project geometry.
+    If not given, uses the project geometry directly (point/line/polygon).
+    Returns: {found, project_name, soil_codes, radius_meters, error}
+    """
+    if not project_name or not str(project_name).strip():
+        return {"found": False, "error": "project_name required", "soil_codes": []}
+    result = await search_lake_county_project(str(project_name).strip())
+    if not result.get("found") or not result.get("matches"):
+        return {
+            "found": False,
+            "project_name": project_name,
+            "soil_codes": [],
+            "error": "No project found matching that name",
+        }
+    match = result["matches"][0]
+    attrs = match.get("attributes") or {}
+    name = attrs.get("Name", project_name)
+    geom = match.get("geometry")
+    if not geom or not isinstance(geom, dict):
+        return {
+            "found": True,
+            "project_name": name,
+            "soil_codes": [],
+            "error": "Project has no geometry",
+        }
+    if radius_meters is not None and radius_meters > 0:
+        if radius_meters > 5000:
+            radius_meters = 5000
+        geom = buffer_geometry_meters(geom, radius_meters)
+        if not geom:
+            return {
+                "found": True,
+                "project_name": name,
+                "soil_codes": [],
+                "radius_meters": radius_meters,
+                "error": "Could not create buffer",
+            }
+    soil_codes = await _fetch_soils_intersecting_geometry(geom)
+    soil_polygons_geojson = await fetch_soil_polygons_intersecting_geometry(geom)
+    out: dict[str, Any] = {
+        "found": True,
+        "project_name": name,
+        "soil_codes": soil_codes,
+        "project_match": {
+            "rep_point_geojson": match.get("rep_point_geojson"),
+            "geometry_geojson": match.get("geometry_geojson"),
+            "geojson": match.get("geometry_geojson") or match.get("rep_point_geojson"),
+            "attributes": attrs,
+        },
+        "soil_polygons_geojson": soil_polygons_geojson,
+    }
+    if radius_meters is not None:
+        out["radius_meters"] = radius_meters
+    return out
+
+
 async def fetch_flood_zone_polygons(
     flood_zone: str | None = None,
     zone_subtype: str | None = None,
@@ -778,7 +958,10 @@ async def fetch_flood_zone_polygons(
         safe = str(flood_zone).strip().replace("'", "''")
         conditions.append(f"UPPER(FLD_ZONE) LIKE UPPER('%{safe}%')")
     if zone_subtype and str(zone_subtype).strip():
-        safe = str(zone_subtype).strip().replace("'", "''")
+        raw = str(zone_subtype).strip()
+        if raw.upper() == "REGULATORY FLOODWAY":
+            raw = "FLOODWAY"
+        safe = raw.replace("'", "''")
         conditions.append(f"UPPER(ZONE_SUBTY) LIKE UPPER('%{safe}%')")
     if special_flood_hazard is True:
         conditions.append("SFHA_TF = 'T'")

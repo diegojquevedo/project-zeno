@@ -280,7 +280,9 @@ with chat_col:
                             st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
                             st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
+                                pr.get("district_boundary") or pr.get("county_board_district_boundary")
+                            )
                     elapsed = time.perf_counter() - start_time
                     if SHOW_RESPONSE_TIMER:
                         timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")

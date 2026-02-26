@@ -123,11 +123,12 @@ async def list_lake_county_projects(
     - "Projects on hydric soils" -> hydric_soils=True
     - "Projects in FEMA Zone AE" -> flood_zone="AE"
     - "Projects in coastal floodplain" -> flood_zone_subtype="coastal floodplain"
+    - "Projects in Regulatory Floodway" or "floodway" or "Flood Hazard Zones layer" -> flood_zone_subtype="Regulatory Floodway" (NFHL ZONE_SUBTY, NOT projecttype)
     - "Projects in Special Flood Hazard Area" -> special_flood_hazard_area=True
     - "Show me projects 5 km from Gurnee" -> place_name="Gurnee", radius_km=5
     - "Projects within 10 miles of Waukegan" -> place_name="Waukegan", radius_km=16
 
-    project_types: filter by projecttype (Capital, WMB, SIRF, etc.). subshed: filter by sub-watershed.
+    project_types: filter by projecttype (Capital, WMB, SIRF, 319, etc.). Do NOT use for flood zones — "Floodway" is flood_zone_subtype, not projecttype.
     county_board_district: filter by County Board District (number or name).
     drainage_district: filter by Drainage District (CODE or NAME).
     state_senate_district: filter by State Senate District (number or name).
@@ -138,7 +139,7 @@ async def list_lake_county_projects(
     soil_code: filter by NRCS soil type (spatial). Use SOILCODE (e.g. "1210A", "103A").
     hydric_soils: filter projects on hydric soils (HYDRIC='Y').
     flood_zone: filter by FEMA flood zone (spatial). Use FLD_ZONE (e.g. "AE", "X").
-    flood_zone_subtype: filter by flood zone subtype (e.g. "COASTAL FLOODPLAIN").
+    flood_zone_subtype: filter by flood zone subtype ZONE_SUBTY (e.g. "coastal floodplain", "Regulatory Floodway"). Use "Regulatory Floodway" for floodway areas.
     special_flood_hazard_area: filter projects in Special Flood Hazard Area (SFHA_TF='T').
     """
     domains = await fetch_lake_county_domains()

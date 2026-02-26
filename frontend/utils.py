@@ -254,17 +254,59 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
             name="Jurisdiction",
         ).add_to(m2)
 
+    soil_color_map = None
     if county_board_district_boundary and county_board_district_boundary.get("features"):
-        folium.GeoJson(
-            county_board_district_boundary,
-            style_function=lambda f: {
-                "color": "#00e6a9",
-                "weight": 3,
-                "fillColor": "#ffffff",
-                "fillOpacity": 0,
-            },
-            name="District",
-        ).add_to(m2)
+        is_soil_layer = (
+            project_data
+            and isinstance(project_data, dict)
+            and project_data.get("boundary_type") == "soil"
+        )
+        if is_soil_layer:
+            codes = sorted(
+                set(
+                    f.get("properties", {}).get("SOILCODE", "")
+                    for f in county_board_district_boundary["features"]
+                    if f.get("properties", {}).get("SOILCODE")
+                )
+            )
+            palette = [
+                "#94a3a8", "#7d9b8b", "#9ba88d", "#b5a890", "#8b9dc3",
+                "#9b8ba8", "#8ba39b", "#a67c6b", "#94a3b8", "#a89090",
+                "#7d8f8f", "#9ecae1", "#a1d99b", "#fdae6b", "#bcbddc",
+            ]
+            soil_color_map = {c: palette[i % len(palette)] for i, c in enumerate(codes)}
+
+            def _soil_style(f, cm=soil_color_map):
+                code = f.get("properties", {}).get("SOILCODE", "")
+                color = cm.get(code, "#999999")
+                return {
+                    "color": color,
+                    "weight": 2,
+                    "fillColor": color,
+                    "fillOpacity": 0.45,
+                }
+
+            folium.GeoJson(
+                county_board_district_boundary,
+                style_function=_soil_style,
+                tooltip=folium.features.GeoJsonTooltip(
+                    fields=["SOILCODE", "HYDRIC"],
+                    aliases=["Soil code:", "Hydric:"],
+                    labels=True,
+                ),
+                name="Soils",
+            ).add_to(m2)
+        else:
+            folium.GeoJson(
+                county_board_district_boundary,
+                style_function=lambda f: {
+                    "color": "#00e6a9",
+                    "weight": 3,
+                    "fillColor": "#ffffff",
+                    "fillOpacity": 0,
+                },
+                name="District",
+            ).add_to(m2)
 
     if list_mode:
         for m in project_list:
@@ -342,6 +384,13 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
         st.write(f"**Layer:** {layer_name}")
         st.write("**Source:** Lake County")
         st.write(f"**Description:** {dataset_data.get('description', 'N/A')}")
+        if soil_color_map:
+            st.write("**Soil types (colors):**")
+            legend_items = "  ".join(
+                f"<span style='display:inline-block;width:12px;height:12px;background:{c};border:1px solid #555;margin-right:4px;vertical-align:middle;'></span><b>{code}</b>"
+                for code, c in soil_color_map.items()
+            )
+            st.markdown(legend_items, unsafe_allow_html=True)
 
 
 def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):

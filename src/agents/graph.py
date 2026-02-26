@@ -16,6 +16,7 @@ from src.agents.tools import (
     generate_insights,
     get_capabilities,
     get_lake_county_project,
+    get_project_surrounding_soils,
     list_lake_county_concerns,
     list_lake_county_preapps,
     list_lake_county_projects,
@@ -61,6 +62,7 @@ TOOLS:
 - list_lake_county_preapps: When data_source is Lake County and user asks for pre-applications (preapps), use this. jurisdiction=municipality (e.g. North Chicago, Zion). subshed=sub-watershed (e.g. Lake Michigan, North Branch Chicago River). Always excludes Archived.
 - list_lake_county_concerns: When data_source is Lake County and user asks for concerns, CIRS, or reported issues, use this. Always excludes Archived (status_CIRS <> 'Archived'). Filters: jurisdiction, category_report, problem, frequency_problem. For "all concerns in Lake County" or "concerns in LC", call with no filters to get all non-Archived concerns. Summaries use construction_issue and description.
 - search_lake_county_project_descriptions: When data_source is Lake County and user asks about project content/topics in descriptions (e.g. "projects about sewers", "drainage in Wadsworth"), use this. Filters by jurisdiction/status/etc. first, then ranks by semantic similarity. Returns top 15 most relevant projects.
+- get_project_surrounding_soils: When data_source is Lake County and user asks about soil types for a specific project (e.g. "soil types for project X", "soils around project Y within 50m"), use this. If radius_meters is given (e.g. 50), returns NRCS soil codes within that distance. If not given, returns soils that touch/intersect the project geometry (point/line/polygon).
 - pick_aoi: Pick the best area of interest (AOI) based on a place name and user's question.
 - pick_dataset: Find the most relevant datasets to help answer the user's question.
 - pull_data: Pulls data for the selected AOI and dataset in the specified date range.
@@ -80,7 +82,8 @@ Project type definitions (use these to reason about semantic queries like "flood
 {project_types_block}
 
 - If user asks about a specific project by name (e.g. "Tell me about X", "Show me X"), use get_lake_county_project(project_name).
-- If user asks for projects matching filters (status, jurisdiction, project type, sub-watershed, or any district), use list_lake_county_projects(...). **When the user says "in the X Watershed" or "in X watershed" (e.g. "Fox River Watershed", "Lake Michigan watershed"), you MUST use the watershed= parameter (e.g. watershed="Fox River"). Do NOT use subshed= for that — subshed= is only a text filter on a project attribute; watershed= fetches the watershed boundary and filters by geometry.** For "in the X Subwatershed" use subwatershed= (e.g. subwatershed="Upper Fox River"). Use subshed only when they say "sub-watershed" as an attribute filter (e.g. "projects in Lake Michigan subshed"). For districts use exactly one of: county_board_district, drainage_district, state_senate_district, state_representative_district, us_congressional_district, watershed, subwatershed. For soil and flood zone filters use: soil_code (NRCS SOILCODE e.g. "1210A"), hydric_soils (projects on hydric soils), flood_zone (FLD_ZONE e.g. "AE"), flood_zone_subtype (e.g. "coastal floodplain"), special_flood_hazard_area (Special Flood Hazard Area). Examples: "projects in the Fox River Watershed" -> watershed="Fox River"; "projects in Upper Fox River Subwatershed" -> subwatershed="Upper Fox River"; "projects on soil type 1210A" -> soil_code="1210A"; "projects on hydric soils" -> hydric_soils=True; "projects in FEMA Zone AE" -> flood_zone="AE"; "projects in Special Flood Hazard Area" -> special_flood_hazard_area=True.
+- If user asks about soil types for a project (e.g. "soil types for project X", "what soils are around project Y within 50m"), use get_project_surrounding_soils(project_name, radius_meters=50). Omit radius_meters if not specified — then soils touching the project geometry are returned.
+- If user asks for projects matching filters (status, jurisdiction, sub-watershed, or any district), use list_lake_county_projects(...). **IMPORTANT: Do NOT confuse "project type" (projecttype: Capital, WMB, SIRF, 319, etc.) with "flood zone subtype" (NFHL layer ZONE_SUBTY: Regulatory Floodway, coastal floodplain).** When user says "Floodway", "Regulatory Floodway", "flood hazard zones", or "Flood Hazard Zones layer" — use flood_zone_subtype="Regulatory Floodway" (or the appropriate ZONE_SUBTY). When user says "Capital", "WMB", "SIRF" — use project_types. Avoid interpreting "Projects type X" as projecttype when X is clearly a flood zone term (Floodway, floodplain, etc.). **When the user says "in the X Watershed"** use watershed= (e.g. watershed="Fox River"). For "in the X Subwatershed" use subwatershed=. For districts: county_board_district, drainage_district, watershed, subwatershed, etc. For NFHL Flood Hazard Zones layer: flood_zone (FLD_ZONE e.g. "AE"), flood_zone_subtype (ZONE_SUBTY: "Regulatory Floodway", "coastal floodplain"), special_flood_hazard_area. For soils: soil_code, hydric_soils.
 - If user asks for projects within a distance of a place (e.g. "projects 5 km from Gurnee", "projects five kilometers away from Gurnee", "within 10 miles of Waukegan"), use list_lake_county_projects(place_name="Gurnee", radius_km=5). Convert miles to km when needed (1 mile ≈ 1.6 km; 5 miles ≈ 8 km; 10 miles ≈ 16 km). place_name must be a Lake County municipality or place (e.g. Gurnee, Waukegan, Libertyville).
 - **IMPORTANT - Status filter recognition:** When user says "recommended projects", "approved projects", "archived projects", etc., these are STATUS filters. Call list_lake_county_projects with status parameter directly (e.g., status="Recommended"). Do NOT call twice - extract the status from the first call.
 - If user asks for "projects in Lake County" or "projects across Lake County" WITHOUT specific filters, use list_lake_county_projects(project_category="projects") - returns normal projects only (~536).
@@ -155,12 +158,15 @@ GENERAL NOTES:
 {WORDING_INSTRUCTIONS}
 
 Example prompts for Lake County:
+- Soil types for project Wadsworth Oaks
+- Soil types for project X around 50 meters
 - Show me projects in the Fox River Watershed
 - Projects in Upper Fox River Subwatershed
 - Projects on soil type 1210A
 - Projects on hydric soils
-- Projects in FEMA Zone AE
-- Projects in coastal floodplain
+- Projects in FEMA Zone AE (flood zone)
+- Projects in coastal floodplain (flood zone subtype)
+- Projects in Regulatory Floodway (flood zone subtype, NFHL layer)
 - Projects in Special Flood Hazard Area
 """
 
@@ -168,6 +174,7 @@ Example prompts for Lake County:
 tools = [
     get_capabilities,
     get_lake_county_project,
+    get_project_surrounding_soils,
     list_lake_county_concerns,
     list_lake_county_preapps,
     list_lake_county_projects,

@@ -1,8 +1,3 @@
-"""
-Lake County map constants (colors by projecttype).
-From Project_to_analyze_Lake_County MainMap.constants.ts
-"""
-# [R, G, B] - border 100%, fill 60% opacity
 PROJECT_TYPE_COLORS = {
     "319": [76, 175, 80],
     "Capital": [255, 235, 59],
