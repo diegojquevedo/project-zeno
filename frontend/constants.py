@@ -35,7 +35,11 @@ SESSION_KEY_DATA_SOURCE = "data_source"
 SESSION_KEY_MAP_CHAT_PENDING_INPUT = "map_chat_pending_input"
 SESSION_KEY_MAP_CHAT_USER_INPUT = "map_chat_user_input"
 
-DATA_SOURCES = {"Forest Carbon": "forest_carbon", "Lake County": "lake_county"}
+DATA_SOURCES = {
+    "Forest Carbon": "forest_carbon",
+    "Lake County": "lake_county",
+    "Geo Lake County": "geo_lake_county",
+}
 
 FOREST_CARBON_REMOVALS_DATASET = {
     "dataset_id": 10,

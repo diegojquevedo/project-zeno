@@ -13,6 +13,7 @@ from src.agents.llms import MODEL
 from src.agents.prompts import WORDING_INSTRUCTIONS
 from src.agents.state import AgentState
 from src.agents.tools import (
+    geo_discover_layer_schema,
     generate_insights,
     get_capabilities,
     get_lake_county_project,
@@ -25,6 +26,7 @@ from src.agents.tools import (
     pull_data,
     search_lake_county_project_descriptions,
 )
+from src.api.geo_lake_county_config import get_geo_lake_county_layers
 from src.api.lake_county_config import (
     LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS,
     LAKE_COUNTY_SYSTEM_PURPOSE,
@@ -43,9 +45,15 @@ def _build_lake_county_project_types_block() -> str:
     return "\n".join(lines)
 
 
+def _build_geo_layer_ids() -> str:
+    layers = get_geo_lake_county_layers()
+    return ", ".join(f'"{l["layer_id"]}"' for l in layers) or "(none)"
+
+
 def get_prompt(user: Optional[dict] = None) -> str:
     """Generate the prompt with current date. (Ignore user information)"""
     project_types_block = _build_lake_county_project_types_block()
+    geo_layer_ids = _build_geo_layer_ids()
     return f"""You are a Global Nature Watch's Geospatial Agent with access to tools and user provided selections. Think step-by-step to help answer user queries.
 
 CRITICAL INSTRUCTIONS:
@@ -68,6 +76,7 @@ TOOLS:
 - pull_data: Pulls data for the selected AOI and dataset in the specified date range.
 - generate_insights: Analyzes raw data to generate a single chart insight that answers the user's question, along with 2-3 follow-up suggestions for further exploration.
 - get_capabilities: Get information about your capabilities, available datasets, supported areas and about you. ONLY use when users ask what you can do, what data is available, what's possible or about you.
+- geo_discover_layer_schema: When data_source is geo_lake_county, use this to fetch layer metadata (fields, types, domains) from ArcGIS. Call it when you need to understand a layer's structure to answer the user. Pass layer_id (one of the available layer ids). Returns raw schema — analyze it yourself to deduce which field to use for filtering, matching the user's intent.
 
 WORKFLOW:
 1. Call pick_aoi and pick_dataset (in parallel when both needed). Then pull_data, then generate_insights.
@@ -95,6 +104,14 @@ Project type definitions (use these to reason about semantic queries like "flood
 - When the user asks by semantic criteria (e.g. "flood areas", "water quality projects"), reason from the project type definitions above to decide which project_types apply. Example: "projects with flood areas" -> Capital, WMB, SIRF (they address flood damages or stormwater infrastructure).
 - In your response, explain what you deduced from the user's question ONLY when you actually inferred it. If the user explicitly names a project type (e.g. "SIRF projects"), do not say you "deduced" it; just show the results. If the user said something like "flood areas" and you inferred Capital/WMB/SIRF, then briefly state your reasoning.
 - Do NOT use pick_aoi or pick_dataset for Lake County project queries.
+
+GEO LAKE COUNTY MODE (when data_source is geo_lake_county):
+Available layer ids: {geo_layer_ids}
+
+- Use geo_discover_layer_schema(layer_id) when you need to understand a layer's structure. Match the layer_id to the user's question from context — layer ids reflect their content.
+- The tool returns fields, types, and domains. Analyze the schema to deduce which field corresponds to what the user is asking about. Infer the correct WHERE clause from field names, aliases, and domain values — do not assume or hardcode.
+- Include relevant schema details in your response so the user sees what you found and how you inferred the answer.
+- Do NOT use Lake County project tools (get_lake_county_project, list_lake_county_projects, etc.) in this mode.
 
 When you see UI action messages:
 1. Do NOT acknowledge obvious selections (e.g. "I see you've selected Lake County") — proceed directly to answering.
@@ -172,6 +189,7 @@ Example prompts for Lake County:
 
 
 tools = [
+    geo_discover_layer_schema,
     get_capabilities,
     get_lake_county_project,
     get_project_surrounding_soils,

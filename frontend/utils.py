@@ -969,6 +969,10 @@ def render_stream(stream, skip_maps=False):
                 with st.container():
                     st.markdown("**Selected dataset**")
                     st.info(content)
+            elif tool_name == "geo_discover_layer_schema" and content:
+                with st.container():
+                    st.markdown("**Schema discovery**")
+                    st.markdown(content)
             else:
                 st.markdown(content)
     # Render map if this is a tool node with AOI data

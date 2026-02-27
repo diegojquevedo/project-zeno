@@ -32,10 +32,8 @@ from constants import (
     SESSION_KEY_MAP_PROJECT_MATCHES,
     SESSION_KEY_TOKEN,
 )
-from src.shared.lake_county_constants import (
-    LAKE_COUNTY_AOI,
-    LAKE_COUNTY_LAYERS,
-)
+from src.api.geo_lake_county_config import GEO_LAKE_COUNTY_DEFAULT_LAYER
+from src.shared.lake_county_constants import LAKE_COUNTY_AOI, LAKE_COUNTY_LAYERS
 
 SHOW_RESPONSE_TIMER = True
 
@@ -107,10 +105,13 @@ with chat_col:
     st.header("Geo AI")
     st.write("This is a friendly prompt-based system to filter and analyze mapping data.")
 
+    _ds_idx = list(DATA_SOURCES.values()).index(
+        st.session_state[SESSION_KEY_DATA_SOURCE]
+    ) if st.session_state[SESSION_KEY_DATA_SOURCE] in DATA_SOURCES.values() else 0
     data_source = st.selectbox(
         "Data source",
         options=list(DATA_SOURCES.keys()),
-        index=0 if st.session_state[SESSION_KEY_DATA_SOURCE] == "forest_carbon" else 1,
+        index=_ds_idx,
         key="data_source_select",
     )
     ds_value = DATA_SOURCES[data_source]
@@ -119,6 +120,15 @@ with chat_col:
         if ds_value == "lake_county":
             st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
             st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+        elif ds_value == "geo_lake_county":
+            st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
+            st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+            st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+            st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+            st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+            st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+            st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
         else:
             st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
             st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
@@ -131,6 +141,8 @@ with chat_col:
 
     if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
         st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
+    elif st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
+        st.caption("Query layers interactively (e.g. soils in a jurisdiction, jurisdictions with soil type 103A).")
 
     st.divider()
 
@@ -172,6 +184,8 @@ with chat_col:
     placeholder = (
         "Search or filter Lake County projects"
         if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+        else "Ask about soils in a jurisdiction or jurisdictions with a soil type"
+        if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county"
         else "Ask about carbon removal for a location"
     )
     user_input = st.chat_input(
@@ -191,7 +205,7 @@ with chat_col:
 
         dataset = (
             st.session_state[SESSION_KEY_MAP_DATASET_DATA]
-            if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+            if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
             else FOREST_CARBON_REMOVALS_DATASET
         )
         ui_context = {
@@ -205,7 +219,7 @@ with chat_col:
                     "subregion": "",
                     "subtype": "",
                 }
-                if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+                if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
                 else None
             ),
         }

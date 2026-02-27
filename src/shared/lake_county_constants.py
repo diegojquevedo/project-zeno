@@ -120,3 +120,5 @@ LAKE_COUNTY_AOI = {
         ]],
     },
 }
+
+GEO_LAKE_COUNTY_PROJECT_ID = "geo_lake_county"
