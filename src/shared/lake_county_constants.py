@@ -72,6 +72,7 @@ LC_WATERSHEDS_URL = f"{WAB_DRAINAGE_MAP_SERVER}/7"
 LC_SUBWATERSHEDS_URL = f"{WAB_DRAINAGE_MAP_SERVER}/8"
 
 LC_SOILS_URL = "https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABSoil/MapServer/4"
+LC_HYDRO_LINES_URL = "https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABWater/MapServer/4"
 LC_NFHL_FLOOD_ZONES_URL = "https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/NFHL/MapServer/28"
 
 PREAPP_POINT_URL = f"{SMC_API_BASE}/PreApplicationProjectLocation/FeatureServer/98"

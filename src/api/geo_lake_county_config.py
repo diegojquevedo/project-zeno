@@ -4,6 +4,7 @@ from src.shared.lake_county_constants import (
     LAKE_COUNTY_BOUNDS,
     LAKE_COUNTY_CENTER,
     LAKE_COUNTY_ZOOM,
+    LC_HYDRO_LINES_URL,
     LC_MUNICIPALITIES_URL,
     LC_SOILS_URL,
 )
@@ -28,6 +29,16 @@ GEO_LAKE_COUNTY_LAYERS = [
         "role": "what",
         "geometry_type": "polygon",
         "description": "NRCS soil types",
+    },
+    {
+        "layer_id": "hydro_lines",
+        "arcgis_url": LC_HYDRO_LINES_URL,
+        "layer_type": "MapServer",
+        "data_layer": "2002 Hydro Lines",
+        "dataset_name": "2002 Hydro Lines",
+        "role": "what",
+        "geometry_type": "polyline",
+        "description": "Hydrographic linear features (streams, rivers, lakes, ponds, drainage) in Lake County",
     },
 ]
 
