@@ -5,6 +5,7 @@ import uuid
 from collections import Counter
 
 import streamlit as st
+from custom_renderer_registry import get_primary_action_types
 from geo_map_renderer import render_geo_map
 from streamlit_folium import folium_static
 from utils import (
@@ -263,8 +264,9 @@ with chat_col:
                     if "map_actions" in update:
                         incoming = update["map_actions"]
                         existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
-                        has_feature_layer = any(a.get("type") == "addFeatureLayer" and a.get("colorByField") for a in incoming)
-                        if has_feature_layer:
+                        primary_types = {"addFeatureLayer"} | get_primary_action_types()
+                        is_primary_result = any(a.get("type") in primary_types for a in incoming)
+                        if is_primary_result:
                             st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
                         else:
                             st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + incoming

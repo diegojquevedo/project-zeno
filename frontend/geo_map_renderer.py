@@ -1,11 +1,10 @@
+import custom  # noqa: F401 — registers all custom renderers
 import folium
+from custom_renderer_registry import get_renderer
 from shapely.geometry import shape
 
 
-def render_geo_map(map_actions, width=700, height=400):
-    if not map_actions:
-        return None
-
+def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
     center = [42.34, -88.0]
     zoom_start = 10
 
@@ -31,6 +30,14 @@ def render_geo_map(map_actions, width=700, height=400):
         except Exception:
             pass
 
+    return center, zoom_start
+
+
+def render_geo_map(map_actions, width=700, height=400):
+    if not map_actions:
+        return None
+
+    center, zoom_start = _compute_center_and_zoom(map_actions)
     m = folium.Map(location=center, zoom_start=zoom_start, tiles="OpenStreetMap")
 
     for action in map_actions:
@@ -102,6 +109,11 @@ def render_geo_map(map_actions, width=700, height=400):
                         tooltip=label,
                         name=label,
                     ).add_to(m)
+
+        else:
+            renderer = get_renderer(action_type)
+            if renderer:
+                renderer(m, action)
 
     folium.LayerControl().add_to(m)
     return m

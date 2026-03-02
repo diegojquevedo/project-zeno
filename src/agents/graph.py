@@ -9,6 +9,9 @@ from langgraph.graph.state import CompiledStateGraph
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+import src.agents.tools.custom  # noqa: F401 — registers custom tools and prompt blocks
+from src.agents.custom_prompt_registry import get_all_custom_prompt_blocks
+from src.agents.custom_tools_registry import get_all_custom_tools
 from src.agents.llms import MODEL
 from src.agents.prompts import WORDING_INSTRUCTIONS
 from src.agents.state import AgentState
@@ -70,6 +73,7 @@ def get_prompt(user: Optional[dict] = None) -> str:
     project_types_block = _build_lake_county_project_types_block()
     geo_layer_ids = _build_geo_layer_ids()
     geo_layers_desc = _build_geo_layers_description()
+    geo_projects_block = get_all_custom_prompt_blocks()
     return f"""You are a Global Nature Watch's Geospatial Agent with access to tools and user provided selections. Think step-by-step to help answer user queries.
 
 CRITICAL INSTRUCTIONS:
@@ -219,7 +223,8 @@ IMPORTANT:
 - ALL field names come from schema discovery — never from memory, assumptions, or previous conversations
 - Layer configurations have NO field hints — every field must be discovered dynamically
 - For each new query, rediscover fields from schema (use cache — it's fast)
-- Do NOT use Lake County project tools in this mode
+- Do NOT use list_lake_county_projects or get_lake_county_project in this mode — use geo_query_geo_projects instead
+{geo_projects_block}
 
 RESPONSE FORMATTING:
 - Start with brief context: "I'll check the [layer] layer structure first"
@@ -310,7 +315,7 @@ Example prompts for Lake County:
 """
 
 
-tools = [
+_core_tools = [
     geo_discover_layer_schema,
     geo_get_boundary,
     geo_query_layer,
@@ -327,6 +332,8 @@ tools = [
     pull_data,
     generate_insights,
 ]
+
+tools = [*_core_tools, *get_all_custom_tools()]
 
 DATABASE_URL = settings.get_database_url_for_psycopg()
 
