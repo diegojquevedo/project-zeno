@@ -16,7 +16,6 @@ GEO_LAKE_COUNTY_LAYERS = [
         "data_layer": "Municipalities",
         "dataset_name": "Municipalities",
         "role": "where",
-        "label_field": "NAME",
         "geometry_type": "polygon",
         "description": "Municipalities and jurisdictions in Lake County",
     },
@@ -27,14 +26,13 @@ GEO_LAKE_COUNTY_LAYERS = [
         "data_layer": "Soils",
         "dataset_name": "Soils",
         "role": "what",
-        "value_field": "SOILCODE",
         "geometry_type": "polygon",
         "description": "NRCS soil types",
     },
 ]
 
 GEO_LAKE_COUNTY_DEFAULT_LAYER = GEO_LAKE_COUNTY_LAYERS[0]
-GEO_LAKE_COUNTY_LAYERS_BY_ID = {l["layer_id"]: l for l in GEO_LAKE_COUNTY_LAYERS}
+GEO_LAKE_COUNTY_LAYERS_BY_ID = {layer["layer_id"]: layer for layer in GEO_LAKE_COUNTY_LAYERS}
 
 GEO_LAKE_COUNTY_LAYERS_BY_ROLE: dict[str, list[dict]] = {}
 for layer in GEO_LAKE_COUNTY_LAYERS:

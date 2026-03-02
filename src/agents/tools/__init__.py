@@ -1,5 +1,8 @@
 from .generate_insights import generate_insights
 from .geo_discover_layer_schema import geo_discover_layer_schema
+from .geo_get_boundary import geo_get_boundary
+from .geo_query_layer import geo_query_layer
+from .geo_spatial_intersection import geo_spatial_intersection
 from .get_capabilities import get_capabilities
 from .get_lake_county_project import get_lake_county_project
 from .get_project_surrounding_soils import get_project_surrounding_soils
@@ -15,6 +18,9 @@ from .search_lake_county_project_descriptions import (
 
 __all__ = [
     "geo_discover_layer_schema",
+    "geo_get_boundary",
+    "geo_query_layer",
+    "geo_spatial_intersection",
     "pick_aoi",
     "pick_dataset",
     "pull_data",

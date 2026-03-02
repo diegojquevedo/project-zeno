@@ -16,6 +16,15 @@ def add_aois(left: list[dict[str, Any]] | Any, right: list[dict[str, Any]] | Any
     return left + right
 
 
+def add_map_actions(left: list[dict[str, Any]] | Any, right: list[dict[str, Any]] | Any) -> list[dict[str, Any]]:
+    """Append new map actions to existing ones."""
+    if not isinstance(left, list):
+        left = [] if left is None else [left]
+    if not isinstance(right, list):
+        right = [] if right is None else [right]
+    return left + right
+
+
 def replace_aoi_options(left: list[dict[str, Any]], right: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """Replace aoi_options with the new selection so each query uses only the current AOI(s)."""
     if right is None:
@@ -42,7 +51,12 @@ class AgentState(TypedDict, total=False):
     # Lake County project lookup
     project_result: dict[str, Any] | None
 
-    # pull-data tool
+    geo_query_result: dict[str, Any] | None
+    geo_boundary_result: dict[str, Any] | None
+    geo_spatial_intersection_result: dict[str, Any] | None
+
+    map_actions: Annotated[list[dict[str, Any]], add_map_actions]
+
     raw_data: dict[str, Any]
     start_date: str
     end_date: str

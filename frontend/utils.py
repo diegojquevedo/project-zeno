@@ -930,7 +930,6 @@ def render_charts(charts_data):
 
 
 def render_stream(stream, skip_maps=False):
-    # node = stream["node"]
     update = json.loads(stream["update"])
 
     state_updates = "State Update: " + ", ".join(list(update.keys()))
@@ -973,6 +972,18 @@ def render_stream(stream, skip_maps=False):
                 with st.container():
                     st.markdown("**Schema discovery**")
                     st.markdown(content)
+            elif tool_name == "geo_query_layer" and content:
+                with st.container():
+                    st.markdown("**Layer query result**")
+                    st.info(content)
+            elif tool_name == "geo_get_boundary" and content:
+                with st.container():
+                    st.markdown("**Boundary found**")
+                    st.success(content)
+            elif tool_name == "geo_spatial_intersection" and content:
+                with st.container():
+                    st.markdown("**Spatial intersection result**")
+                    st.success(content)
             else:
                 st.markdown(content)
     # Render map if this is a tool node with AOI data
@@ -1014,6 +1025,7 @@ def render_stream(stream, skip_maps=False):
                 file_name=f"thread_{thread_id}_checkpoint_{checkpoint_id}_raw_data.csv",
                 mime="text/csv",
             )
+
 
     # Render code blocks if this is a tool node with code_blocks
     if "code_blocks" in update:

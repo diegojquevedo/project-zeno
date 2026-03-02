@@ -5,6 +5,8 @@ import uuid
 from collections import Counter
 
 import streamlit as st
+from geo_map_renderer import render_geo_map
+from streamlit_folium import folium_static
 from utils import (
     API_BASE_URL,
     render_charts,
@@ -18,6 +20,7 @@ from constants import (
     DATA_SOURCES,
     FOREST_CARBON_REMOVALS_DATASET,
     SESSION_KEY_DATA_SOURCE,
+    SESSION_KEY_MAP_ACTIONS,
     SESSION_KEY_MAP_AOI_DATA,
     SESSION_KEY_MAP_CHARTS_DATA,
     SESSION_KEY_MAP_CHAT_MESSAGES,
@@ -33,7 +36,10 @@ from constants import (
     SESSION_KEY_TOKEN,
 )
 from src.api.geo_lake_county_config import GEO_LAKE_COUNTY_DEFAULT_LAYER
-from src.shared.lake_county_constants import LAKE_COUNTY_AOI, LAKE_COUNTY_LAYERS
+from src.shared.lake_county_constants import (
+    LAKE_COUNTY_AOI,
+    LAKE_COUNTY_LAYERS,
+)
 
 SHOW_RESPONSE_TIMER = True
 
@@ -59,6 +65,8 @@ if SESSION_KEY_MAP_JURISDICTION_BOUNDARY not in st.session_state:
     st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
 if SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY not in st.session_state:
     st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+if SESSION_KEY_MAP_ACTIONS not in st.session_state:
+    st.session_state[SESSION_KEY_MAP_ACTIONS] = []
 if SESSION_KEY_DATA_SOURCE not in st.session_state:
     st.session_state[SESSION_KEY_DATA_SOURCE] = "forest_carbon"
 
@@ -129,6 +137,7 @@ with chat_col:
             st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
             st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
             st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+            st.session_state[SESSION_KEY_MAP_ACTIONS] = []
         else:
             st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
             st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
@@ -251,6 +260,14 @@ with chat_col:
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = update["aoi"]
                     if "dataset" in update:
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = update["dataset"]
+                    if "map_actions" in update:
+                        incoming = update["map_actions"]
+                        existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
+                        has_feature_layer = any(a.get("type") == "addFeatureLayer" and a.get("colorByField") for a in incoming)
+                        if has_feature_layer:
+                            st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
+                        else:
+                            st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + incoming
                     if "project_result" in update:
                         pr = update["project_result"]
                         if pr is None:
@@ -309,7 +326,22 @@ with chat_col:
                 timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
 
 with map_col:
-    if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+    if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
+        map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
+        if map_actions and len(map_actions) > 0:
+            st.subheader("Geo AI")
+            geo_map = render_geo_map(map_actions, width=1200, height=550)
+            if geo_map:
+                folium_static(geo_map, width=1200, height=550)
+        else:
+            render_dataset_map(
+                st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+                st.session_state[SESSION_KEY_MAP_AOI_DATA],
+                show_title=True,
+                width=1200,
+                height=550,
+            )
+    elif st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
         matches = st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES]
         project_list = st.session_state[SESSION_KEY_MAP_PROJECT_LIST]
         if matches and not st.session_state[SESSION_KEY_MAP_PROJECT_DATA] and not project_list:
@@ -339,22 +371,22 @@ with map_col:
                             {"role": "assistant", "content": "\n".join(detail_lines)}
                         )
                         st.rerun()
-    render_dataset_map(
-        st.session_state[SESSION_KEY_MAP_DATASET_DATA],
-        st.session_state[SESSION_KEY_MAP_AOI_DATA],
-        show_title=True,
-        width=1200,
-        height=550,
-        project_data=st.session_state[SESSION_KEY_MAP_PROJECT_DATA]
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-        else None,
-        project_list=st.session_state[SESSION_KEY_MAP_PROJECT_LIST]
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-        else None,
-        jurisdiction_boundary=st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY]
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-        else None,
-        county_board_district_boundary=st.session_state.get(SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY)
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-        else None,
-    )
+        render_dataset_map(
+            st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+            st.session_state[SESSION_KEY_MAP_AOI_DATA],
+            show_title=True,
+            width=1200,
+            height=550,
+            project_data=st.session_state[SESSION_KEY_MAP_PROJECT_DATA],
+            project_list=st.session_state[SESSION_KEY_MAP_PROJECT_LIST],
+            jurisdiction_boundary=st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY],
+            county_board_district_boundary=st.session_state.get(SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY),
+        )
+    else:
+        render_dataset_map(
+            st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+            st.session_state[SESSION_KEY_MAP_AOI_DATA],
+            show_title=True,
+            width=1200,
+            height=550,
+        )

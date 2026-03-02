@@ -1,6 +1,6 @@
-import cachetools
 from typing import Annotated
 
+import cachetools
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
@@ -87,7 +87,7 @@ async def geo_discover_layer_schema(
     tid = tool_call_id or ""
     layer = get_geo_lake_county_layer_by_id(layer_id)
     if not layer:
-        available = [l["layer_id"] for l in get_geo_lake_county_layers()]
+        available = [layer["layer_id"] for layer in get_geo_lake_county_layers()]
         return Command(
             update={
                 "messages": [

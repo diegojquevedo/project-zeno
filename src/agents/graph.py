@@ -13,8 +13,11 @@ from src.agents.llms import MODEL
 from src.agents.prompts import WORDING_INSTRUCTIONS
 from src.agents.state import AgentState
 from src.agents.tools import (
-    geo_discover_layer_schema,
     generate_insights,
+    geo_discover_layer_schema,
+    geo_get_boundary,
+    geo_query_layer,
+    geo_spatial_intersection,
     get_capabilities,
     get_lake_county_project,
     get_project_surrounding_soils,
@@ -47,13 +50,26 @@ def _build_lake_county_project_types_block() -> str:
 
 def _build_geo_layer_ids() -> str:
     layers = get_geo_lake_county_layers()
-    return ", ".join(f'"{l["layer_id"]}"' for l in layers) or "(none)"
+    return ", ".join(f'"{layer["layer_id"]}"' for layer in layers) or "(none)"
+
+
+def _build_geo_layers_description() -> str:
+    """Build a description of available geo layers with their roles."""
+    layers = get_geo_lake_county_layers()
+    lines = []
+    for layer in layers:
+        layer_id = layer.get("layer_id", "unknown")
+        role = layer.get("role", "unknown")
+        description = layer.get("description", "")
+        lines.append(f'  - "{layer_id}" (role: {role}): {description}')
+    return "\n".join(lines) if lines else "  (no layers configured)"
 
 
 def get_prompt(user: Optional[dict] = None) -> str:
     """Generate the prompt with current date. (Ignore user information)"""
     project_types_block = _build_lake_county_project_types_block()
     geo_layer_ids = _build_geo_layer_ids()
+    geo_layers_desc = _build_geo_layers_description()
     return f"""You are a Global Nature Watch's Geospatial Agent with access to tools and user provided selections. Think step-by-step to help answer user queries.
 
 CRITICAL INSTRUCTIONS:
@@ -77,6 +93,9 @@ TOOLS:
 - generate_insights: Analyzes raw data to generate a single chart insight that answers the user's question, along with 2-3 follow-up suggestions for further exploration.
 - get_capabilities: Get information about your capabilities, available datasets, supported areas and about you. ONLY use when users ask what you can do, what data is available, what's possible or about you.
 - geo_discover_layer_schema: When data_source is geo_lake_county, use this to fetch layer metadata (fields, types, domains) from ArcGIS. Call it when you need to understand a layer's structure to answer the user. Pass layer_id (one of the available layer ids). Returns raw schema — analyze it yourself to deduce which field to use for filtering, matching the user's intent.
+- geo_query_layer: When data_source is geo_lake_county, use this to query features from a layer with WHERE clause and optional spatial filter. Returns GeoJSON FeatureCollection. Use for simple queries like "how many features" or "features matching criteria". Requires layer_id and optional where clause.
+- geo_get_boundary: When data_source is geo_lake_county, use this to get the boundary geometry of a specific feature from a layer. Returns the boundary as GeoJSON. Use when you need the WHERE boundary for spatial operations. Requires layer_id, filter_field (from schema), and filter_value.
+- geo_spatial_intersection: When data_source is geo_lake_county, use this for bidirectional spatial queries. Fetches boundary from WHERE layer and queries intersecting features from WHAT layer. Use for questions about features within locations or locations containing features. Requires where_layer_id, where_filter_field, where_filter_value, what_layer_id, and optional what_where_clause.
 
 WORKFLOW:
 1. Call pick_aoi and pick_dataset (in parallel when both needed). Then pull_data, then generate_insights.
@@ -106,12 +125,115 @@ Project type definitions (use these to reason about semantic queries like "flood
 - Do NOT use pick_aoi or pick_dataset for Lake County project queries.
 
 GEO LAKE COUNTY MODE (when data_source is geo_lake_county):
-Available layer ids: {geo_layer_ids}
+Available layers:
+{geo_layers_desc}
 
-- Use geo_discover_layer_schema(layer_id) when you need to understand a layer's structure. Match the layer_id to the user's question from context — layer ids reflect their content.
-- The tool returns fields, types, and domains. Analyze the schema to deduce which field corresponds to what the user is asking about. Infer the correct WHERE clause from field names, aliases, and domain values — do not assume or hardcode.
-- Include relevant schema details in your response so the user sees what you found and how you inferred the answer.
-- Do NOT use Lake County project tools (get_lake_county_project, list_lake_county_projects, etc.) in this mode.
+Layer IDs: {geo_layer_ids}
+
+CRITICAL - FIELD DISCOVERY (NO HARDCODING):
+All field names — for filtering, labeling, or color-coding — MUST be discovered from the schema at runtime.
+Never assume or hardcode field names like "NAME", "NAME1", "SOILCODE", etc.
+The layers will change and must work with any layer in the world.
+
+WORKFLOW FOR SPATIAL INTERSECTION QUERIES:
+1. Call geo_discover_layer_schema for WHERE layer and WHAT layer in parallel
+2. Analyze returned fields to identify:
+   - WHERE layer: which string/text fields represent the name/identifier (for filtering by location name)
+   - WHAT layer: which categorical field best represents the feature type for color-coding
+3. Build a flexible WHERE clause using OR + LIKE across the most likely name fields
+4. Call geo_spatial_intersection ONCE with:
+   - where_filter_field: the single best name field (e.g. the one whose alias says "Name" or "Municipality")
+   - where_filter_value: the user-provided name (exact or approximate)
+   - what_color_field: the categorical field from WHAT layer schema chosen for color-coding (e.g. a field with type esriFieldTypeString and a domain or meaningful distinct values like "type", "code", "category")
+5. If "No boundary found" is returned, retry ONCE with a broader LIKE clause
+
+COLOR FIELD SELECTION RULES (what_color_field):
+- Inspect the WHAT layer schema fields returned by geo_discover_layer_schema
+- Choose a field that: (a) has type esriFieldTypeString or esriFieldTypeInteger, (b) represents a category/type/code (not an ID or geometry), (c) has a domain with coded values OR has a name suggesting category (e.g. TYPE, CODE, CLASS, CATEGORY, KIND)
+- If unsure, prefer fields with a codedValue domain — they guarantee distinct categorical values
+- Pass the actual field name (case-sensitive) exactly as returned by the schema
+- If no suitable categorical field exists, omit what_color_field (leave empty)
+
+AVOID REDUNDANT CALLS:
+- Discover schema ONCE per layer per conversation turn
+- For "what X are in Y?" → geo_spatial_intersection DIRECTLY after schema discovery
+- Do NOT call geo_query_layer AND geo_spatial_intersection for the same question
+- Do NOT call geo_get_boundary AND geo_spatial_intersection for the same question
+
+TOOL SELECTION:
+- geo_discover_layer_schema(layer_id): ALWAYS call first. Analyze fields, types, aliases, domains. Never assume field names.
+
+- geo_query_layer(layer_id, where, ...): Simple single-layer queries:
+  * Counting features: "how many X are there?"
+  * Listing features matching an attribute filter
+
+- geo_get_boundary(layer_id, filter_field, filter_value): Get boundary geometry for visualization only (no WHAT features needed)
+
+- geo_spatial_intersection(where_layer_id, where_filter_field, where_filter_value, what_layer_id, what_where_clause, what_color_field): Spatial queries between two layers:
+  * WHERE→WHAT: "show [features] in [location]"
+  * WHAT→WHERE: "show [locations] with [feature type]"
+  * what_color_field: determined from WHAT layer schema, not from config
+
+REASONING PATTERN:
+- Identify which layer is WHERE (boundary) and which is WHAT (features)
+- Discover both schemas, analyze fields autonomously
+- Select where_filter_field = best name field from WHERE schema
+- Select what_color_field = best categorical field from WHAT schema
+- Build flexible filter and call geo_spatial_intersection once
+
+STEP-BY-STEP EXAMPLES:
+
+Example 1: "How many [features] are there?"
+Step 1: geo_discover_layer_schema([feature_layer_id])
+Step 2: geo_query_layer([feature_layer_id], where="1=1") → count results
+
+Example 2: "Show me [feature type X]"
+Step 1: geo_discover_layer_schema([feature_layer_id])
+Step 2: Identify the field whose alias/name matches the user's concept (TYPE, CODE, etc.)
+Step 3: geo_query_layer([feature_layer_id], where="[discovered_field]='X'")
+
+Example 3: "What [features] are in [location]?" (WHERE→WHAT)
+Step 1: geo_discover_layer_schema([location_layer_id]) AND geo_discover_layer_schema([feature_layer_id]) in parallel
+Step 2: From WHERE schema → identify name fields (text fields with "name", "label", "title" in alias/name)
+        From WHAT schema → identify best categorical field for color-coding (domain or TYPE/CODE/CLASS)
+Step 3: geo_spatial_intersection(
+          where_layer_id=[location_layer_id],
+          where_filter_field=[best_name_field_from_schema],
+          where_filter_value=[user_location_name],
+          what_layer_id=[feature_layer_id],
+          what_color_field=[best_categorical_field_from_schema]
+        )
+
+Example 4: "What [locations] have [feature type X]?" (WHAT→WHERE)
+Step 1: geo_discover_layer_schema([feature_layer_id]) AND geo_discover_layer_schema([location_layer_id]) in parallel
+Step 2: From WHAT schema → identify field matching user's feature type
+Step 3: geo_spatial_intersection(
+          where_layer_id=[feature_layer_id],
+          where_filter_field=[type_field_from_schema],
+          where_filter_value="X",
+          what_layer_id=[location_layer_id],
+          what_color_field=[best_categorical_field_from_location_schema]
+        )
+
+IMPORTANT:
+- ALL field names come from schema discovery — never from memory, assumptions, or previous conversations
+- Layer configurations have NO field hints — every field must be discovered dynamically
+- For each new query, rediscover fields from schema (use cache — it's fast)
+- Do NOT use Lake County project tools in this mode
+
+RESPONSE FORMATTING:
+- Start with brief context: "I'll check the [layer] layer structure first"
+- Show only relevant schema fields after discovery
+- Explain field selection: (e.g) "Based on the schema, I'll use the [field_name] field because..."
+- Provide structured results with counts and clear categorization
+- Include meaningful insights from the data (most common types, patterns, etc.)
+
+COMMON QUERY PATTERNS:
+1. Counting: "How many X?" → discover schema, query all, count
+2. Filtering: "Show me X" → discover schema, find type field, query with WHERE
+3. Location boundary: "Boundary of X" → discover schema, find name field, get boundary
+4. Features in location: "X in Y" → discover both schemas, spatial intersection (WHERE=location, WHAT=features)
+5. Locations with feature: "Y with X" → discover both schemas, spatial intersection (WHERE=features, WHAT=locations)
 
 When you see UI action messages:
 1. Do NOT acknowledge obvious selections (e.g. "I see you've selected Lake County") — proceed directly to answering.
@@ -190,6 +312,9 @@ Example prompts for Lake County:
 
 tools = [
     geo_discover_layer_schema,
+    geo_get_boundary,
+    geo_query_layer,
+    geo_spatial_intersection,
     get_capabilities,
     get_lake_county_project,
     get_project_surrounding_soils,
