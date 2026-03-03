@@ -17,6 +17,7 @@ from src.agents.prompts import WORDING_INSTRUCTIONS
 from src.agents.state import AgentState
 from src.agents.tools import (
     generate_insights,
+    geo_build_result_summary,
     geo_discover_layer_schema,
     geo_get_boundary,
     geo_query_layer,
@@ -100,6 +101,7 @@ TOOLS:
 - geo_query_layer: When data_source is geo_lake_county, use this to query features from a layer with WHERE clause and optional spatial filter. Returns GeoJSON FeatureCollection. Use for simple queries like "how many features" or "features matching criteria". Requires layer_id and optional where clause.
 - geo_get_boundary: When data_source is geo_lake_county, use this to get the boundary geometry of a specific feature from a layer. Returns the boundary as GeoJSON. Use when you need the WHERE boundary for spatial operations. Requires layer_id, filter_field (from schema), and filter_value.
 - geo_spatial_intersection: When data_source is geo_lake_county, use this for bidirectional spatial queries. Fetches boundary from WHERE layer and queries intersecting features from WHAT layer. Use for questions about features within locations or locations containing features. Requires where_layer_id, where_filter_field, where_filter_value, what_layer_id, and optional what_where_clause.
+- geo_build_result_summary: When data_source is geo_lake_county, call this AFTER geo_query_layer or geo_spatial_intersection returns multiple features to build a structured summary with 1-3 auto-selected charts. Args: source ("geo_query_result" after geo_query_layer, or "geo_spatial_intersection_result" after geo_spatial_intersection), result_label (e.g. soil types, streams, municipalities), chart_fields (2-4 categorical field names from schema discovery). The tool reads features directly from state — do NOT pass GeoJSON as argument.
 
 WORKFLOW:
 1. Call pick_aoi and pick_dataset (in parallel when both needed). Then pull_data, then generate_insights.
@@ -224,6 +226,12 @@ IMPORTANT:
 - Layer configurations have NO field hints — every field must be discovered dynamically
 - For each new query, rediscover fields from schema (use cache — it's fast)
 - Do NOT use list_lake_county_projects or get_lake_county_project in this mode — use geo_query_geo_projects instead
+
+- RESULT SUMMARIES WITH CHARTS: After geo_query_layer or geo_spatial_intersection returns multiple features (>1), call geo_build_result_summary with:
+  - source: "geo_query_result" (after geo_query_layer) or "geo_spatial_intersection_result" (after geo_spatial_intersection)
+  - result_label: human-readable name for the features (e.g. "soil types", "streams", "municipalities", "projects")
+  - chart_fields: list of 2-4 field names from schema you identified as most relevant (categorical fields like type, class, zone, status, code)
+  The tool reads features directly from state — do NOT pass GeoJSON as argument.
 {geo_projects_block}
 
 RESPONSE FORMATTING:
@@ -316,6 +324,7 @@ Example prompts for Lake County:
 
 
 _core_tools = [
+    geo_build_result_summary,
     geo_discover_layer_schema,
     geo_get_boundary,
     geo_query_layer,

@@ -21,6 +21,7 @@ from constants import (
     DATA_SOURCES,
     FOREST_CARBON_REMOVALS_DATASET,
     SESSION_KEY_DATA_SOURCE,
+    SESSION_KEY_GEO_RESULT_SUMMARY,
     SESSION_KEY_MAP_ACTIONS,
     SESSION_KEY_MAP_AOI_DATA,
     SESSION_KEY_MAP_CHARTS_DATA,
@@ -44,7 +45,40 @@ from src.shared.lake_county_constants import (
 
 SHOW_RESPONSE_TIMER = True
 
-LAKE_COUNTY_DEFAULT_LAYER = LAKE_COUNTY_LAYERS[1]  # areas
+LAKE_COUNTY_DEFAULT_LAYER = LAKE_COUNTY_LAYERS[1]
+
+
+def _render_geo_result_summary(geo_summary: dict) -> None:
+    total = geo_summary.get("total", 0)
+    label = geo_summary.get("label_plural", "results")
+    filters = geo_summary.get("filters", {})
+    charts_data = geo_summary.get("charts_data", [])
+    feature_rows = geo_summary.get("feature_rows", [])
+
+    st.markdown(f"**Found {total} {label}**")
+
+    filter_parts = []
+    if filters.get("category") and filters["category"] != "projects":
+        filter_parts.append(f"category: {filters['category']}")
+    if filters.get("jurisdiction"):
+        filter_parts.append(f"in {filters['jurisdiction']}")
+    if filters.get("status"):
+        filter_parts.append(f"status: {filters['status']}")
+    if filter_parts:
+        st.caption(" · ".join(filter_parts))
+
+    if charts_data:
+        st.divider()
+        render_charts(charts_data)
+
+    if feature_rows and total > 0:
+        st.divider()
+        with st.expander(f"View {total} {label}", expanded=False):
+            _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
+            display_rows = [{k: v for k, v in row.items() if k not in _skip} for row in feature_rows]
+            st.dataframe(display_rows, use_container_width=True)
+
+    st.divider()
 
 if SESSION_KEY_MAP_CHAT_SESSION_ID not in st.session_state:
     st.session_state[SESSION_KEY_MAP_CHAT_SESSION_ID] = str(uuid.uuid4())
@@ -68,6 +102,8 @@ if SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY not in st.session_state:
     st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
 if SESSION_KEY_MAP_ACTIONS not in st.session_state:
     st.session_state[SESSION_KEY_MAP_ACTIONS] = []
+if SESSION_KEY_GEO_RESULT_SUMMARY not in st.session_state:
+    st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
 if SESSION_KEY_DATA_SOURCE not in st.session_state:
     st.session_state[SESSION_KEY_DATA_SOURCE] = "forest_carbon"
 
@@ -160,7 +196,6 @@ with chat_col:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Persistent project count/summary and charts when we have a list (e.g. district query)
     if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
         project_list = st.session_state.get(SESSION_KEY_MAP_PROJECT_LIST)
         charts_data = st.session_state.get(SESSION_KEY_MAP_CHARTS_DATA)
@@ -178,6 +213,11 @@ with chat_col:
                 st.divider()
                 render_charts(charts_data)
             st.divider()
+
+    if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
+        geo_summary = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+        if geo_summary and isinstance(geo_summary, dict):
+            _render_geo_result_summary(geo_summary)
 
     client = ZenoClient(base_url=API_BASE_URL, token=st.session_state[SESSION_KEY_TOKEN])
     quota_info = client.get_quota_info()
@@ -238,6 +278,7 @@ with chat_col:
         with st.chat_message("assistant"):
             timer_placeholder = st.empty()
             progress_placeholder = st.empty()
+            geo_summary_placeholder = st.empty()
             progress_placeholder.progress(0, text="Connecting...")
             start_time = time.perf_counter()
             stream_count = 0
@@ -261,6 +302,8 @@ with chat_col:
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = update["aoi"]
                     if "dataset" in update:
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = update["dataset"]
+                    if "geo_result_summary" in update and update["geo_result_summary"] is not None:
+                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = update["geo_result_summary"]
                     if "map_actions" in update:
                         incoming = update["map_actions"]
                         existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
@@ -268,6 +311,8 @@ with chat_col:
                         is_primary_result = any(a.get("type") in primary_types for a in incoming)
                         if is_primary_result:
                             st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
+                            if "geo_result_summary" not in update:
+                                st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
                         else:
                             st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + incoming
                     if "project_result" in update:
@@ -326,6 +371,10 @@ with chat_col:
             total_time = time.perf_counter() - start_time
             if SHOW_RESPONSE_TIMER:
                 timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
+            geo_summary = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+            if geo_summary and isinstance(geo_summary, dict):
+                with geo_summary_placeholder.container():
+                    _render_geo_result_summary(geo_summary)
 
 with map_col:
     if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":

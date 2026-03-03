@@ -7,6 +7,7 @@ from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
 
 from src.agents.custom_tools_registry import register_tool
+from src.agents.tools.geo_build_result_summary import _build_charts_from_rows
 from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_CATEGORY_FLOOD_AUDITS,
     GEO_PROJECT_CATEGORY_PROJECTS,
@@ -326,9 +327,38 @@ async def geo_query_geo_projects(
         f"{with_geom} with actual geometry, {total - with_geom} reference points only"
     )
 
+    _skip = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
+    feature_rows: list[dict] = []
+    for feat in rep_features:
+        props = feat.get("properties", {})
+        row = {k: v for k, v in props.items() if v is not None and str(v).strip() and k not in _skip}
+        if row:
+            feature_rows.append(row)
+
+    charts_data = _build_charts_from_rows(
+        feature_rows,
+        [GEO_PROJECT_TYPE_FIELD, "status", "projectsubtype", "jurisdiction"],
+    )
+    geo_result_summary = {
+        "total": total,
+        "label": "project",
+        "label_plural": "projects",
+        "feature_rows": feature_rows,
+        "charts_data": charts_data,
+        "filters": {
+            k: v for k, v in {
+                "category": project_category,
+                "types": project_types,
+                "status": status,
+                "jurisdiction": jurisdiction,
+            }.items() if v
+        },
+    }
+
     return Command(
         update={
             "map_actions": map_actions,
+            "geo_result_summary": geo_result_summary,
             "messages": [ToolMessage(content=". ".join(summary_parts), tool_call_id=tid)],
         },
     )

@@ -1,4 +1,5 @@
 from .generate_insights import generate_insights
+from .geo_build_result_summary import geo_build_result_summary
 from .geo_discover_layer_schema import geo_discover_layer_schema
 from .geo_get_boundary import geo_get_boundary
 from .geo_query_layer import geo_query_layer
@@ -18,6 +19,7 @@ from .search_lake_county_project_descriptions import (
 
 __all__ = [
     "generate_insights",
+    "geo_build_result_summary",
     "geo_discover_layer_schema",
     "geo_get_boundary",
     "geo_query_layer",
