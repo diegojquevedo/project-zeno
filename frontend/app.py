@@ -10,6 +10,7 @@ from geo_map_renderer import render_geo_map
 from streamlit_folium import folium_static
 from utils import (
     API_BASE_URL,
+    _fetch_lake_county_boundary_cached,
     render_charts,
     render_dataset_map,
     render_stream,
@@ -73,7 +74,7 @@ def _render_geo_result_summary(geo_summary: dict) -> None:
 
     if feature_rows and total > 0:
         st.divider()
-        with st.expander(f"View {total} {label}", expanded=False):
+        with st.expander(f"View {total} {label}", expanded=(total <= 100)):
             _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
             display_rows = [{k: v for k, v in row.items() if k not in _skip} for row in feature_rows]
             st.dataframe(display_rows, use_container_width=True)
@@ -380,8 +381,21 @@ with map_col:
     if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
         map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
         if map_actions and len(map_actions) > 0:
+            lc_boundary = _fetch_lake_county_boundary_cached(
+                API_BASE_URL, st.session_state.get(SESSION_KEY_TOKEN)
+            )
+            augmented_actions = list(map_actions)
+            if lc_boundary and lc_boundary.get("features"):
+                augmented_actions.insert(
+                    0,
+                    {
+                        "type": "addBoundaryLayer",
+                        "geojson": lc_boundary,
+                        "label": "Lake County Boundary",
+                    },
+                )
             st.subheader("Geo AI")
-            geo_map = render_geo_map(map_actions, width=1200, height=550)
+            geo_map = render_geo_map(augmented_actions, width=1200, height=550)
             if geo_map:
                 folium_static(geo_map, width=1200, height=550)
         else:

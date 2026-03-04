@@ -12,6 +12,7 @@ _SKIP_FIELDS = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"
 _MAX_CATEGORY_VALUES = 20
 _MIN_CATEGORY_VALUES = 1
 _MAX_CHARTS = 3
+_EPOCH_MS_THRESHOLD = 253402300800000
 
 
 def _field_priority_score(field_name: str, unique_count: int) -> float:
@@ -50,6 +51,19 @@ def _build_charts_from_rows(feature_rows: list[dict], requested_fields: list[str
         non_null = [v for v in values if v is not None and str(v).strip()]
         if not non_null:
             continue
+
+        numeric_vals = []
+        for v in non_null:
+            try:
+                numeric_vals.append(float(v))
+            except (TypeError, ValueError):
+                pass
+        if numeric_vals and len(numeric_vals) == len(non_null):
+            if all(abs(n) > _EPOCH_MS_THRESHOLD for n in numeric_vals if n != 0):
+                continue
+            if all(n != int(n) or abs(n) > 1e12 for n in numeric_vals):
+                continue
+
         unique_vals = {str(v) for v in non_null}
         unique_count = len(unique_vals)
         if not (_MIN_CATEGORY_VALUES <= unique_count <= _MAX_CATEGORY_VALUES):
@@ -118,8 +132,8 @@ def geo_build_result_summary(
 ) -> Command:
     """Build a result summary with auto-selected charts from the most recent query result.
 
-    Call this after geo_query_layer or geo_spatial_intersection returns multiple features,
-    to generate a structured summary panel with count, distribution charts, and feature table.
+    Call this ONLY after geo_query_layer or geo_spatial_intersection returns multiple features.
+    Do NOT call after geo_query_geo_projects — that tool builds its own summary with charts.
 
     Args:
         source: Which state result to read features from. Use:

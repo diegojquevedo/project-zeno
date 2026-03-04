@@ -55,6 +55,7 @@ class AgentState(TypedDict, total=False):
     geo_boundary_result: dict[str, Any] | None
     geo_spatial_intersection_result: dict[str, Any] | None
     geo_result_summary: dict[str, Any] | None
+    geo_project_geometry: dict[str, Any] | None
 
     map_actions: Annotated[list[dict[str, Any]], add_map_actions]
 

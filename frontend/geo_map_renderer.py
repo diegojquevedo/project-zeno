@@ -11,7 +11,19 @@ def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
     zoom_action = next((a for a in map_actions if a.get("type") == "zoomTo"), None)
     if zoom_action and zoom_action.get("geometry"):
         try:
-            geom = shape(zoom_action["geometry"])
+            raw = zoom_action["geometry"]
+            if raw.get("type") == "FeatureCollection":
+                from shapely.ops import unary_union
+                shapes = [
+                    shape(f["geometry"])
+                    for f in raw.get("features", [])
+                    if f.get("geometry")
+                ]
+                geom = unary_union(shapes) if shapes else None
+            else:
+                geom = shape(raw)
+            if geom is None:
+                raise ValueError("empty geometry")
             minx, miny, maxx, maxy = geom.bounds
             center = [(miny + maxy) / 2, (minx + maxx) / 2]
             max_diff = max(maxy - miny, maxx - minx)

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Annotated
 
 from langchain_core.messages import ToolMessage
@@ -21,6 +22,7 @@ from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_TYPE_COLORS,
     GEO_PROJECT_TYPE_FIELD,
 )
+from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
 from src.api.lake_county_constants import (
     ARCGIS_RESULT_RECORD_COUNT_BATCH,
     ARCGIS_SRID,
@@ -40,64 +42,149 @@ def _arcgis_client() -> ArcGISClient:
     return ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_QUERY)
 
 
-async def _fetch_jurisdiction_boundary(jurisdiction: str) -> dict | None:
-    safe = jurisdiction.strip().replace("'", "''")
+async def _fetch_layer_boundary(
+    layer_id: str,
+    filter_field: str,
+    filter_value: str,
+) -> dict | None:
+    layer = get_geo_lake_county_layer_by_id(layer_id)
+    if not layer:
+        logger.warning("geo_projects_boundary_layer_not_found", layer_id=layer_id)
+        return None
+    url = layer.get("arcgis_url")
+    if not url:
+        return None
+    query_url = f"{url}/query" if not url.endswith("/query") else url
+    safe_value = filter_value.strip().replace("'", "''")
     params = {
-        "where": f"UPPER(NAME) LIKE UPPER('%{safe}%') OR UPPER(NAME1) LIKE UPPER('%{safe}%')",
-        "outFields": "NAME,NAME1",
+        "where": f"{filter_field}='{safe_value}'",
+        "outFields": filter_field,
         "returnGeometry": "true",
-        "outSR": ARCGIS_SRID,
+        "outSR": str(ARCGIS_SRID),
         "f": "geojson",
         "resultRecordCount": 1,
     }
     try:
         client = ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_MUNICIPALITY)
-        data = await client.get(
-            f"{LC_MUNICIPALITIES_URL}/query", params, HTTP_TIMEOUT_MUNICIPALITY
-        )
+        data = await client.get(query_url, params, HTTP_TIMEOUT_MUNICIPALITY)
     except Exception as e:
-        logger.warning("geo_projects_jurisdiction_boundary_failed", jurisdiction=jurisdiction, error=str(e))
+        logger.warning(
+            "geo_projects_layer_boundary_failed",
+            layer_id=layer_id,
+            filter_field=filter_field,
+            filter_value=filter_value,
+            error=str(e),
+        )
         return None
+    if data.get("error") or not data.get("features"):
+        stripped = filter_value.strip().replace("'", "''")
+        if stripped.lstrip("-").isdigit():
+            fallback_clauses = [
+                f"{filter_field} = {stripped}",
+                f"{filter_field} LIKE '{stripped}'",
+                f"CAST({filter_field} AS VARCHAR(20)) = '{stripped}'",
+            ]
+        else:
+            fallback_clauses = [
+                f"{filter_field} LIKE '%{stripped}%'",
+                f"UPPER({filter_field}) LIKE UPPER('%{stripped}%')",
+            ]
+
+        for clause in fallback_clauses:
+            fallback_params = {**params, "where": clause}
+            try:
+                client2 = ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_MUNICIPALITY)
+                data = await client2.get(query_url, fallback_params, HTTP_TIMEOUT_MUNICIPALITY)
+            except Exception as e:
+                logger.warning(
+                    "geo_projects_layer_boundary_flexible_failed",
+                    layer_id=layer_id,
+                    clause=clause,
+                    error=str(e),
+                )
+                continue
+            if not data.get("error") and data.get("features"):
+                break
+
     if data.get("error") or not data.get("features"):
         return None
     return data
 
 
-def _build_where_clause(
+async def _fetch_municipality_boundary(jurisdiction: str) -> dict | None:
+    if not jurisdiction or not jurisdiction.strip():
+        return None
+    safe = jurisdiction.strip().replace("'", "''")
+    query_url = f"{LC_MUNICIPALITIES_URL}/query"
+    for clause in [
+        f"NAME LIKE '%{safe}%'",
+        f"NAME1 LIKE '%{safe}%'",
+    ]:
+        params = {
+            "where": clause,
+            "outFields": "*",
+            "returnGeometry": "true",
+            "outSR": str(ARCGIS_SRID),
+            "f": "geojson",
+            "resultRecordCount": 1,
+        }
+        try:
+            client = ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_MUNICIPALITY)
+            data = await client.get(query_url, params, HTTP_TIMEOUT_MUNICIPALITY)
+        except Exception as e:
+            logger.warning("geo_projects_municipality_boundary_failed", jurisdiction=jurisdiction, error=str(e))
+            continue
+        if not data.get("error") and data.get("features"):
+            return data
+    return None
+
+
+def _geojson_geometry_to_esri(geojson_geom: dict) -> dict | None:
+    geom_type = geojson_geom.get("type", "")
+    coordinates = geojson_geom.get("coordinates")
+    if not coordinates:
+        return None
+    if geom_type == "Polygon":
+        return {"rings": coordinates, "spatialReference": {"wkid": 4326}}
+    if geom_type == "MultiPolygon":
+        rings = []
+        for polygon in coordinates:
+            rings.extend(polygon)
+        return {"rings": rings, "spatialReference": {"wkid": 4326}}
+    return None
+
+
+def _build_category_clause(project_category: str | None) -> str | None:
+    if not project_category:
+        return None
+    cat = project_category.strip().lower()
+    if cat == GEO_PROJECT_CATEGORY_PROJECTS:
+        return (
+            "(projectsubtype IS NULL OR projectsubtype <> 'Flood Audit') "
+            "AND (is_study IS NULL OR is_study = 0)"
+        )
+    if cat == GEO_PROJECT_CATEGORY_STUDIES:
+        return "is_study = 1"
+    if cat == GEO_PROJECT_CATEGORY_FLOOD_AUDITS:
+        return "projectsubtype = 'Flood Audit'"
+    return None
+
+
+def _combine_where(
     project_category: str | None,
-    project_types: list[str] | None,
-    status: str | None,
-    jurisdiction: str | None,
+    where_clause: str | None,
+    jurisdiction: str | None = None,
 ) -> str:
-    conditions: list[str] = []
-
-    if project_category:
-        cat = project_category.strip().lower()
-        if cat == GEO_PROJECT_CATEGORY_PROJECTS:
-            conditions.append(
-                "(projectsubtype IS NULL OR projectsubtype <> 'Flood Audit') "
-                "AND (is_study IS NULL OR is_study = 0)"
-            )
-        elif cat == GEO_PROJECT_CATEGORY_STUDIES:
-            conditions.append("is_study = 1")
-        elif cat == GEO_PROJECT_CATEGORY_FLOOD_AUDITS:
-            conditions.append("projectsubtype = 'Flood Audit'")
-
-    if project_types:
-        safe = [t.strip().replace("'", "''") for t in project_types if t and t.strip()]
-        if safe:
-            in_clause = ", ".join(f"'{t}'" for t in safe)
-            conditions.append(f"projecttype IN ({in_clause})")
-
-    if status:
-        safe_s = status.strip().replace("'", "''")
-        conditions.append(f"UPPER(status) LIKE UPPER('%{safe_s}%')")
-
-    if jurisdiction:
-        safe_j = jurisdiction.strip().replace("'", "''")
-        conditions.append(f"UPPER(jurisdiction) LIKE UPPER('%{safe_j}%')")
-
-    return " AND ".join(conditions) if conditions else "1=1"
+    parts: list[str] = []
+    category_clause = _build_category_clause(project_category)
+    if category_clause:
+        parts.append(category_clause)
+    if jurisdiction and jurisdiction.strip():
+        safe = jurisdiction.strip().replace("'", "''")
+        parts.append(f"(UPPER(jurisdiction) LIKE UPPER('%{safe}%'))")
+    if where_clause and where_clause.strip() and where_clause.strip() != "1=1":
+        parts.append(f"({where_clause.strip()})")
+    return " AND ".join(parts) if parts else "1=1"
 
 
 async def _batch_fetch_geometries(
@@ -156,10 +243,12 @@ async def _batch_fetch_geometries(
 
 @tool("geo_query_geo_projects")
 async def geo_query_geo_projects(
+    where_clause: str = "1=1",
     project_category: str = "projects",
-    project_types: list[str] | None = None,
-    status: str | None = None,
     jurisdiction: str | None = None,
+    boundary_layer_id: str | None = None,
+    boundary_filter_field: str | None = None,
+    boundary_filter_value: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
 ) -> Command:
     """
@@ -168,47 +257,145 @@ async def geo_query_geo_projects(
     geometries (point, polyline, polygon) in parallel batches using project_id as join key.
     Emits map actions: one layer per geometry type + one layer for representative points.
 
+    IMPORTANT: Before calling this tool for any attribute-based filter, call
+    geo_discover_project_schema first to inspect available fields, types, and domain values.
+    Build where_clause from what you find in the schema — never assume field names or values.
+
     Args:
-        project_category: Filter by category. One of: "projects" (normal projects, default),
-            "studies" (is_study=1), "flood_audits" (projectsubtype='Flood Audit').
-        project_types: List of projecttype values to filter (e.g. ["Capital", "WMB", "SIRF"]).
-            Available: 319, Capital, Maintenance, Multiple Funding Sources, Other, SIRF, WMAG, WMB.
-        status: Filter by project status (partial match, e.g. "Recommended", "Under Review").
-        jurisdiction: Filter by municipality/jurisdiction name (partial match).
+        where_clause: SQL WHERE clause for attribute filtering on the representative points layer.
+            Build this from schema discovery. Examples after schema inspection:
+            - Filter by a text field: "UPPER(fieldname) LIKE UPPER('%value%')"
+            - Numeric comparison: "fieldname > 50000"
+            - Exact match: "fieldname = 'value'"
+            - Combined: "fieldA = 'X' AND fieldB > 1000"
+            Leave as "1=1" to return all projects (subject to project_category filter).
+        project_category: Business-logic category — NOT a schema field. Controls which
+            project records to include:
+            - "projects" (default): excludes flood audits and studies
+            - "studies": study projects only
+            - "flood_audits": flood audit projects only
+        jurisdiction: Municipality/jurisdiction name (e.g. "Village of Antioch"). When provided,
+            projects are filtered by jurisdiction AND the municipality boundary is shown on the map.
+            Use this for "projects in [municipality]" queries — no need to add jurisdiction to where_clause.
+        boundary_layer_id: Layer id of a configured boundary layer to spatially filter projects
+            (e.g. "county_board_districts", "drainage_districts", "watersheds"). Use when the
+            user asks for projects in a district, watershed, or any boundary.
+            Discover the correct filter field from that layer's schema first.
+        boundary_filter_field: Field name in the boundary layer (discovered from schema).
+        boundary_filter_value: Value to match in boundary_filter_field.
     """
     tid = tool_call_id or ""
     client = _arcgis_client()
 
-    where = _build_where_clause(project_category, project_types, status, jurisdiction)
+    combined_where = _combine_where(project_category, where_clause, jurisdiction)
 
-    jurisdiction_boundary = None
-    if jurisdiction:
-        jurisdiction_boundary = await _fetch_jurisdiction_boundary(jurisdiction)
+    spatial_boundary_data = None
+    spatial_boundary_label = None
+
+    if boundary_layer_id and boundary_filter_field and boundary_filter_value:
+        spatial_boundary_data = await _fetch_layer_boundary(
+            boundary_layer_id, boundary_filter_field, boundary_filter_value
+        )
+        if not spatial_boundary_data or not spatial_boundary_data.get("features"):
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                f"Could not find boundary '{boundary_filter_value}' "
+                                f"in layer '{boundary_layer_id}' using field '{boundary_filter_field}'. "
+                                "Please call geo_discover_layer_schema on that layer to verify the correct "
+                                "field name and available values, then retry."
+                            ),
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+        boundary_props = spatial_boundary_data["features"][0].get("properties", {})
+        spatial_boundary_label = (
+            boundary_props.get(boundary_filter_field) or boundary_filter_value
+        )
 
     rep_query_url = f"{GEO_PROJECT_REPRESENTATIVE_POINTS_URL}/query"
-    rep_params = {
-        "where": where,
-        "outFields": "*",
-        "returnGeometry": "true",
-        "outSR": ARCGIS_SRID,
-        "f": "geojson",
-        "resultRecordCount": _MAX_RESULTS,
-    }
 
-    try:
-        rep_data = await client.get(rep_query_url, rep_params, HTTP_TIMEOUT_QUERY)
-    except Exception as e:
-        logger.error("geo_query_geo_projects_rep_fetch_failed", error=str(e))
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"Failed to query projects: {str(e)}",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
+    if spatial_boundary_data and spatial_boundary_data.get("features"):
+        boundary_geom = spatial_boundary_data["features"][0].get("geometry")
+        esri_polygon = _geojson_geometry_to_esri(boundary_geom) if boundary_geom else None
+
+        if esri_polygon:
+            rep_params = {
+                "where": combined_where,
+                "outFields": "*",
+                "returnGeometry": "true",
+                "outSR": str(ARCGIS_SRID),
+                "f": "geojson",
+                "resultRecordCount": str(_MAX_RESULTS),
+                "geometry": json.dumps(esri_polygon),
+                "geometryType": "esriGeometryPolygon",
+                "spatialRel": "esriSpatialRelIntersects",
+                "inSR": "4326",
+            }
+            try:
+                rep_data = await client.post(rep_query_url, rep_params, HTTP_TIMEOUT_QUERY)
+            except Exception as e:
+                logger.error("geo_query_geo_projects_spatial_rep_fetch_failed", error=str(e))
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=f"Failed to query projects spatially: {str(e)}",
+                                tool_call_id=tid,
+                            )
+                        ],
+                    },
+                )
+        else:
+            rep_params = {
+                "where": combined_where,
+                "outFields": "*",
+                "returnGeometry": "true",
+                "outSR": ARCGIS_SRID,
+                "f": "geojson",
+                "resultRecordCount": _MAX_RESULTS,
+            }
+            try:
+                rep_data = await client.get(rep_query_url, rep_params, HTTP_TIMEOUT_QUERY)
+            except Exception as e:
+                logger.error("geo_query_geo_projects_rep_fetch_failed", error=str(e))
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content=f"Failed to query projects: {str(e)}",
+                                tool_call_id=tid,
+                            )
+                        ],
+                    },
+                )
+    else:
+        rep_params = {
+            "where": combined_where,
+            "outFields": "*",
+            "returnGeometry": "true",
+            "outSR": ARCGIS_SRID,
+            "f": "geojson",
+            "resultRecordCount": _MAX_RESULTS,
+        }
+        try:
+            rep_data = await client.get(rep_query_url, rep_params, HTTP_TIMEOUT_QUERY)
+        except Exception as e:
+            logger.error("geo_query_geo_projects_rep_fetch_failed", error=str(e))
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"Failed to query projects: {str(e)}",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
 
     if rep_data.get("error"):
         error_msg = rep_data["error"].get("message", "Unknown error")
@@ -282,14 +469,22 @@ async def geo_query_geo_projects(
 
     map_actions: list[dict] = []
 
-    if jurisdiction_boundary and jurisdiction_boundary.get("features"):
-        boundary_props = jurisdiction_boundary["features"][0].get("properties", {})
-        boundary_label = boundary_props.get("NAME1") or boundary_props.get("NAME") or jurisdiction
+    if spatial_boundary_data and spatial_boundary_data.get("features"):
         map_actions.append({
             "type": "addBoundaryLayer",
-            "geojson": jurisdiction_boundary,
-            "label": f"Jurisdiction: {boundary_label}",
+            "geojson": spatial_boundary_data,
+            "label": f"Boundary: {spatial_boundary_label or boundary_filter_value}",
         })
+    elif jurisdiction:
+        jurisdiction_boundary = await _fetch_municipality_boundary(jurisdiction)
+        if jurisdiction_boundary and jurisdiction_boundary.get("features"):
+            boundary_props = jurisdiction_boundary["features"][0].get("properties", {})
+            label = boundary_props.get("NAME1") or boundary_props.get("NAME") or jurisdiction
+            map_actions.append({
+                "type": "addBoundaryLayer",
+                "geojson": jurisdiction_boundary,
+                "label": f"Jurisdiction: {label}",
+            })
 
     if geom_features_with_projecttype:
         map_actions.append({
@@ -317,12 +512,10 @@ async def geo_query_geo_projects(
     summary_parts = [f"Found {total} project(s)"]
     if project_category and project_category != "projects":
         summary_parts.append(f"category: {project_category}")
-    if project_types:
-        summary_parts.append(f"types: {', '.join(project_types)}")
-    if status:
-        summary_parts.append(f"status: {status}")
-    if jurisdiction:
-        summary_parts.append(f"jurisdiction: {jurisdiction}")
+    if where_clause and where_clause.strip() and where_clause.strip() != "1=1":
+        summary_parts.append(f"filter: {where_clause.strip()}")
+    if spatial_boundary_label:
+        summary_parts.append(f"within {spatial_boundary_label}")
     summary_parts.append(
         f"{with_geom} with actual geometry, {total - with_geom} reference points only"
     )
@@ -335,10 +528,7 @@ async def geo_query_geo_projects(
         if row:
             feature_rows.append(row)
 
-    charts_data = _build_charts_from_rows(
-        feature_rows,
-        [GEO_PROJECT_TYPE_FIELD, "status", "projectsubtype", "jurisdiction"],
-    )
+    charts_data = _build_charts_from_rows(feature_rows, [])
     geo_result_summary = {
         "total": total,
         "label": "project",
@@ -348,9 +538,8 @@ async def geo_query_geo_projects(
         "filters": {
             k: v for k, v in {
                 "category": project_category,
-                "types": project_types,
-                "status": status,
-                "jurisdiction": jurisdiction,
+                "where": where_clause if where_clause and where_clause.strip() != "1=1" else None,
+                "boundary": spatial_boundary_label,
             }.items() if v
         },
     }

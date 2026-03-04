@@ -1,5 +1,4 @@
 from src.shared.lake_county_constants import (
-    LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS,
     PROJECT_CATEGORY_FLOOD_AUDITS,
     PROJECT_CATEGORY_PROJECTS,
     PROJECT_CATEGORY_STUDIES,
@@ -48,57 +47,82 @@ GEO_PROJECT_CATEGORY_PROJECTS = PROJECT_CATEGORY_PROJECTS
 GEO_PROJECT_CATEGORY_STUDIES = PROJECT_CATEGORY_STUDIES
 GEO_PROJECT_CATEGORY_FLOOD_AUDITS = PROJECT_CATEGORY_FLOOD_AUDITS
 
-_project_type_lines = [
-    f"  - {name}: {desc}"
-    for name, desc in LAKE_COUNTY_PROJECT_TYPE_DEFINITIONS
-]
-
-GEO_PROJECTS_PROMPT_BLOCK = f"""
+GEO_PROJECTS_PROMPT_BLOCK = """
 GEO LAKE COUNTY PROJECTS (when data_source is geo_lake_county and user asks about projects):
 
 LAYER ARCHITECTURE:
-- Representative points layer (FeatureServer/30): Contains ALL project attributes — Name, projecttype,
-  projectsubtype, status, ProjectStatus, jurisdiction, Subshed, ProjectPartners, is_study, Geometry, project_id, etc.
-  This is the primary search/filter layer. Always query this layer first.
-- Geometry layers (fetched in parallel after attribute query):
-    * FeatureServer/27 → Point geometries  (Geometry field = "Point")
-    * FeatureServer/23 → Polyline geometries (Geometry field = "Polyline" or "Line")
-    * FeatureServer/29 → Polygon geometries (Geometry field = "Polygon")
-  Each geometry layer shares `project_id` as the join key (NOT OBJECTID).
+- Representative points layer (FeatureServer/30): The primary layer containing ALL project attributes.
+  Always call geo_discover_project_schema before filtering to know the exact field names and values.
+- Geometry layers (fetched automatically by the tool after querying representative points):
+    * FeatureServer/27 → Point geometries
+    * FeatureServer/23 → Polyline/Line geometries
+    * FeatureServer/29 → Polygon geometries
+  Each shares `project_id` as the join key (NOT OBJECTID). The tool handles this internally.
 
-PROJECT CATEGORIES (filter on representative points layer):
-- "projects" → normal projects: excludes Flood Audit and Study
-    SQL: (projectsubtype IS NULL OR projectsubtype <> 'Flood Audit') AND (is_study IS NULL OR is_study = 0)
-- "studies" → study projects: is_study = 1
-- "flood_audits" → flood audit projects: projectsubtype = 'Flood Audit'
-- If no category specified and user says "projects", default to "projects" category.
-
-PROJECT TYPES (projecttype field — used for coloring on map):
-{chr(10).join(_project_type_lines)}
+PROJECT CATEGORIES — business-logic abstraction (NOT a schema field), pass via project_category=:
+- "projects" (default): normal projects — excludes flood audits and studies
+- "studies": study projects only
+- "flood_audits": flood audit projects only
+When user says "projects" without qualifiers, use "projects". When they say "studies" or "flood audits", use those.
 
 TOOL: geo_query_geo_projects
-Use this tool when the user asks about projects in geo_lake_county mode:
-- "show me all projects in Lake County" → project_category="projects"
-- "show me Capital projects" → project_types=["Capital"]
-- "projects in Antioch" → jurisdiction="Antioch"
+Use for any query about projects in geo_lake_county mode.
+ALWAYS call geo_discover_project_schema FIRST to know available fields before building any where_clause.
+
+WORKFLOW for attribute-based project queries (type, status, cost, date, etc.):
+1. Call geo_discover_project_schema() to inspect available fields, types, and domain values.
+2. Analyze the schema: identify the correct field name and value format.
+3. Build a where_clause using the actual field names from the schema.
+4. Call geo_query_geo_projects(where_clause="<built_clause>", project_category="<category>")
+
+WORKFLOW for "projects in [district/watershed/boundary]" (spatial filter):
+1. Call geo_discover_layer_schema(layer_id="<boundary_layer_id>") to find the correct filter field.
+2. Call geo_query_geo_projects(
+     boundary_layer_id="<boundary_layer_id>",
+     boundary_filter_field="<field_from_schema>",
+     boundary_filter_value="<value>"
+   )
+Both workflows can be combined: pass both where_clause AND boundary_layer_id when needed.
+
+EXAMPLES (illustrative only — always verify field names from schema):
+- "show me all projects" → geo_discover_project_schema(), then geo_query_geo_projects()
+- "Capital projects" → discover schema → find type field and its values → where_clause="<type_field>='Capital'"
+- "projects in Village of Antioch" → jurisdiction="Village of Antioch" (filters and shows boundary; no need for where_clause)
+- "projects with final cost > 50000" → discover schema → find cost field → where_clause="<cost_field> > 50000"
+- "projects started after 2010" → discover schema → find year/date field → where_clause="<year_field> >= 2010"
+- "projects with status Recommended" → discover schema → find status field → where_clause="UPPER(<status_field>) LIKE UPPER('%Recommended%')"
+- "projects in County Board District 5" → discover boundary layer schema → geo_query_geo_projects(boundary_layer_id="...", boundary_filter_field="<field>", boundary_filter_value="5")
 - "show me studies" → project_category="studies"
 - "flood audit projects" → project_category="flood_audits"
-- "show me WMB and SIRF projects" → project_types=["WMB", "SIRF"]
-- "projects with status Recommended" → status="Recommended"
 
 MAP RENDERING:
-- For each project returned, the tool emits TWO map layers:
-  1. The actual geometry (polygon, polyline, or point) colored by projecttype
-  2. The representative point (always shown as a distinct marker)
-- Both layers use the projecttype field for coloring.
-- Color mapping by projecttype: {", ".join(f"{k}={v}" for k, v in GEO_PROJECT_TYPE_COLORS.items())}
-- Default color for unknown types: {GEO_PROJECT_DEFAULT_COLOR}
+- The tool emits geometry layers (colored by the project type field) and representative point markers.
+- When boundary_layer_id is provided, the boundary polygon is shown automatically.
+- When jurisdiction is provided (municipality queries), the municipality boundary is fetched and shown.
+
+PROJECT INFO BY NAME (e.g. "give me info about Wadsworth Oaks"):
+Call geo_get_project_geometry(project_name="<name>"). The tool returns attributes and displays
+the project geometry on the map. Summarize the attributes in your response. Do NOT call
+geo_spatial_intersection unless the user wants features within the project.
+
+FINDING FEATURES WITHIN A NAMED PROJECT (e.g. "soils in Wadsworth Oaks project"):
+When the user wants geo features (soils, streams, flood zones, etc.) within a named project:
+1. Call geo_get_project_geometry(project_name="<name>") first.
+2. Call geo_discover_layer_schema(layer_id="<what_layer>") to find the color/label field.
+3. Call geo_spatial_intersection(
+     where_layer_id="geo_project_geometry",
+     where_filter_field="",
+     where_filter_value="<project_name>",
+     what_layer_id="<what_layer>",
+     what_color_field="<field_from_schema>"
+   )
+Do NOT use geo_query_geo_projects for these flows.
 
 IMPORTANT:
-- Do NOT use geo_spatial_intersection or geo_query_layer for project queries — use geo_query_geo_projects
-- Do NOT hardcode project_id values — always query dynamically
-- Geometry fetch is done in parallel batches by the tool automatically
-- project_id is the join key between representative points and geometry layers (NOT OBJECTID)
+- ALWAYS call geo_discover_project_schema before building any where_clause — never assume field names or values.
+- Do NOT use geo_spatial_intersection or geo_query_layer for project queries — use geo_query_geo_projects.
+- Do NOT call geo_build_result_summary after geo_query_geo_projects — it builds its own complete summary.
+- project_id is the join key between the representative points and geometry layers (NOT OBJECTID).
 """
 
 

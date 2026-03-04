@@ -1,14 +1,18 @@
 import json
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from shapely.geometry import shape
 
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
-from src.api.lake_county_constants import HTTP_TIMEOUT_DOMAINS
+from src.api.lake_county_constants import (
+    HTTP_TIMEOUT_DOMAINS,
+    HTTP_TIMEOUT_QUERY,
+)
 from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.shared.logging_config import get_logger
 from src.shared.map_constants import MAX_COLOR_CATEGORIES, MIN_COLOR_CATEGORIES
@@ -20,16 +24,21 @@ from src.shared.map_utils import (
     generate_color_palette,
 )
 
+_PROJECT_GEOMETRY_SENTINEL = "geo_project_geometry"
+
 logger = get_logger(__name__)
+
+_PAGE_SIZE = 1000
+_MAX_PAGES = 20
 
 
 def _arcgis_client() -> ArcGISClient:
-    return ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_DOMAINS)
+    return ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_QUERY)
 
 
 def _build_flexible_where_clause(field: str, value: str) -> str:
-    normalized = value.strip()
-    return f"UPPER({field}) LIKE UPPER('%{normalized}%')"
+    normalized = value.strip().replace("'", "''")
+    return f"{field} LIKE '%{normalized}%'"
 
 
 def _geojson_geometry_to_esri(geojson_geom: dict) -> dict | None:
@@ -57,6 +66,78 @@ def _geojson_geometry_to_esri(geojson_geom: dict) -> dict | None:
     return None
 
 
+async def _fetch_what_page(
+    client: ArcGISClient,
+    query_url: str,
+    base_params: dict,
+    offset: int,
+) -> dict:
+    params = {**base_params, "resultOffset": offset, "resultRecordCount": _PAGE_SIZE}
+    try:
+        return await client.post(query_url, params, HTTP_TIMEOUT_QUERY)
+    except Exception as e:
+        logger.warning("geo_spatial_intersection_page_failed", offset=offset, error=str(e))
+        return {}
+
+
+async def _fetch_all_what_features(
+    client: ArcGISClient,
+    query_url: str,
+    base_params: dict,
+) -> tuple[list[dict], bool]:
+    all_features: list[dict] = []
+    had_error = False
+
+    for page in range(_MAX_PAGES):
+        offset = page * _PAGE_SIZE
+        data = await _fetch_what_page(client, query_url, base_params, offset)
+
+        if not data:
+            had_error = True
+            break
+
+        if data.get("error"):
+            logger.warning(
+                "geo_spatial_intersection_arcgis_error",
+                offset=offset,
+                error=data.get("error"),
+            )
+            had_error = True
+            break
+
+        page_features = data.get("features", [])
+        all_features.extend(page_features)
+
+        logger.info(
+            "geo_spatial_intersection_page_fetched",
+            offset=offset,
+            count=len(page_features),
+            total_so_far=len(all_features),
+        )
+
+        if not data.get("exceededTransferLimit", False):
+            break
+
+        if len(page_features) < _PAGE_SIZE:
+            break
+
+    return all_features, had_error
+
+
+def _build_fallback_clauses(filter_field: str, filter_value: str) -> list[str]:
+    stripped = filter_value.strip().replace("'", "''")
+    if stripped.lstrip("-").isdigit():
+        return [
+            f"{filter_field} = {stripped}",
+            f"{filter_field} LIKE '{stripped}'",
+            f"CAST({filter_field} AS VARCHAR(20)) = '{stripped}'",
+        ]
+    return [
+        f"{filter_field} LIKE '%{stripped}%'",
+        f"UPPER({filter_field}) LIKE UPPER('%{stripped}%')",
+    ]
+
+
 async def _fetch_boundary(
     client: ArcGISClient,
     query_url: str,
@@ -78,14 +159,15 @@ async def _fetch_boundary(
         return None, str(e)
 
     if data.get("error") or not data.get("features"):
-        flexible_clause = _build_flexible_where_clause(filter_field, filter_value)
-        params["where"] = flexible_clause
-        params["resultRecordCount"] = 5
-
-        try:
-            data = await client.get(query_url, params, HTTP_TIMEOUT_DOMAINS)
-        except Exception as e:
-            return None, str(e)
+        for fallback_clause in _build_fallback_clauses(filter_field, filter_value):
+            params["where"] = fallback_clause
+            params["resultRecordCount"] = 1
+            try:
+                data = await client.get(query_url, params, HTTP_TIMEOUT_DOMAINS)
+            except Exception as e:
+                return None, str(e)
+            if not data.get("error") and data.get("features"):
+                break
 
     if data.get("error"):
         return None, data["error"].get("message", "Unknown ArcGIS error")
@@ -95,6 +177,23 @@ async def _fetch_boundary(
         return None, None
 
     return data, None
+
+
+def _union_geometry_from_fc(geojson_fc: dict) -> dict | None:
+    features = geojson_fc.get("features", [])
+    if not features:
+        return None
+    if len(features) == 1:
+        return features[0].get("geometry")
+    try:
+        from shapely.ops import unary_union
+        shapes = [shape(f["geometry"]) for f in features if f.get("geometry")]
+        if not shapes:
+            return None
+        unioned = unary_union(shapes)
+        return json.loads(json.dumps(unioned.__geo_interface__))
+    except Exception:
+        return features[0].get("geometry")
 
 
 @tool("geo_spatial_intersection")
@@ -107,6 +206,7 @@ async def geo_spatial_intersection(
     what_color_field: str = "",
     spatial_rel: str = "esriSpatialRelIntersects",
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
+    state: Annotated[dict[str, Any], InjectedState] = None,
 ) -> Command:
     """
     Perform spatial intersection between two layers: WHERE (boundary) and WHAT (features).
@@ -114,10 +214,17 @@ async def geo_spatial_intersection(
     - "Show [feature types] in [location]" (WHERE=locations, WHAT=features)
     - "Show [locations] with [feature type]" (WHERE=features, WHAT=locations)
 
+    SPECIAL: when where_layer_id="geo_project_geometry", the boundary is taken from the
+    geo_project_geometry stored in state by a prior geo_get_project_geometry call.
+    In that case, where_filter_field should be "" and where_filter_value is the project name label.
+
     Args:
-        where_layer_id: Layer id defining the boundary (e.g. "locations", "regions")
+        where_layer_id: Layer id defining the boundary (e.g. "locations", "regions"),
+            or "geo_project_geometry" to use a project's geometry stored in state.
         where_filter_field: Field to filter WHERE layer (e.g. "NAME", "CODE"). Discovered from schema.
-        where_filter_value: Value for WHERE filter (e.g. location name, code)
+            Leave empty when using "geo_project_geometry" sentinel.
+        where_filter_value: Value for WHERE filter (e.g. location name, code).
+            When using "geo_project_geometry", pass the project name as a label.
         what_layer_id: Layer id to query features from (e.g. "features", "types")
         what_where_clause: Optional WHERE clause for WHAT layer (e.g. "TYPE='ABC'" or "CATEGORY='X'")
         what_color_field: Field from WHAT layer schema to use for color-coding features. Leave empty for no color-coding. Discovered from schema — use a categorical field with meaningful distinct values.
@@ -126,22 +233,131 @@ async def geo_spatial_intersection(
     Returns both the boundary and intersecting features as GeoJSON.
     """
     tid = tool_call_id or ""
+    state = state or {}
 
-    where_layer = get_geo_lake_county_layer_by_id(where_layer_id)
-    what_layer = get_geo_lake_county_layer_by_id(what_layer_id)
+    using_project_geometry = where_layer_id == _PROJECT_GEOMETRY_SENTINEL
 
-    if not where_layer:
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"WHERE layer '{where_layer_id}' not found in configuration.",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
+    if using_project_geometry:
+        geo_project_geometry: dict | None = state.get("geo_project_geometry")
+        if not geo_project_geometry:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                "No project geometry in state. "
+                                "Call geo_get_project_geometry first to find and store the project geometry."
+                            ),
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        project_geojson_fc = geo_project_geometry.get("geojson", {})
+        project_name_label = geo_project_geometry.get("project_name", where_filter_value)
+
+        boundary_geometry = _union_geometry_from_fc(project_geojson_fc)
+        if not boundary_geometry:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"Project geometry for '{project_name_label}' is empty or invalid.",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        boundary_data = project_geojson_fc
+        boundary_properties: dict = {}
+        boundary_label = project_name_label
+        where_name = "Project"
+    else:
+        where_layer = get_geo_lake_county_layer_by_id(where_layer_id)
+        if not where_layer:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"WHERE layer '{where_layer_id}' not found in configuration.",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        where_url = where_layer.get("arcgis_url")
+        if not where_url:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="WHERE layer has no URL configured.",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        client = _arcgis_client()
+        where_query_url = (
+            f"{where_url}/query" if not where_url.endswith("/query") else where_url
         )
 
+        boundary_data, fetch_error = await _fetch_boundary(
+            client, where_query_url, where_filter_field, where_filter_value
+        )
+
+        if fetch_error:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=f"Failed to fetch boundary from '{where_layer_id}': {fetch_error}",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        if boundary_data is None:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                f"No boundary found in '{where_layer_id}' "
+                                f"where {where_filter_field} matches '{where_filter_value}'. "
+                                "Try discovering the schema to verify available fields and actual values."
+                            ),
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        boundary_features = boundary_data.get("features", [])
+        boundary_geometry = boundary_features[0].get("geometry")
+        boundary_properties = boundary_features[0].get("properties", {})
+
+        if not boundary_geometry:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Boundary feature has no geometry.",
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+        where_name = where_layer.get("description", where_layer_id)
+        boundary_label = boundary_properties.get(where_filter_field, where_filter_value)
+
+    what_layer = get_geo_lake_county_layer_by_id(what_layer_id)
     if not what_layer:
         return Command(
             update={
@@ -154,15 +370,13 @@ async def geo_spatial_intersection(
             },
         )
 
-    where_url = where_layer.get("arcgis_url")
     what_url = what_layer.get("arcgis_url")
-
-    if not where_url or not what_url:
+    if not what_url:
         return Command(
             update={
                 "messages": [
                     ToolMessage(
-                        content="One or both layers have no URL configured.",
+                        content="WHAT layer has no URL configured.",
                         tool_call_id=tid,
                     )
                 ],
@@ -170,59 +384,6 @@ async def geo_spatial_intersection(
         )
 
     client = _arcgis_client()
-
-    where_query_url = (
-        f"{where_url}/query" if not where_url.endswith("/query") else where_url
-    )
-
-    boundary_data, fetch_error = await _fetch_boundary(
-        client, where_query_url, where_filter_field, where_filter_value
-    )
-
-    if fetch_error:
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"Failed to fetch boundary from '{where_layer_id}': {fetch_error}",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
-    if boundary_data is None:
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=(
-                            f"No boundary found in '{where_layer_id}' "
-                            f"where {where_filter_field} matches '{where_filter_value}'. "
-                            "Try discovering the schema to verify available fields and actual values."
-                        ),
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
-    boundary_features = boundary_data.get("features", [])
-    boundary_geometry = boundary_features[0].get("geometry")
-    boundary_properties = boundary_features[0].get("properties", {})
-
-    if not boundary_geometry:
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="Boundary feature has no geometry.",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
     what_query_url = (
         f"{what_url}/query" if not what_url.endswith("/query") else what_url
     )
@@ -230,7 +391,7 @@ async def geo_spatial_intersection(
     esri_polygon = _geojson_geometry_to_esri(boundary_geometry)
 
     if esri_polygon:
-        what_params = {
+        what_base_params = {
             "where": what_where_clause,
             "outFields": "*",
             "returnGeometry": "true",
@@ -239,7 +400,6 @@ async def geo_spatial_intersection(
             "geometryType": "esriGeometryPolygon",
             "spatialRel": spatial_rel,
             "inSR": "4326",
-            "resultRecordCount": 2000,
         }
     else:
         geom = shape(boundary_geometry)
@@ -251,7 +411,7 @@ async def geo_spatial_intersection(
             "ymax": bounds[3],
             "spatialReference": {"wkid": 4326},
         }
-        what_params = {
+        what_base_params = {
             "where": what_where_clause,
             "outFields": "*",
             "returnGeometry": "true",
@@ -260,49 +420,30 @@ async def geo_spatial_intersection(
             "geometryType": "esriGeometryEnvelope",
             "spatialRel": spatial_rel,
             "inSR": "4326",
-            "resultRecordCount": 2000,
         }
 
-    try:
-        what_data = await client.post(
-            what_query_url, what_params, HTTP_TIMEOUT_DOMAINS
-        )
+    what_features, fetch_had_error = await _fetch_all_what_features(
+        client, what_query_url, what_base_params
+    )
 
-    except Exception as e:
-        logger.error("geo_spatial_intersection_failed", error=str(e))
+    if fetch_had_error and not what_features:
         return Command(
             update={
                 "messages": [
                     ToolMessage(
-                        content=f"Failed to query '{what_layer_id}' features: {str(e)}",
+                        content=f"Failed to query '{what_layer_id}' features.",
                         tool_call_id=tid,
                     )
                 ],
             },
         )
 
-    if what_data.get("error"):
-        error_msg = what_data["error"].get("message", "Unknown error")
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"ArcGIS error querying '{what_layer_id}': {error_msg}",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
-    what_features = what_data.get("features", [])
     what_count = len(what_features)
+    what_data = {"type": "FeatureCollection", "features": what_features}
 
-    where_name = where_layer.get("description", where_layer_id)
     what_name = what_layer.get("description", what_layer_id)
-    boundary_label = boundary_properties.get(where_filter_field, where_filter_value)
 
     summary = f"Found {what_count} feature(s) from {what_name} intersecting {boundary_label} ({where_name})"
-
     if what_where_clause != "1=1":
         summary += f" with filter: {what_where_clause}"
 

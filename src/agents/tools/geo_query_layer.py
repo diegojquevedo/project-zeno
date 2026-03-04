@@ -7,7 +7,7 @@ from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
 
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
-from src.api.lake_county_constants import HTTP_TIMEOUT_DOMAINS
+from src.api.lake_county_constants import HTTP_TIMEOUT_QUERY
 from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.shared.logging_config import get_logger
 from src.shared.map_constants import MAX_COLOR_CATEGORIES, MIN_COLOR_CATEGORIES
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 def _arcgis_client() -> ArcGISClient:
-    return ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_DOMAINS)
+    return ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_QUERY)
 
 
 @tool("geo_query_layer")
@@ -126,9 +126,9 @@ async def geo_query_layer(
 
     try:
         if geometry:
-            data = await client.post(query_url, params, HTTP_TIMEOUT_DOMAINS)
+            data = await client.post(query_url, params, HTTP_TIMEOUT_QUERY)
         else:
-            data = await client.get(query_url, params, HTTP_TIMEOUT_DOMAINS)
+            data = await client.get(query_url, params, HTTP_TIMEOUT_QUERY)
     except Exception as e:
         logger.warning(
             "geo_query_layer_request_failed", url=query_url, error=str(e)
