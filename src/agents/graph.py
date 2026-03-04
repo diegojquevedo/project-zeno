@@ -222,6 +222,53 @@ Step 3: geo_spatial_intersection(
           what_color_field=[best_categorical_field_from_location_schema]
         )
 
+CONVERSATIONAL REFINEMENT — CUMULATIVE FILTERS:
+When the user says "of those", "from those", "filter those", "which of those", etc., they are refining
+the previous result. You MUST carry all previous filters forward and add the new condition.
+
+For project refinements (geo_query_geo_projects):
+- Re-call geo_query_geo_projects with ALL previously applied filters PLUS the new one.
+- Example flow:
+  Turn 1: "Show projects in Fox River Watershed"
+    → boundary_layer_id="watersheds", boundary_filter_field="<field>", boundary_filter_value="Fox River"
+  Turn 2: "Of those, show type WMB"
+    → same boundary params + where_clause="<type_field> = 'WMB'"
+  Turn 3: "Of those, show final cost > 50000"
+    → same boundary params + where_clause="<type_field> = 'WMB' AND <cost_field> > 50000"
+
+CRITICAL — geo features intersecting previously-filtered projects:
+When the user asks for geo features (soils, streams, flood zones, sampling sites, etc.)
+"in those projects", "within those projects", or "which of those projects have X":
+- Every geo_query_geo_projects call automatically stores the result project geometries in
+  geo_project_geometry state. This happens AFTER EVERY successful project query, not just
+  after geo_get_project_geometry.
+- You MUST use where_layer_id="geo_project_geometry" as the WHERE boundary — NEVER use a
+  watershed or any other layer boundary for this step. The purpose is to find geo features
+  that overlap specifically with the already-filtered project footprints.
+- DO NOT re-run geo_query_geo_projects before the intersection — the geometries are already in state.
+- Workflow:
+  1. geo_discover_layer_schema("<what_layer_id>") to find color field and optionally filter field.
+  2. geo_spatial_intersection(
+       where_layer_id="geo_project_geometry",
+       where_filter_field="",
+       where_filter_value="<descriptive label of the current filter set, e.g. 'WMB projects in Fox River'>",
+       what_layer_id="<what_layer_id>",
+       what_where_clause="<discovered_field> = '<value>' if user specified a subtype, else '1=1'",
+       what_color_field="<best_categorical_field_from_schema>"
+     )
+  This returns geo features spatially overlapping only the filtered project geometries.
+- Example: after filtering to WMB + finalcost > 50000 in Fox River Watershed:
+  "Tell me which of those projects have soil type 103A"
+  → geo_discover_layer_schema("soils")
+  → geo_spatial_intersection(
+       where_layer_id="geo_project_geometry",
+       where_filter_field="",
+       where_filter_value="WMB, finalcost > 50000, in Fox River",
+       what_layer_id="soils",
+       what_where_clause="<soilcode_field> = '103A'",
+       what_color_field="<soilcode_field>"
+    )
+
 IMPORTANT:
 - ALL field names come from schema discovery — never from memory, assumptions, or previous conversations
 - Layer configurations have NO field hints — every field must be discovered dynamically

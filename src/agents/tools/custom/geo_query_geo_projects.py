@@ -544,13 +544,31 @@ async def geo_query_geo_projects(
         },
     }
 
-    return Command(
-        update={
-            "map_actions": map_actions,
-            "geo_result_summary": geo_result_summary,
-            "messages": [ToolMessage(content=". ".join(summary_parts), tool_call_id=tid)],
-        },
-    )
+    filter_label_parts = []
+    if project_category and project_category != "projects":
+        filter_label_parts.append(project_category)
+    if where_clause and where_clause.strip() and where_clause.strip() != "1=1":
+        filter_label_parts.append(where_clause.strip())
+    if spatial_boundary_label:
+        filter_label_parts.append(f"in {spatial_boundary_label}")
+    if jurisdiction:
+        filter_label_parts.append(f"in {jurisdiction}")
+    filter_label = ", ".join(filter_label_parts) if filter_label_parts else "all projects"
+
+    geo_project_geometry = {
+        "project_name": filter_label,
+        "geojson": {"type": "FeatureCollection", "features": geom_features_with_projecttype},
+    } if geom_features_with_projecttype else None
+
+    update: dict = {
+        "map_actions": map_actions,
+        "geo_result_summary": geo_result_summary,
+        "messages": [ToolMessage(content=". ".join(summary_parts), tool_call_id=tid)],
+    }
+    if geo_project_geometry:
+        update["geo_project_geometry"] = geo_project_geometry
+
+    return Command(update=update)
 
 
 register_tool(geo_query_geo_projects)

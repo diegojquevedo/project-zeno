@@ -45,16 +45,13 @@ def _geojson_geometry_to_esri(geojson_geom: dict) -> dict | None:
     geom_type = geojson_geom.get("type", "")
     coordinates = geojson_geom.get("coordinates")
 
-    if not coordinates:
-        return None
-
-    if geom_type == "Polygon":
+    if geom_type == "Polygon" and coordinates:
         return {
             "rings": coordinates,
             "spatialReference": {"wkid": 4326},
         }
 
-    if geom_type == "MultiPolygon":
+    if geom_type == "MultiPolygon" and coordinates:
         rings = []
         for polygon in coordinates:
             rings.extend(polygon)
@@ -62,6 +59,15 @@ def _geojson_geometry_to_esri(geojson_geom: dict) -> dict | None:
             "rings": rings,
             "spatialReference": {"wkid": 4326},
         }
+
+    if geom_type == "GeometryCollection":
+        rings = []
+        for geom in geojson_geom.get("geometries", []):
+            sub = _geojson_geometry_to_esri(geom)
+            if sub and "rings" in sub:
+                rings.extend(sub["rings"])
+        if rings:
+            return {"rings": rings, "spatialReference": {"wkid": 4326}}
 
     return None
 
@@ -183,17 +189,27 @@ def _union_geometry_from_fc(geojson_fc: dict) -> dict | None:
     features = geojson_fc.get("features", [])
     if not features:
         return None
-    if len(features) == 1:
-        return features[0].get("geometry")
+
+    polygon_geom_types = {"Polygon", "MultiPolygon"}
+
+    polygon_features = [f for f in features if f.get("geometry", {}).get("type") in polygon_geom_types]
+    candidates = polygon_features if polygon_features else features
+
+    if len(candidates) == 1:
+        return candidates[0].get("geometry")
+
     try:
         from shapely.ops import unary_union
-        shapes = [shape(f["geometry"]) for f in features if f.get("geometry")]
+        shapes = [shape(f["geometry"]) for f in candidates if f.get("geometry")]
         if not shapes:
             return None
         unioned = unary_union(shapes)
-        return json.loads(json.dumps(unioned.__geo_interface__))
+        geom = unioned.__geo_interface__
+        if geom.get("type") not in ("Polygon", "MultiPolygon", "GeometryCollection"):
+            return geom
+        return json.loads(json.dumps(geom))
     except Exception:
-        return features[0].get("geometry")
+        return candidates[0].get("geometry")
 
 
 @tool("geo_spatial_intersection")
