@@ -934,7 +934,7 @@ def render_stream(stream, skip_maps=False):
     if timestamp := stream.get("timestamp"):
         st.badge(timestamp, icon=":material/schedule:", color="blue")
 
-    for msg in update["messages"]:
+    for msg_idx, msg in enumerate(update["messages"]):
         msg_type = msg["kwargs"].get("type")
         if (
             msg_type == "tool"
@@ -966,7 +966,16 @@ def render_stream(stream, skip_maps=False):
                     st.markdown("**Selected dataset**")
                     st.info(content)
             elif content and isinstance(content, str) and "## Fields" in content:
-                with st.container():
+                with st.container(key=f"schema_fields_{msg_idx}"):
+                    st.markdown(
+                        """<style>
+                        [class*="st-key-schema_fields"] details {
+                            border: 1px solid black !important;
+                            border-radius: 6px;
+                        }
+                        </style>""",
+                        unsafe_allow_html=True,
+                    )
                     st.markdown("**Schema discovery**")
                     _parts = content.split("\n## Fields\n", 1)
                     if len(_parts) == 2:
