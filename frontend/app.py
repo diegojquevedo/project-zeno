@@ -102,10 +102,19 @@ if SESSION_KEY_MAP_CHAT_SESSION_ID not in st.session_state:
     st.session_state[SESSION_KEY_MAP_CHAT_SESSION_ID] = str(uuid.uuid4())
 if SESSION_KEY_MAP_CHAT_MESSAGES not in st.session_state:
     st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES] = []
+if SESSION_KEY_DATA_SOURCE not in st.session_state:
+    st.session_state[SESSION_KEY_DATA_SOURCE] = "geo_lake_county"
 if SESSION_KEY_MAP_AOI_DATA not in st.session_state:
-    st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
+    _ds = st.session_state.get(SESSION_KEY_DATA_SOURCE, "geo_lake_county")
+    st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI if _ds in ("geo_lake_county", "lake_county") else None
 if SESSION_KEY_MAP_DATASET_DATA not in st.session_state:
-    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
+    _ds = st.session_state.get(SESSION_KEY_DATA_SOURCE, "geo_lake_county")
+    if _ds == "geo_lake_county":
+        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
+    elif _ds == "lake_county":
+        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
+    else:
+        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
 if SESSION_KEY_MAP_PROJECT_DATA not in st.session_state:
     st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
 if SESSION_KEY_MAP_PROJECT_MATCHES not in st.session_state:
@@ -122,8 +131,6 @@ if SESSION_KEY_MAP_ACTIONS not in st.session_state:
     st.session_state[SESSION_KEY_MAP_ACTIONS] = []
 if SESSION_KEY_GEO_RESULT_SUMMARY not in st.session_state:
     st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
-if SESSION_KEY_DATA_SOURCE not in st.session_state:
-    st.session_state[SESSION_KEY_DATA_SOURCE] = "forest_carbon"
 
 token = st.query_params.get("token")
 if token:
@@ -168,6 +175,7 @@ st.markdown(
     [class*="geo_chat_header"] [data-testid="stCaptionContainer"] { margin: 0 0 0.2rem 0 !important; }
     [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div { margin: 0 !important; padding: 0 !important; }
     [class*="geo_chat_header"] hr { margin: 0.25rem 0 !important; }
+    [class*="st-key-data_source_selector"] { display: none !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -180,43 +188,44 @@ with chat_col:
         st.header("Geo AI")
         st.write("This is a friendly prompt-based system to filter and analyze mapping data.")
 
-        _ds_idx = list(DATA_SOURCES.values()).index(
-            st.session_state[SESSION_KEY_DATA_SOURCE]
-        ) if st.session_state[SESSION_KEY_DATA_SOURCE] in DATA_SOURCES.values() else 0
-        data_source = st.selectbox(
-            "Data source",
-            options=list(DATA_SOURCES.keys()),
-            index=_ds_idx,
-            key="data_source_select",
-        )
-        ds_value = DATA_SOURCES[data_source]
-        if ds_value != st.session_state[SESSION_KEY_DATA_SOURCE]:
-            st.session_state[SESSION_KEY_DATA_SOURCE] = ds_value
-            if ds_value == "lake_county":
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
-                st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
-            elif ds_value == "geo_lake_county":
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
-                st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
-                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
-                st.session_state[SESSION_KEY_MAP_ACTIONS] = []
-            else:
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
-                st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
-                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+        with st.container(key="data_source_selector"):
+            _ds_idx = list(DATA_SOURCES.values()).index(
+                st.session_state[SESSION_KEY_DATA_SOURCE]
+            ) if st.session_state[SESSION_KEY_DATA_SOURCE] in DATA_SOURCES.values() else 0
+            data_source = st.selectbox(
+                "Data source",
+                options=list(DATA_SOURCES.keys()),
+                index=_ds_idx,
+                key="data_source_select",
+            )
+            ds_value = DATA_SOURCES[data_source]
+            if ds_value != st.session_state[SESSION_KEY_DATA_SOURCE]:
+                st.session_state[SESSION_KEY_DATA_SOURCE] = ds_value
+                if ds_value == "lake_county":
+                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
+                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+                elif ds_value == "geo_lake_county":
+                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
+                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+                    st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                    st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                    st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                    st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                    st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                    st.session_state[SESSION_KEY_MAP_ACTIONS] = []
+                else:
+                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
+                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
+                    st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                    st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                    st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                    st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                    st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
 
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
-            st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
+            if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+                st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
 
         st.divider()
 
@@ -360,7 +369,7 @@ with chat_col:
                         elapsed = time.perf_counter() - start_time
                         if SHOW_RESPONSE_TIMER:
                             timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
-                        render_stream(stream, skip_maps=True)
+                        render_stream(stream, skip_maps=True, stream_idx=stream_count)
                     except Exception as e:
                         st.error(f"Error processing stream: {e}")
                 if last_tool_content[0]:

@@ -926,7 +926,7 @@ def render_charts(charts_data):
         st.json(charts_data)  # Fallback to show raw data
 
 
-def render_stream(stream, skip_maps=False):
+def render_stream(stream, skip_maps=False, stream_idx=0):
     update = json.loads(stream["update"])
 
     state_updates = "State Update: " + ", ".join(list(update.keys()))
@@ -966,7 +966,7 @@ def render_stream(stream, skip_maps=False):
                     st.markdown("**Selected dataset**")
                     st.info(content)
             elif content and isinstance(content, str) and "## Fields" in content:
-                with st.container(key=f"schema_fields_{msg_idx}"):
+                with st.container(key=f"schema_fields_{stream_idx}_{msg_idx}"):
                     st.markdown(
                         """<style>
                         [class*="st-key-schema_fields"] details {
