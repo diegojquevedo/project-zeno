@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from collections import Counter
+from datetime import datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -77,7 +78,22 @@ def _render_geo_result_summary(geo_summary: dict) -> None:
         st.divider()
         with st.expander(f"View {total} {label}", expanded=(total <= 100)):
             _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
-            display_rows = [{k: v for k, v in row.items() if k not in _skip} for row in feature_rows]
+            _date_columns = {"StartYear", "EndYear"}
+
+            def _format_cell(key: str, val) -> str | object:
+                if key not in _date_columns or val is None or val == "None":
+                    return val
+                try:
+                    n = int(val)
+                    ts = n / 1000 if abs(n) > 1e10 else n
+                    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m/%d/%Y")
+                except (ValueError, TypeError, OSError):
+                    return val
+
+            display_rows = [
+                {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
+                for row in feature_rows
+            ]
             st.dataframe(display_rows, use_container_width=True)
 
     st.divider()
@@ -413,7 +429,15 @@ with chat_col:
             if (el) el.scrollTop = el.scrollHeight;
         }
         var rafId = null;
-        function scheduleScroll() {
+        function isInsideExpander(node) {
+            if (!node || !node.closest) return false;
+            return !!(node.closest('[data-testid="stExpander"]') || node.closest('[class*="streamlit-expander"]') || node.closest('[class*="stExpander"]'));
+        }
+        function scheduleScroll(mutations) {
+            for (var i = 0; i < (mutations && mutations.length) || 0; i++) {
+                var m = mutations[i];
+                if (isInsideExpander(m.target)) return;
+            }
             if (rafId) return;
             rafId = window.parent.requestAnimationFrame(function() {
                 rafId = null;

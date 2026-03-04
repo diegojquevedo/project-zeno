@@ -369,9 +369,6 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
                             opacity=FILL_OPACITY,
                         ).add_to(m2)
 
-    if not list_mode and not rep_point_geojson and not geometry_geojson:
-        st.info("Search for a project by name or filter by status, jurisdiction, or project type.")
-
     if show_title:
         st.subheader("Geo AI")
     folium_static(m2, width=width, height=height)
@@ -968,10 +965,16 @@ def render_stream(stream, skip_maps=False):
                 with st.container():
                     st.markdown("**Selected dataset**")
                     st.info(content)
-            elif tool_name == "geo_discover_layer_schema" and content:
+            elif content and isinstance(content, str) and "## Fields" in content:
                 with st.container():
                     st.markdown("**Schema discovery**")
-                    st.markdown(content)
+                    _parts = content.split("\n## Fields\n", 1)
+                    if len(_parts) == 2:
+                        st.markdown(_parts[0])
+                        with st.expander("Fields", expanded=False):
+                            st.markdown(_parts[1])
+                    else:
+                        st.markdown(content)
             elif tool_name == "geo_query_layer" and content:
                 with st.container():
                     st.markdown("**Layer query result**")
