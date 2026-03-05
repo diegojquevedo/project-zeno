@@ -8,6 +8,9 @@ from src.agents.tools.custom.geo_get_project_geometry import (
 from src.agents.tools.custom.geo_query_geo_projects import (
     geo_query_geo_projects,  # noqa: F401 — triggers register_tool
 )
+from src.agents.tools.custom.geo_resolve_attribute_filter import (
+    geo_resolve_attribute_filter,  # noqa: F401 — triggers register_tool
+)
 from src.api.custom.geo_lake_county_projects_config import (
     get_geo_projects_prompt_block,
 )

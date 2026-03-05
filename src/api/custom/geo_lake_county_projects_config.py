@@ -71,9 +71,12 @@ ALWAYS call geo_discover_project_schema FIRST to know available fields before bu
 
 WORKFLOW for attribute-based project queries (type, status, cost, date, etc.):
 1. Call geo_discover_project_schema() to inspect available fields, types, and domain values.
-2. Analyze the schema: identify the correct field name and value format.
-3. Build a where_clause using the actual field names from the schema.
-4. Call geo_query_geo_projects(where_clause="<built_clause>", project_category="<category>")
+2. From the schema, deduce candidate_field_names: fields that could contain the user's values (e.g. for
+   "approved" or "status" → status, ProjectStatus, last_status, etc.). Pass only field names that exist in the schema.
+3. Call geo_resolve_attribute_filter(values=["Approved"], candidate_field_names=["status","ProjectStatus",...]).
+   For multiple values (e.g. "approved and recommended"): values=["Approved","Recommended"].
+4. The resolver returns the exact where_clause. Use it in geo_query_geo_projects(where_clause="<resolved_clause>", ...).
+5. If the resolver says "values not found", ask the user to clarify — do NOT guess or try other fields.
 
 WORKFLOW for "projects in [district/watershed/boundary]" (spatial filter):
 1. Call geo_discover_layer_schema(layer_id="<boundary_layer_id>") to find the correct filter field.
@@ -84,13 +87,13 @@ WORKFLOW for "projects in [district/watershed/boundary]" (spatial filter):
    )
 Both workflows can be combined: pass both where_clause AND boundary_layer_id when needed.
 
-EXAMPLES (illustrative only — always verify field names from schema):
-- "show me all projects" → geo_discover_project_schema(), then geo_query_geo_projects()
-- "Capital projects" → discover schema → find type field and its values → where_clause="<type_field>='Capital'"
-- "projects in Village of Antioch" → jurisdiction="Village of Antioch" (filters and shows boundary; no need for where_clause)
-- "projects with final cost > 50000" → discover schema → find cost field → where_clause="<cost_field> > 50000"
-- "projects started after 2010" → discover schema → find year/date field → where_clause="<year_field> >= 2010"
-- "projects with status Recommended" → discover schema → find status field → where_clause="UPPER(<status_field>) LIKE UPPER('%Recommended%')"
+EXAMPLES (illustrative — use geo_resolve_attribute_filter for attribute values):
+- "show me all projects" → geo_discover_project_schema(), geo_query_geo_projects()
+- "approved projects" → discover schema → geo_resolve_attribute_filter(values=["Approved"], candidate_field_names=["status","ProjectStatus",...]) → geo_query_geo_projects(where_clause=<resolved>)
+- "approved and recommended projects" → geo_resolve_attribute_filter(values=["Approved","Recommended"], candidate_field_names=["status",...])
+- "Capital projects" → geo_resolve_attribute_filter(values=["Capital"], candidate_field_names=["projecttype",...])
+- "projects in Village of Antioch" → jurisdiction="Village of Antioch" (no attribute filter)
+- "projects with final cost > 50000" → discover schema → build where_clause="<cost_field> > 50000" (numeric, no resolver)
 - "projects in County Board District 5" → discover boundary layer schema → geo_query_geo_projects(boundary_layer_id="...", boundary_filter_field="<field>", boundary_filter_value="5")
 - "show me studies" → project_category="studies"
 - "flood audit projects" → project_category="flood_audits"
@@ -124,7 +127,9 @@ When the user wants geo features (soils, streams, flood zones, etc.) within a na
 Do NOT use geo_query_geo_projects for these flows.
 
 IMPORTANT:
-- ALWAYS call geo_discover_project_schema before building any where_clause — never assume field names or values.
+- For attribute value filters (status, type, etc.): ALWAYS use geo_resolve_attribute_filter — never guess the field.
+- geo_resolve_attribute_filter fetches unique values from candidate fields in one query and returns the exact where_clause.
+- If resolver says "values not found", ask the user to clarify — do NOT try other fields.
 - Do NOT use geo_spatial_intersection or geo_query_layer for project queries — use geo_query_geo_projects.
 - Do NOT call geo_build_result_summary after geo_query_geo_projects — it builds its own complete summary.
 - project_id is the join key between the representative points and geometry layers (NOT OBJECTID).
