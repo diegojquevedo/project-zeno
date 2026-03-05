@@ -183,6 +183,8 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    main .block-container, .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; overflow: visible !important; }
+    h1, h2, h3, [data-testid="stHeader"], [data-testid="stSubheader"] { overflow: visible !important; }
     [data-testid="stSidebar"] { display: none !important; }
     [data-testid="collapsedControl"] { display: none !important; }
     button[aria-label="Expand sidebar"],
@@ -191,13 +193,16 @@ st.markdown(
 
     [data-testid="column"]:first-of-type { height: 85vh !important; max-height: 85vh !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
     [data-testid="column"]:first-of-type > div { flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
-    [data-testid="column"]:first-of-type > div > *:nth-child(1) { flex-shrink: 0 !important; }
+    [data-testid="column"]:first-of-type > div > *:nth-child(1) { flex-shrink: 0 !important; overflow: visible !important; }
     [data-testid="column"]:first-of-type > div > *:nth-child(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }
     [data-testid="column"]:first-of-type > div > [data-testid="stVerticalBlock"]:nth-of-type(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; max-height: 100% !important; }
     div.stHorizontalBlock > div:first-child { height: 85vh !important; max-height: 85vh !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
     div.stHorizontalBlock > div:first-child > div { flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
     div.stHorizontalBlock > div:first-child > div > div:nth-child(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }
+    [data-testid="column"]:last-of-type > div > *:first-child { overflow: visible !important; padding-top: 0.75rem !important; margin-top: 0.5rem !important; }
     [data-testid="column"]:first-of-type > div > *:nth-child(3) { flex-shrink: 0 !important; }
+    [data-testid="column"]:first-of-type { padding-bottom: 5.5rem !important; box-sizing: border-box !important; }
+    [class*="geo_chat_header"] { overflow: visible !important; }
     [class*="geo_chat_header"] [data-testid="stHeader"],
     [class*="geo_chat_header"] h1 { margin-top: 0 !important; margin-bottom: 0.2rem !important; padding: 0 !important; }
     [class*="geo_chat_header"] [data-testid="stMarkdown"] { margin: 0 0 0.2rem 0 !important; }
@@ -205,6 +210,7 @@ st.markdown(
     [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div { margin: 0 !important; padding: 0 !important; }
     [class*="geo_chat_header"] hr { margin: 0.25rem 0 !important; }
     [class*="st-key-data_source_selector"] { display: none !important; }
+    [data-testid="stChatInput"], [data-testid="stChatInputContainer"], .stChatFloatingInputContainer { margin-bottom: 5.5rem !important; }
     </style>
     """,
     unsafe_allow_html=True,
