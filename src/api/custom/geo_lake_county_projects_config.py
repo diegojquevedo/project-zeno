@@ -95,6 +95,11 @@ EXAMPLES (illustrative only — always verify field names from schema):
 - "show me studies" → project_category="studies"
 - "flood audit projects" → project_category="flood_audits"
 
+PROJECTS BY PERSON (submitted_by filter):
+When the user asks for projects by a person's name (e.g. "Show me Adam's projects", "projects from Adam",
+"Adam's projects"), pass submitted_by_user_name="Adam". The tool looks up the user in the inflow database
+and filters by submitted_by. Only use when a person name is clearly mentioned — the first matching user is used.
+
 MAP RENDERING:
 - The tool emits geometry layers (colored by the project type field) and representative point markers.
 - When boundary_layer_id is provided, the boundary polygon is shown automatically.

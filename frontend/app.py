@@ -65,10 +65,52 @@ def _render_geo_result_summary(geo_summary: dict) -> None:
         filter_parts.append(f"category: {filters['category']}")
     if filters.get("jurisdiction"):
         filter_parts.append(f"in {filters['jurisdiction']}")
+    if filters.get("boundary"):
+        filter_parts.append(f"in {filters['boundary']}")
     if filters.get("status"):
         filter_parts.append(f"status: {filters['status']}")
     if filter_parts:
         st.caption(" · ".join(filter_parts))
+
+    _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
+    _date_columns = {"StartYear", "EndYear"}
+
+    def _format_cell(key: str, val) -> str | object:
+        if key not in _date_columns or val is None or val == "None":
+            return val
+        try:
+            n = int(val)
+            ts = n / 1000 if abs(n) > 1e10 else n
+            return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m/%d/%Y")
+        except (ValueError, TypeError, OSError):
+            return val
+
+    if total == 1 and feature_rows:
+        st.divider()
+        row = feature_rows[0]
+        display_row = {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
+        priority_keys = ("Name", "projecttype", "jurisdiction", "watershed", "subwatershed", "project_id")
+        for key in priority_keys:
+            if key in display_row and display_row[key] is not None:
+                label_key = key.replace("_", " ").title()
+                st.markdown(f"**{label_key}:** {display_row[key]}")
+        remaining = {k: v for k, v in display_row.items() if k not in priority_keys and v is not None}
+        if remaining:
+            for k, v in remaining.items():
+                st.caption(f"{k}: {v}")
+    elif total > 1 and feature_rows:
+        st.divider()
+        summary_parts = []
+        for row in feature_rows[:20]:
+            name = row.get("Name") or row.get("project_id") or "Unnamed"
+            ptype = row.get("projecttype")
+            if ptype:
+                summary_parts.append(f"• **{name}** ({ptype})")
+            else:
+                summary_parts.append(f"• **{name}**")
+        if total > 20:
+            summary_parts.append(f"_... and {total - 20} more_")
+        st.markdown("\n".join(summary_parts))
 
     if charts_data:
         st.divider()
@@ -76,20 +118,7 @@ def _render_geo_result_summary(geo_summary: dict) -> None:
 
     if feature_rows and total > 0:
         st.divider()
-        with st.expander(f"View {total} {label}", expanded=(total <= 100)):
-            _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
-            _date_columns = {"StartYear", "EndYear"}
-
-            def _format_cell(key: str, val) -> str | object:
-                if key not in _date_columns or val is None or val == "None":
-                    return val
-                try:
-                    n = int(val)
-                    ts = n / 1000 if abs(n) > 1e10 else n
-                    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m/%d/%Y")
-                except (ValueError, TypeError, OSError):
-                    return val
-
+        with st.expander(f"View full data ({total} {label})", expanded=(total == 1 or total <= 20)):
             display_rows = [
                 {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
                 for row in feature_rows

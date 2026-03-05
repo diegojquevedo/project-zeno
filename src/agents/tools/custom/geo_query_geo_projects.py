@@ -30,12 +30,66 @@ from src.api.lake_county_constants import (
     HTTP_TIMEOUT_QUERY,
 )
 from src.infrastructure.external.arcgis_client import ArcGISClient
+from src.services.inflow_user_service import lookup_user_id_by_name
 from src.shared.lake_county_constants import LC_MUNICIPALITIES_URL
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 _MAX_RESULTS = 1000
+_PROJECT_DISPLAY_FIELDS = ("Name", "projecttype", "jurisdiction", "watershed", "subwatershed", "project_id")
+
+
+def _format_project_row_detail(row: dict) -> str:
+    parts: list[str] = []
+    for key in _PROJECT_DISPLAY_FIELDS:
+        val = row.get(key)
+        if val is not None and str(val).strip():
+            label = key.replace("_", " ").title()
+            parts.append(f"{label}: {val}")
+    if not parts:
+        for k, v in row.items():
+            if v is not None and str(v).strip():
+                parts.append(f"{k}: {v}")
+                if len(parts) >= 6:
+                    break
+    return "; ".join(parts) if parts else "—"
+
+
+def _build_project_tool_message_content(
+    total: int,
+    with_geom: int,
+    feature_rows: list[dict],
+    project_category: str | None,
+    where_clause: str | None,
+    spatial_boundary_label: str | None,
+    charts_data: list,
+) -> str:
+    base = f"Found {total} project(s)"
+    if project_category and project_category != "projects":
+        base += f", category: {project_category}"
+    if where_clause and where_clause.strip() and where_clause.strip() != "1=1":
+        base += f", filter: {where_clause.strip()}"
+    if spatial_boundary_label:
+        base += f", within {spatial_boundary_label}"
+    base += f". {with_geom} with actual geometry, {total - with_geom} reference points only."
+    if total == 0:
+        return base
+    if total == 1 and feature_rows:
+        detail = _format_project_row_detail(feature_rows[0])
+        return f"{base}\n\n**Project details:** {detail}"
+    names_and_types: list[str] = []
+    for row in feature_rows[:15]:
+        name = row.get("Name") or row.get("project_id") or "Unnamed"
+        ptype = row.get("projecttype")
+        if ptype:
+            names_and_types.append(f"{name} ({ptype})")
+        else:
+            names_and_types.append(name)
+    summary = "; ".join(names_and_types)
+    if total > 15:
+        summary += f" ... and {total - 15} more"
+    return f"{base}\n\n**Summary:** {summary}"
 
 
 def _arcgis_client() -> ArcGISClient:
@@ -174,11 +228,15 @@ def _combine_where(
     project_category: str | None,
     where_clause: str | None,
     jurisdiction: str | None = None,
+    submitted_by_user_id: int | None = None,
 ) -> str:
     parts: list[str] = []
     category_clause = _build_category_clause(project_category)
     if category_clause:
         parts.append(category_clause)
+    if submitted_by_user_id is not None:
+        safe_id = str(submitted_by_user_id).replace("'", "''")
+        parts.append(f"(submitted_by = '{safe_id}')")
     if jurisdiction and jurisdiction.strip():
         safe = jurisdiction.strip().replace("'", "''")
         parts.append(f"(UPPER(jurisdiction) LIKE UPPER('%{safe}%'))")
@@ -246,6 +304,7 @@ async def geo_query_geo_projects(
     where_clause: str = "1=1",
     project_category: str = "projects",
     jurisdiction: str | None = None,
+    submitted_by_user_name: str | None = None,
     boundary_layer_id: str | None = None,
     boundary_filter_field: str | None = None,
     boundary_filter_value: str | None = None,
@@ -283,11 +342,36 @@ async def geo_query_geo_projects(
             Discover the correct filter field from that layer's schema first.
         boundary_filter_field: Field name in the boundary layer (discovered from schema).
         boundary_filter_value: Value to match in boundary_filter_field.
+        submitted_by_user_name: When the user asks for projects by a person (e.g. "Adam's projects",
+            "projects from Adam, projects by Adam"), pass the person's name here. The tool will look up the user ID in the
+            inflow database and filter projects by submitted_by. Only use when a person name is mentioned.
     """
     tid = tool_call_id or ""
     client = _arcgis_client()
 
-    combined_where = _combine_where(project_category, where_clause, jurisdiction)
+    submitted_by_user_id: int | None = None
+    if submitted_by_user_name and submitted_by_user_name.strip():
+        submitted_by_user_id = await asyncio.to_thread(
+            lookup_user_id_by_name, submitted_by_user_name.strip()
+        )
+        if submitted_by_user_id is None:
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content=(
+                                f"Could not find a user matching '{submitted_by_user_name.strip()}' "
+                                "in the user database. Please check the name or try a different query."
+                            ),
+                            tool_call_id=tid,
+                        )
+                    ],
+                },
+            )
+
+    combined_where = _combine_where(
+        project_category, where_clause, jurisdiction, submitted_by_user_id
+    )
 
     spatial_boundary_data = None
     spatial_boundary_label = None
@@ -507,18 +591,6 @@ async def geo_query_geo_projects(
         })
 
     total = len(rep_features)
-    with_geom = len(geom_features_with_projecttype)
-
-    summary_parts = [f"Found {total} project(s)"]
-    if project_category and project_category != "projects":
-        summary_parts.append(f"category: {project_category}")
-    if where_clause and where_clause.strip() and where_clause.strip() != "1=1":
-        summary_parts.append(f"filter: {where_clause.strip()}")
-    if spatial_boundary_label:
-        summary_parts.append(f"within {spatial_boundary_label}")
-    summary_parts.append(
-        f"{with_geom} with actual geometry, {total - with_geom} reference points only"
-    )
 
     _skip = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
     feature_rows: list[dict] = []
@@ -540,6 +612,7 @@ async def geo_query_geo_projects(
                 "category": project_category,
                 "where": where_clause if where_clause and where_clause.strip() != "1=1" else None,
                 "boundary": spatial_boundary_label,
+                "jurisdiction": jurisdiction if jurisdiction and jurisdiction.strip() else None,
             }.items() if v
         },
     }
@@ -560,10 +633,20 @@ async def geo_query_geo_projects(
         "geojson": {"type": "FeatureCollection", "features": geom_features_with_projecttype},
     } if geom_features_with_projecttype else None
 
+    tool_content = _build_project_tool_message_content(
+        total=total,
+        with_geom=len(geom_features_with_projecttype),
+        feature_rows=feature_rows,
+        project_category=project_category,
+        where_clause=where_clause,
+        spatial_boundary_label=spatial_boundary_label,
+        charts_data=charts_data,
+    )
+
     update: dict = {
         "map_actions": map_actions,
         "geo_result_summary": geo_result_summary,
-        "messages": [ToolMessage(content=". ".join(summary_parts), tool_call_id=tid)],
+        "messages": [ToolMessage(content=tool_content, tool_call_id=tid)],
     }
     if geo_project_geometry:
         update["geo_project_geometry"] = geo_project_geometry

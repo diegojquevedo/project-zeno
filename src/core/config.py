@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Inflow DB (SQL Server — user lookup for project submitted_by filter)
+    # -------------------------------------------------------------------------
+    inflow_db_host: Optional[str] = Field(default=None, alias="DB_HOST")
+    inflow_db_port: int = Field(default=1433, alias="DB_PORT")
+    inflow_db_name: Optional[str] = Field(default=None, alias="DB_DATABASE")
+    inflow_db_username: Optional[str] = Field(default=None, alias="DB_USERNAME")
+    inflow_db_password: Optional[str] = Field(default=None, alias="DB_PASSWORD")
+    inflow_user_table: str = Field(
+        default="users", alias="INFLOW_USER_TABLE"
+    )
+
+    # -------------------------------------------------------------------------
     # Dataset embeddings (shared)
     # -------------------------------------------------------------------------
     dataset_embeddings_db: str = Field(
@@ -126,6 +138,27 @@ class Settings(BaseSettings):
             domain.strip()
             for domain in self.domains_allowlist_str.split(",")
         ]
+
+    @field_validator(
+        "inflow_db_host",
+        "inflow_db_name",
+        "inflow_db_username",
+        "inflow_db_password",
+    )
+    @classmethod
+    def strip_inflow_db_value(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not isinstance(value, str):
+            return value
+        s = value.strip().strip("'\"").rstrip(",").strip()
+        return s if s else None
+
+    @field_validator("inflow_db_port", mode="before")
+    @classmethod
+    def parse_inflow_db_port(cls, value: str | int) -> int:
+        if isinstance(value, int):
+            return value
+        s = str(value).strip().rstrip(",").strip()
+        return int(s) if s else 1433
 
     @field_validator("nextjs_api_key")
     @classmethod

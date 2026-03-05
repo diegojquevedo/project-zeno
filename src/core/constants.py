@@ -29,6 +29,8 @@ GRAPH_RECURSION_LIMIT = 25
 CACHE_MAX_SIZE = 1024
 CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
+INFLOW_USER_ID_COLUMN = "id"
+
 
 class AnalysisStatus(StrEnum):
     """Status of an analysis or agent run."""
