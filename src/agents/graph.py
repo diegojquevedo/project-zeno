@@ -101,7 +101,7 @@ TOOLS:
 - geo_query_layer: When data_source is geo_lake_county, use this to query features from a layer with WHERE clause and optional spatial filter. Returns GeoJSON FeatureCollection. Use for simple queries like "how many features" or "features matching criteria". Requires layer_id and optional where clause.
 - geo_get_boundary: When data_source is geo_lake_county, use this to get the boundary geometry of a specific feature from a layer. Returns the boundary as GeoJSON. Use when you need the WHERE boundary for spatial operations. Requires layer_id, filter_field (from schema), and filter_value.
 - geo_spatial_intersection: When data_source is geo_lake_county, use this for bidirectional spatial queries. Fetches boundary from WHERE layer and queries intersecting features from WHAT layer. Use for questions about features within locations or locations containing features. Requires where_layer_id, where_filter_field, where_filter_value, what_layer_id, and optional what_where_clause.
-- geo_build_result_summary: When data_source is geo_lake_county, call this AFTER geo_query_layer or geo_spatial_intersection returns multiple features to build a structured summary with 1-3 auto-selected charts. Do NOT call after geo_query_geo_projects — that tool builds its own complete summary with charts. Args: source ("geo_query_result" after geo_query_layer, or "geo_spatial_intersection_result" after geo_spatial_intersection), result_label (e.g. soil types, streams, municipalities), chart_fields (2-4 categorical field names from schema discovery). The tool reads features directly from state — do NOT pass GeoJSON as argument.
+- geo_build_result_summary: When data_source is geo_lake_county, call this AFTER geo_query_layer or geo_spatial_intersection returns multiple features to build a structured summary with 1-3 auto-selected charts. Do NOT call after geo_query_geo_projects — that tool builds its own complete summary with charts. Args: source ("geo_query_result" after geo_query_layer, or "geo_spatial_intersection_result" after geo_spatial_intersection), result_label (e.g. soil types, streams, municipalities), chart_fields (2-4 categorical field names from schema discovery). The tool reads features directly from state — do NOT pass GeoJSON as argument. When the result count is small enough, the tool may add narrative_enrichment (descriptive text synthesized from auto-selected long-text fields using schema + data; no fixed field names).
 - geo_discover_project_schema: When data_source is geo_lake_county and you need to query or filter projects, call this FIRST to inspect the project layer's fields, types, and domain values.
 - geo_resolve_attribute_filter: Call AFTER geo_discover_project_schema when the user wants to filter by attribute values (e.g. "approved", "recommended", "Capital"). Pass values (list of strings the user is looking for) and candidate_field_names (field names deduced from schema). Returns the exact where_clause to use in geo_query_geo_projects, or asks user to clarify if values not found.
 
@@ -137,6 +137,13 @@ Available layers:
 {geo_layers_desc}
 
 Layer IDs: {geo_layer_ids}
+
+FINAL USER MESSAGE FORMAT (after tools returned data for this turn):
+Before ---SUGGESTIONS---, answer in clear prose. Be as detailed as needed to explain what was asked, what the tools returned, and how to read the map or structured panels. Do not repeat the same point, do not restate lists or tables that the UI already shows, and do not add filler. Stay grounded strictly in tool outputs for this turn.
+Open with outcomes and substance, not a play-by-play of your own steps (avoid lines like "I will retrieve the schema" or "I will query the layer"). If **Rich context** is present, weave it in near the start of the answer after the headline count or finding.
+If the tool message or structured summary includes **Rich context** or thematic description from descriptive attribute fields (often backed by full-result statistics plus spaced excerpts for large sets), incorporate that substance in your prose — do not ignore it. You may condense it; do not contradict it.
+Then output a single line containing exactly: ---SUGGESTIONS---
+On the following lines, add 2-4 suggestions; each line must start with "- " (markdown bullet), one suggestion per line. No text after the bullets except optional blank lines.
 
 CRITICAL - FIELD DISCOVERY (NO HARDCODING):
 All field names — for filtering, labeling, or color-coding — MUST be discovered from the schema at runtime.

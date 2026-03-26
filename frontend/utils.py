@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 import altair as alt
@@ -14,13 +15,67 @@ from constants import (
     API_BASE_URL,
     CACHE_TTL_LAKE_COUNTY_BOUNDARY,
     CHART_HEIGHT,
+    CHART_NOMINAL_COLOR_SCHEME,
+    CHART_PIE_COLOR_SCHEME,
     CHART_WIDTH,
+    GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS,
+    GEO_CHAT_SCHEMA_CONTAINER_KEY,
     LAKE_COUNTY_ZOOM,
     LC_BOUNDARY_STYLE,
+    SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN,
 )
 from src.shared.lake_county_constants import (
     LAKE_COUNTY_CENTER,
 )
+
+
+def _alt_color_by_category(field: str) -> alt.Color:
+    return alt.Color(
+        f"{field}:N",
+        title=field.replace("_", " ").title(),
+        scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
+        legend=None,
+    )
+
+
+def _stream_message_is_ai(msg: dict) -> bool:
+    if msg.get("kwargs", {}).get("type") == "ai":
+        return True
+    mid = msg.get("id")
+    if isinstance(mid, (list, tuple)) and mid:
+        tail = str(mid[-1])
+        if tail == "AIMessage" or tail.endswith("AIMessage"):
+            return True
+    return False
+
+
+def _stream_message_is_human(msg: dict) -> bool:
+    if msg.get("kwargs", {}).get("type") == "human":
+        return True
+    mid = msg.get("id")
+    if isinstance(mid, (list, tuple)) and mid:
+        tail = str(mid[-1])
+        if tail == "HumanMessage" or tail.endswith("HumanMessage"):
+            return True
+    return False
+
+
+def _extract_ai_text_chunks(content) -> list[str]:
+    if content is None:
+        return []
+    if isinstance(content, str):
+        return [content] if str(content).strip() else []
+    if isinstance(content, list):
+        out: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                tx = item.get("text")
+                if tx and str(tx).strip():
+                    out.append(str(tx))
+            elif isinstance(item, str) and item.strip():
+                out.append(item)
+        return out
+    return []
 
 
 # TODO: move rendering logic to a separate module so
@@ -180,7 +235,7 @@ def _fetch_lake_county_boundary_cached(base_url: str, token: str | None) -> dict
         return None
 
 
-def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
+def _render_lake_county_map(dataset_data, aoi_data, width, height, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
     """
     Render Lake County map.
     - If project_data (single): show rep point (PIN) + geometry, zoom to project.
@@ -369,8 +424,6 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
                             opacity=FILL_OPACITY,
                         ).add_to(m2)
 
-    if show_title:
-        st.subheader("Geo AI")
     folium_static(m2, width=width, height=height)
     with st.expander("Dataset Information"):
         layer_name = (
@@ -390,7 +443,7 @@ def _render_lake_county_map(dataset_data, aoi_data, show_title, width, height, p
             st.markdown(legend_items, unsafe_allow_html=True)
 
 
-def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
+def render_dataset_map(dataset_data, aoi_data=None, width=700, height=400, project_data=None, project_list=None, jurisdiction_boundary=None, county_board_district_boundary=None):
     """
     Render dataset layer as a map using streamlit-folium.
 
@@ -406,7 +459,6 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
             _render_lake_county_map(
                 dataset_data,
                 aoi_data,
-                show_title,
                 width,
                 height,
                 project_data,
@@ -506,9 +558,6 @@ def render_dataset_map(dataset_data, aoi_data=None, show_title=True, width=700, 
         # Add layer control
         folium.LayerControl().add_to(m2)
 
-        # Display map in streamlit (title: Geo AI; layer name only in map layer control)
-        if show_title:
-            st.subheader("Geo AI")
         folium_static(m2, width=width, height=height)
 
         # Show dataset info
@@ -569,6 +618,8 @@ def render_charts(charts_data):
         if not charts_data or not isinstance(charts_data, list):
             return
 
+        figures: list[tuple[str, object, str, str | None]] = []
+
         for chart in charts_data:
             if not isinstance(chart, dict):
                 continue
@@ -595,14 +646,8 @@ def render_charts(charts_data):
                 )
                 continue
 
-            # Convert to DataFrame
             df = pd.DataFrame(chart_data)
-
-            st.subheader(chart_title)
-
-            # Display insight if available
-            if "insight" in chart:
-                st.info(chart["insight"])
+            insight_text = chart.get("insight")
 
             # Create chart based on type
             if chart_type == "bar":
@@ -631,6 +676,7 @@ def render_charts(charts_data):
                             color=alt.Color(
                                 "series:N",
                                 title="Series",
+                                scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                             ),
                             xOffset=alt.XOffset("series:N"),
                             tooltip=[f"{xAxis}:N", "series:N", "value:Q"],
@@ -638,7 +684,6 @@ def render_charts(charts_data):
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
-                    # Single-series bar chart
                     chart_obj = (
                         alt.Chart(df)
                         .mark_bar()
@@ -652,9 +697,9 @@ def render_charts(charts_data):
                                 title=yAxis.replace("_", " ").title(),
                             ),
                             color=(
-                                alt.Color(f"{colorField}:N")
+                                alt.Color(f"{colorField}:N", scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME))
                                 if colorField
-                                else alt.value("steelblue")
+                                else _alt_color_by_category(xAxis)
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
@@ -686,13 +731,13 @@ def render_charts(charts_data):
                             color=alt.Color(
                                 "series:N",
                                 title="Series",
+                                scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                             ),
                             tooltip=[f"{xAxis}:O", "series:N", "value:Q"],
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
-                    # Single-series line chart
                     chart_obj = (
                         alt.Chart(df)
                         .mark_line(point=True)
@@ -706,9 +751,9 @@ def render_charts(charts_data):
                                 title=yAxis.replace("_", " ").title(),
                             ),
                             color=(
-                                alt.Color(f"{colorField}:N")
+                                alt.Color(f"{colorField}:N", scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME))
                                 if colorField
-                                else alt.value("steelblue")
+                                else _alt_color_by_category(xAxis)
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
@@ -723,6 +768,7 @@ def render_charts(charts_data):
                         color=alt.Color(
                             f"{xAxis}:N",
                             title=xAxis.replace("_", " ").title(),
+                            scale=alt.Scale(scheme=CHART_PIE_COLOR_SCHEME),
                         ),
                         tooltip=[f"{xAxis}:N", f"{yAxis}:Q"],
                     )
@@ -755,13 +801,13 @@ def render_charts(charts_data):
                             color=alt.Color(
                                 "series:N",
                                 title="Series",
+                                scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                             ),
                             tooltip=[f"{xAxis}:O", "series:N", "value:Q"],
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
-                    # Single-series area chart
                     chart_obj = (
                         alt.Chart(df)
                         .mark_area()
@@ -775,9 +821,9 @@ def render_charts(charts_data):
                                 title=yAxis.replace("_", " ").title(),
                             ),
                             color=(
-                                alt.Color(f"{colorField}:N")
+                                alt.Color(f"{colorField}:N", scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME))
                                 if colorField
-                                else alt.value("steelblue")
+                                else _alt_color_by_category(xAxis)
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
@@ -797,9 +843,9 @@ def render_charts(charts_data):
                             title=yAxis.replace("_", " ").title(),
                         ),
                         color=(
-                            alt.Color(f"{colorField}:N")
+                            alt.Color(f"{colorField}:N", scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME))
                             if colorField
-                            else alt.value("steelblue")
+                            else _alt_color_by_category(xAxis)
                         ),
                     )
                     .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
@@ -831,12 +877,12 @@ def render_charts(charts_data):
                             color=alt.Color(
                                 "category:N",
                                 title="Category",
+                                scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
-                    # Use stackField if provided, otherwise use colorField for stacking
                     stack_field = stackField or colorField
                     chart_obj = (
                         alt.Chart(df)
@@ -856,9 +902,10 @@ def render_charts(charts_data):
                                     title=stack_field.replace(
                                         "_", " "
                                     ).title(),
+                                    scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                                 )
                                 if stack_field
-                                else alt.value("steelblue")
+                                else _alt_color_by_category(xAxis)
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
@@ -882,13 +929,13 @@ def render_charts(charts_data):
                             color=alt.Color(
                                 f"{groupField}:N",
                                 title=groupField.replace("_", " ").title(),
+                                scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME),
                             ),
                             xOffset=alt.XOffset(f"{groupField}:N"),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
                 else:
-                    # Fallback to regular bar chart if no groupField
                     chart_obj = (
                         alt.Chart(df)
                         .mark_bar()
@@ -902,44 +949,83 @@ def render_charts(charts_data):
                                 title=yAxis.replace("_", " ").title(),
                             ),
                             color=(
-                                alt.Color(f"{colorField}:N")
+                                alt.Color(f"{colorField}:N", scale=alt.Scale(scheme=CHART_NOMINAL_COLOR_SCHEME))
                                 if colorField
-                                else alt.value("steelblue")
+                                else _alt_color_by_category(xAxis)
                             ),
                         )
                         .properties(width=CHART_WIDTH, height=CHART_HEIGHT, title=chart_title)
                     )
 
             elif chart_type == "table":
-                # For table type, display as a proper table instead of a chart
-                st.dataframe(df, use_container_width=True)
-                continue  # Skip the altair_chart rendering for tables
+                figures.append(("table", df, chart_title, insight_text))
+                continue
 
             else:
                 st.warning(f"Unsupported chart type: {chart_type}")
                 continue
 
-            st.altair_chart(chart_obj, use_container_width=True)
+            figures.append(("altair", chart_obj, chart_title, insight_text))
+
+        if figures:
+            st.markdown("### Charts")
+            for fig_kind, fig_payload, fig_title, fig_insight in figures:
+                st.subheader(fig_title)
+                if fig_kind == "table":
+                    st.dataframe(fig_payload, use_container_width=True)
+                else:
+                    st.altair_chart(fig_payload, use_container_width=True)
+                if fig_insight:
+                    st.info(fig_insight)
 
     except Exception as e:
         st.error(f"Error rendering charts: {str(e)}")
         st.json(charts_data)  # Fallback to show raw data
 
 
-def render_stream(stream, skip_maps=False, stream_idx=0):
+def _render_geo_schema_intro(intro: str) -> None:
+    text = (intro or "").strip()
+    if not text:
+        return
+    lines = [ln.rstrip() for ln in text.split("\n")]
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines):
+        return
+    first = re.sub(r"^#+\s*", "", lines[i].strip())
+    i += 1
+    sm = re.match(r"(?i)schema:\s*(.+)$", first)
+    if sm:
+        st.markdown(f"**Schema:** {sm.group(1).strip()}")
+    else:
+        st.markdown(first)
+    rest = "\n".join(lines[i:]).strip()
+    if rest:
+        st.markdown(rest)
+
+
+def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_buffer=None):
     update = json.loads(stream["update"])
 
-    state_updates = "State Update: " + ", ".join(list(update.keys()))
-    st.badge(state_updates, icon=":material/check:", color="green")
-    if timestamp := stream.get("timestamp"):
-        st.badge(timestamp, icon=":material/schedule:", color="blue")
+    messages = update.get("messages") or []
 
-    for msg_idx, msg in enumerate(update["messages"]):
+    for msg in messages:
         msg_type = msg["kwargs"].get("type")
         if (
             msg_type == "tool"
             and msg["kwargs"].get("name") == "get_capabilities"
         ):
+            continue
+
+        if _stream_message_is_human(msg):
+            continue
+
+        if ai_text_buffer is not None and _stream_message_is_ai(msg):
+            content_ai = msg["kwargs"].get("content")
+            for chunk in _extract_ai_text_chunks(content_ai):
+                if chunk.strip():
+                    ai_text_buffer.append(chunk.strip())
             continue
 
         content = msg["kwargs"]["content"]
@@ -966,20 +1052,14 @@ def render_stream(stream, skip_maps=False, stream_idx=0):
                     st.markdown("**Selected dataset**")
                     st.info(content)
             elif content and isinstance(content, str) and "## Fields" in content:
-                with st.container(key=f"schema_fields_{stream_idx}_{msg_idx}"):
-                    st.markdown(
-                        """<style>
-                        [class*="st-key-schema_fields"] details {
-                            border: 1px solid black !important;
-                            border-radius: 6px;
-                        }
-                        </style>""",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown("**Schema discovery**")
+                if st.session_state.get(SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN):
+                    continue
+                st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = True
+                with st.container(key=GEO_CHAT_SCHEMA_CONTAINER_KEY):
+                    st.markdown("### Schema discovery")
                     _parts = content.split("\n## Fields\n", 1)
                     if len(_parts) == 2:
-                        st.markdown(_parts[0])
+                        _render_geo_schema_intro(_parts[0])
                         with st.expander("Fields", expanded=False):
                             st.markdown(_parts[1])
                     else:
@@ -996,9 +1076,30 @@ def render_stream(stream, skip_maps=False, stream_idx=0):
                 with st.container():
                     st.markdown("**Spatial intersection result**")
                     st.success(content)
+            elif tool_name in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS and content:
+                pass
             else:
                 st.markdown(content)
-    # Render map if this is a tool node with AOI data
+
+    if "charts_data" in update and not defer_stream_charts:
+        charts_data = update["charts_data"]
+        thread_id = update.get("thread_id")
+        checkpoint_id = update.get("checkpoint_id")
+        token = st.session_state.get("token")
+        client = ZenoClient(base_url=API_BASE_URL, token=token)
+
+        render_charts(charts_data)
+
+        if thread_id and checkpoint_id and token:
+            st.download_button(
+                label="Download data CSV",
+                data=client.download_data(
+                    thread_id=thread_id, checkpoint_id=checkpoint_id
+                ),
+                file_name=f"thread_{thread_id}_checkpoint_{checkpoint_id}_raw_data.csv",
+                mime="text/csv",
+            )
+
     aoi_data = None
     if not skip_maps and "aoi" in update:
         aoi_data = update["aoi"]
@@ -1009,37 +1110,13 @@ def render_stream(stream, skip_maps=False, stream_idx=0):
         )
         render_aoi_map(aoi_data, subregion_data)
 
-    # Render dataset map if this is a tool node with dataset data
     if not skip_maps and "dataset" in update:
         dataset_data = update["dataset"]
         aoi_data = (
             update.get("aoi") or aoi_data
-        )  # Include AOI as overlay if available
+        )
         render_dataset_map(dataset_data, aoi_data)
 
-    # Render charts if this is a tool node with charts_data
-    if "charts_data" in update:
-        charts_data = update["charts_data"]
-        thread_id = update.get("thread_id")
-        checkpoint_id = update.get("checkpoint_id")
-        client = ZenoClient(
-            base_url=API_BASE_URL, token=st.session_state.token
-        )
-
-        render_charts(charts_data)
-
-        if thread_id and checkpoint_id:
-            st.download_button(
-                label="Download data CSV",
-                data=client.download_data(
-                    thread_id=thread_id, checkpoint_id=checkpoint_id
-                ),
-                file_name=f"thread_{thread_id}_checkpoint_{checkpoint_id}_raw_data.csv",
-                mime="text/csv",
-            )
-
-
-    # Render code blocks if this is a tool node with code_blocks
     if "code_blocks" in update:
         with st.expander("Code Blocks", expanded=False):
             code_blocks = "\n".join(update["code_blocks"])
@@ -1050,17 +1127,8 @@ def render_stream(stream, skip_maps=False, stream_idx=0):
             st.code(execution_outputs, language="python")
             st.markdown(text_output)
 
-    with st.expander("State Updates"):
-        for key, value in update.items():
-            if key == "messages" or key == "aoi":
-                continue
-            st.badge(key)
-            st.code(value, language="json")
-
     if not st.session_state.get("messages"):
         st.session_state.messages = []
-
-    # st.session_state.messages.append({"role": "assistant", "content": content})
 
 
 def display_sidebar_selections():

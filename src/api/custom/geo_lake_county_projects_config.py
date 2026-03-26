@@ -108,6 +108,11 @@ MAP RENDERING:
 - When boundary_layer_id is provided, the boundary polygon is shown automatically.
 - When jurisdiction is provided (municipality queries), the municipality boundary is fetched and shown.
 
+RICH CONTEXT (automatic):
+- For modest result counts, the tool may attach narrative_enrichment: prose synthesized from long-text attribute
+  fields chosen using the layer schema (types, aliases, domains) plus value length — not hardcoded field names.
+- When present, it appears in the tool message and in the structured "Results detail" panel; ground your answer in it.
+
 PROJECT INFO BY NAME (e.g. "give me info about Wadsworth Oaks"):
 Call geo_get_project_geometry(project_name="<name>"). The tool returns attributes and displays
 the project geometry on the map. Summarize the attributes in your response. Do NOT call

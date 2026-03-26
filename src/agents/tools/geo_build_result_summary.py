@@ -7,9 +7,11 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 
 from src.agents.state import AgentState
+from src.agents.tools.geo_narrative_enrichment import compute_narrative_enrichment
+from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
 
 _SKIP_FIELDS = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
-_MAX_CATEGORY_VALUES = 20
+_MAX_CATEGORY_VALUES = 45
 _MIN_CATEGORY_VALUES = 1
 _MAX_CHARTS = 3
 _EPOCH_MS_THRESHOLD = 253402300800000
@@ -123,7 +125,7 @@ def _extract_feature_rows(geojson: dict) -> list[dict]:
 
 
 @tool("geo_build_result_summary")
-def geo_build_result_summary(
+async def geo_build_result_summary(
     source: str,
     result_label: str,
     chart_fields: list[str],
@@ -148,18 +150,34 @@ def geo_build_result_summary(
     tid = tool_call_id
 
     geojson: dict = {}
+    layer_id_for_schema: str | None = None
     if source == "geo_query_result":
         result = state.get("geo_query_result") or {}
         geojson = result.get("geojson", {})
+        layer_id_for_schema = result.get("layer_id")
     elif source == "geo_spatial_intersection_result":
         result = state.get("geo_spatial_intersection_result") or {}
         geojson = result.get("what_geojson", {})
+        layer_id_for_schema = result.get("what_layer_id")
 
     feature_rows = _extract_feature_rows(geojson)
     total = len(feature_rows)
     charts_data = _build_charts_from_rows(feature_rows, chart_fields or [])
 
     label_plural = result_label if result_label.endswith("s") else result_label + "s"
+
+    layer_url: str | None = None
+    if layer_id_for_schema and layer_id_for_schema != "geo_project_geometry":
+        layer_cfg = get_geo_lake_county_layer_by_id(layer_id_for_schema)
+        if layer_cfg:
+            layer_url = layer_cfg.get("arcgis_url")
+
+    narrative_enrichment = await compute_narrative_enrichment(
+        feature_rows,
+        layer_url,
+        total=total,
+        result_label=result_label,
+    )
 
     geo_result_summary = {
         "total": total,
@@ -169,6 +187,8 @@ def geo_build_result_summary(
         "charts_data": charts_data,
         "filters": {},
     }
+    if narrative_enrichment:
+        geo_result_summary["narrative_enrichment"] = narrative_enrichment
 
     chart_count = len(charts_data)
     summary = (
@@ -176,6 +196,8 @@ def geo_build_result_summary(
         f"Generated {chart_count} chart{'s' if chart_count != 1 else ''}"
         + (f": {', '.join(c['title'] for c in charts_data)}." if charts_data else ".")
     )
+    if narrative_enrichment:
+        summary += " Added rich context from descriptive attribute text (see structured panel)."
 
     return Command(
         update={

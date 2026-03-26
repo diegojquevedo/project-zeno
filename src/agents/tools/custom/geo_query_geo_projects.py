@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 from typing import Annotated
 
 from langchain_core.messages import ToolMessage
@@ -9,6 +10,7 @@ from langgraph.types import Command
 
 from src.agents.custom_tools_registry import register_tool
 from src.agents.tools.geo_build_result_summary import _build_charts_from_rows
+from src.agents.tools.geo_narrative_enrichment import compute_narrative_enrichment
 from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_CATEGORY_FLOOD_AUDITS,
     GEO_PROJECT_CATEGORY_PROJECTS,
@@ -38,6 +40,22 @@ logger = get_logger(__name__)
 
 _MAX_RESULTS = 1000
 _PROJECT_DISPLAY_FIELDS = ("Name", "projecttype", "jurisdiction", "watershed", "subwatershed", "project_id")
+
+
+def _json_safe_scalar(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int) and not isinstance(v, bool):
+        return v
+    if isinstance(v, float):
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    if isinstance(v, str):
+        return v
+    return str(v)
 
 
 def _format_project_row_detail(row: dict) -> str:
@@ -596,7 +614,19 @@ async def geo_query_geo_projects(
     feature_rows: list[dict] = []
     for feat in rep_features:
         props = feat.get("properties", {})
-        row = {k: v for k, v in props.items() if v is not None and str(v).strip() and k not in _skip}
+        row: dict = {}
+        for k, v in props.items():
+            if k in _skip:
+                continue
+            if v is None:
+                continue
+            if isinstance(v, str) and not v.strip():
+                continue
+            row[k] = _json_safe_scalar(v)
+        if not row:
+            pid = props.get(GEO_PROJECT_ID_FIELD)
+            if pid is not None:
+                row[GEO_PROJECT_ID_FIELD] = _json_safe_scalar(pid)
         if row:
             feature_rows.append(row)
 
@@ -616,6 +646,15 @@ async def geo_query_geo_projects(
             }.items() if v
         },
     }
+
+    narrative_enrichment = await compute_narrative_enrichment(
+        feature_rows,
+        GEO_PROJECT_REPRESENTATIVE_POINTS_URL,
+        total=total,
+        result_label="Lake County projects",
+    )
+    if narrative_enrichment:
+        geo_result_summary["narrative_enrichment"] = narrative_enrichment
 
     filter_label_parts = []
     if project_category and project_category != "projects":
@@ -642,6 +681,11 @@ async def geo_query_geo_projects(
         spatial_boundary_label=spatial_boundary_label,
         charts_data=charts_data,
     )
+    if narrative_enrichment:
+        tool_content += (
+            "\n\n**Rich context** (from descriptive attributes, auto-selected fields): "
+            f"{narrative_enrichment}"
+        )
 
     update: dict = {
         "map_actions": map_actions,
