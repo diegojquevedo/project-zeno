@@ -28,6 +28,10 @@ from constants import (
     FOREST_CARBON_REMOVALS_DATASET,
     GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS,
     GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER,
+    GEO_CHAT_PLACEHOLDER_FOREST_LONG,
+    GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
+    GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
+    GEO_CHAT_PLACEHOLDER_SHORT,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
     SESSION_KEY_DATA_SOURCE,
     SESSION_KEY_GEO_RESULT_SUMMARY,
@@ -320,7 +324,6 @@ st.markdown(
         margin-bottom: 0.15rem !important;
     }
     [class*="st-key-geo_chat_schema_discovery"] details {
-        border: 1px solid rgba(49, 51, 63, 0.45) !important;
         border-radius: 6px !important;
     }
     [class*="st-key-geo_chat_schema_discovery"] [data-testid="stExpander"] {
@@ -603,10 +606,6 @@ with chat_col:
                 elif geo_summary and isinstance(geo_summary, dict):
                     _render_geo_result_summary(geo_summary)
 
-    client = ZenoClient(base_url=API_BASE_URL, token=st.session_state[SESSION_KEY_TOKEN])
-    quota_info = client.get_quota_info()
-    remaining_prompts = quota_info["promptQuota"] - quota_info["promptsUsed"]
-
     if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
         st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None
 
@@ -615,15 +614,23 @@ with chat_col:
         if current and current.strip():
             st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = current.strip()
 
-    placeholder = (
-        "Search or filter Lake County projects"
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-        else "Ask about soils in a jurisdiction or jurisdictions with a soil type"
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county"
-        else "Ask about carbon removal for a location"
+    _chat_msgs = st.session_state.get(SESSION_KEY_MAP_CHAT_MESSAGES, [])
+    _user_has_prompted = any(
+        isinstance(m, dict) and m.get("role") == "user" for m in _chat_msgs
     )
+    if _user_has_prompted:
+        _chat_placeholder = GEO_CHAT_PLACEHOLDER_SHORT
+    else:
+        _base_ph = (
+            GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG
+            if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+            else GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG
+            if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county"
+            else GEO_CHAT_PLACEHOLDER_FOREST_LONG
+        )
+        _chat_placeholder = _base_ph
     st.chat_input(
-        f"{placeholder} (remaining: {remaining_prompts})",
+        _chat_placeholder,
         key=SESSION_KEY_MAP_CHAT_USER_INPUT,
         on_submit=handle_map_chat_input,
     )
