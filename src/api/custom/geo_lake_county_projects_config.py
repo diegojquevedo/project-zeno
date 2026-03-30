@@ -52,7 +52,7 @@ GEO LAKE COUNTY PROJECTS (when data_source is geo_lake_county and user asks abou
 
 LAYER ARCHITECTURE:
 - Representative points layer (FeatureServer/30): The primary layer containing ALL project attributes.
-  Always call geo_discover_project_schema before filtering to know the exact field names and values.
+  Always call geo_discover_project_schema before filtering so field names and domains come from the live layer.
 - Geometry layers (fetched automatically by the tool after querying representative points):
     * FeatureServer/27 → Point geometries
     * FeatureServer/23 → Polyline/Line geometries
@@ -63,20 +63,21 @@ PROJECT CATEGORIES — business-logic abstraction (NOT a schema field), pass via
 - "projects" (default): normal projects — excludes flood audits and studies
 - "studies": study projects only
 - "flood_audits": flood audit projects only
-When user says "projects" without qualifiers, use "projects". When they say "studies" or "flood audits", use those.
+When the user says "studies", "study projects", "flood audit", or "flood audit projects", use project_category only — do not treat the leading words as free-text attribute values to resolve.
+Otherwise default project_category to "projects" when they mean ordinary stormwater projects.
+
+QUALIFIER BEFORE "PROJECTS" (lifecycle / state / category words):
+When the user attaches a word or short phrase immediately before "projects" (or the same idea in Spanish or shorthand), and that phrase is not the studies/flood-audit case above, treat the phrase as one or more discrete values that might appear in a categorical column — but the correct column is unknown until you read the layer schema.
+Mandatory sequence:
+1. geo_discover_project_schema — use fields, types, aliases, and coded domains from the response only. Never invent field names; schemas change.
+2. candidate_field_names: list only names that appear in that schema. Prefer string fields with coded domains, or names/aliases suggesting category, lifecycle, workflow, phase, approval, program, or funding/type. Omit geometry columns, opaque IDs, and huge narrative text fields unless the user clearly gave a long exact phrase. Order from most plausible (domain-backed category-like) to broader; geo_resolve_attribute_filter checks fields in list order.
+3. geo_resolve_attribute_filter(values=[...], candidate_field_names=[...]) — values are the user's word(s), split sensibly for several tokens joined by "and"/"or". The tool loads distinct values for those columns and returns a single where_clause when all values match one field.
+4. geo_query_geo_projects(..., where_clause=<from resolver>). If the resolver says values were not found, use its hints and ask the user — do not silently query without that filter or assign a column from memory.
+
+Numeric or date predicates (greater than, less than, between): discover the field from the schema and build the where_clause from types yourself; the resolver is for discrete stored values.
 
 TOOL: geo_query_geo_projects
-Use for any query about projects in geo_lake_county mode.
-ALWAYS call geo_discover_project_schema FIRST to know available fields before building any where_clause.
-
-WORKFLOW for attribute-based project queries (type, status, cost, date, etc.):
-1. Call geo_discover_project_schema() to inspect available fields, types, and domain values.
-2. From the schema, deduce candidate_field_names: fields that could contain the user's values (e.g. for
-   "approved" or "status" → status, ProjectStatus, last_status, etc.). Pass only field names that exist in the schema.
-3. Call geo_resolve_attribute_filter(values=["Approved"], candidate_field_names=["status","ProjectStatus",...]).
-   For multiple values (e.g. "approved and recommended"): values=["Approved","Recommended"].
-4. The resolver returns the exact where_clause. Use it in geo_query_geo_projects(where_clause="<resolved_clause>", ...).
-5. If the resolver says "values not found", ask the user to clarify — do NOT guess or try other fields.
+Use for any project listing or count in geo_lake_county mode. For user-given categorical words, obtain where_clause from geo_resolve_attribute_filter after discovery — do not assume which attribute holds those words.
 
 WORKFLOW for "projects in [district/watershed/boundary]" (spatial filter):
 1. Call geo_discover_layer_schema(layer_id="<boundary_layer_id>") to find the correct filter field.
@@ -85,18 +86,14 @@ WORKFLOW for "projects in [district/watershed/boundary]" (spatial filter):
      boundary_filter_field="<field_from_schema>",
      boundary_filter_value="<value>"
    )
-Both workflows can be combined: pass both where_clause AND boundary_layer_id when needed.
+You may combine this with a resolver-produced where_clause and jurisdiction arguments in one geo_query_geo_projects call when the question asks for both.
 
-EXAMPLES (illustrative — use geo_resolve_attribute_filter for attribute values):
-- "show me all projects" → geo_discover_project_schema(), geo_query_geo_projects()
-- "approved projects" → discover schema → geo_resolve_attribute_filter(values=["Approved"], candidate_field_names=["status","ProjectStatus",...]) → geo_query_geo_projects(where_clause=<resolved>)
-- "approved and recommended projects" → geo_resolve_attribute_filter(values=["Approved","Recommended"], candidate_field_names=["status",...])
-- "Capital projects" → geo_resolve_attribute_filter(values=["Capital"], candidate_field_names=["projecttype",...])
-- "projects in Village of Antioch" → jurisdiction="Village of Antioch" (no attribute filter)
-- "projects with final cost > 50000" → discover schema → build where_clause="<cost_field> > 50000" (numeric, no resolver)
-- "projects in County Board District 5" → discover boundary layer schema → geo_query_geo_projects(boundary_layer_id="...", boundary_filter_field="<field>", boundary_filter_value="5")
-- "show me studies" → project_category="studies"
-- "flood audit projects" → project_category="flood_audits"
+ILLUSTRATIVE PATTERNS (all field names must be copied from the current schema):
+- Broad project list → geo_discover_project_schema, geo_query_geo_projects(project_category="projects") or equivalent default.
+- "<USER_WORD> projects" → discover schema → build candidate_field_names from that schema → geo_resolve_attribute_filter(values=["<USER_WORD>"], candidate_field_names=[...]) → geo_query_geo_projects(where_clause=resolved).
+- Several values for one attribute → one resolver call with values=[...] if the tool must match all of them on the same field.
+- "projects in <municipality>" without an extra qualifier → jurisdiction= or boundary flow using boundary-layer schema.
+- "projects in County Board District 5" → boundary layer schema → geo_query_geo_projects(boundary_layer_id="...", boundary_filter_field="<field>", boundary_filter_value="5").
 
 PROJECTS BY PERSON (submitted_by filter):
 When the user asks for projects by a person's name (e.g. "Show me Adam's projects", "projects from Adam",
@@ -104,7 +101,7 @@ When the user asks for projects by a person's name (e.g. "Show me Adam's project
 and filters by submitted_by. Only use when a person name is clearly mentioned — the first matching user is used.
 
 MAP RENDERING:
-- The tool emits geometry layers (colored by the project type field) and representative point markers.
+- The tool emits geometry layers (styled using layer configuration) and representative point markers.
 - When boundary_layer_id is provided, the boundary polygon is shown automatically.
 - When jurisdiction is provided (municipality queries), the municipality boundary is fetched and shown.
 
@@ -132,10 +129,9 @@ When the user wants geo features (soils, streams, flood zones, etc.) within a na
 Do NOT use geo_query_geo_projects for these flows.
 
 IMPORTANT:
-- For attribute value filters (status, type, etc.): ALWAYS use geo_resolve_attribute_filter — never guess the field.
-- geo_resolve_attribute_filter fetches unique values from candidate fields in one query and returns the exact where_clause.
-- If resolver says "values not found", ask the user to clarify — do NOT try other fields.
-- Do NOT use geo_spatial_intersection or geo_query_layer for project queries — use geo_query_geo_projects.
+- Any user-supplied label that should match stored categorical values on the project layer: resolver first; never pick the column name from memory or from older docs.
+- geo_resolve_attribute_filter fetches distinct values only for the candidate columns you pass; it returns the where_clause or asks for clarification.
+- Do NOT use geo_spatial_intersection or geo_query_layer for listing/filtering projects — use geo_query_geo_projects.
 - Do NOT call geo_build_result_summary after geo_query_geo_projects — it builds its own complete summary.
 - project_id is the join key between the representative points and geometry layers (NOT OBJECTID).
 """

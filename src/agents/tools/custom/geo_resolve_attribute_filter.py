@@ -1,3 +1,5 @@
+import asyncio
+import difflib
 from typing import Annotated
 
 from langchain_core.messages import ToolMessage
@@ -18,6 +20,8 @@ logger = get_logger(__name__)
 
 _SKIP_FIELDS = frozenset({"OBJECTID", "GlobalID", "SHAPE", "Shape__Area", "Shape__Length"})
 
+_DISTINCT_RECORD_CAP = "32000"
+
 
 def _normalize(s: str) -> str:
     return (s or "").strip().lower()
@@ -33,6 +37,84 @@ def _safe_where_value(raw: str) -> str:
     return (raw or "").replace("'", "''")
 
 
+def _field_def_by_name(schema_data: dict, field_name: str) -> dict | None:
+    for f in schema_data.get("fields", []) or []:
+        if f.get("name") == field_name:
+            return f
+    return None
+
+
+def _sql_scalar_literal(field_def: dict | None, raw: str) -> str:
+    t = (field_def or {}).get("type") or ""
+    if t in ("esriFieldTypeInteger", "esriFieldTypeSmallInteger"):
+        try:
+            return str(int(float(str(raw).strip())))
+        except ValueError:
+            pass
+    if t == "esriFieldTypeDouble":
+        try:
+            return str(float(str(raw).strip()))
+        except ValueError:
+            pass
+    return f"'{_safe_where_value(str(raw))}'"
+
+
+def _domain_literal_for_user_token(field_def: dict | None, user_val: str) -> str | None:
+    if not field_def:
+        return None
+    domain = field_def.get("domain") or {}
+    if domain.get("type") != "codedValue":
+        return None
+    for cv in domain.get("codedValues", []) or []:
+        code = cv.get("code")
+        name = cv.get("name", "")
+        if _values_match(user_val, name) or _values_match(user_val, str(code)):
+            if isinstance(code, bool):
+                continue
+            if isinstance(code, float) and code.is_integer():
+                code = int(code)
+            if isinstance(code, (int, float)):
+                return _sql_scalar_literal(field_def, str(code))
+            return _sql_scalar_literal(field_def, str(code))
+    return None
+
+
+async def _fetch_distinct_for_field(
+    client: ArcGISClient,
+    query_url: str,
+    field: str,
+    timeout: float,
+) -> set[str]:
+    params = {
+        "where": "1=1",
+        "outFields": field,
+        "returnDistinctValues": "true",
+        "returnGeometry": "false",
+        "outSR": str(ARCGIS_SRID),
+        "f": "json",
+        "resultRecordCount": _DISTINCT_RECORD_CAP,
+    }
+    try:
+        data = await client.get(query_url, params, timeout)
+    except Exception as e:
+        logger.warning("geo_resolve_distinct_field_failed", field=field, error=str(e))
+        return set()
+    if data.get("error"):
+        logger.warning(
+            "geo_resolve_distinct_field_arcgis_error",
+            field=field,
+            err=data.get("error"),
+        )
+        return set()
+    out: set[str] = set()
+    for feat in data.get("features", []):
+        props = feat.get("attributes", feat.get("properties", {}))
+        val = props.get(field)
+        if val is not None and str(val).strip():
+            out.add(str(val).strip())
+    return out
+
+
 @tool("geo_resolve_attribute_filter")
 async def geo_resolve_attribute_filter(
     values: list[str],
@@ -41,9 +123,10 @@ async def geo_resolve_attribute_filter(
 ) -> Command:
     """
     Resolve which project layer field contains the given values. Call AFTER geo_discover_project_schema.
-    Pass the values the user is looking for (e.g. ["Approved", "Recommended"]) and the candidate field
-    names deduced from the schema (e.g. ["status", "ProjectStatus"]). Returns the exact where_clause to
-    use in geo_query_geo_projects, or a message asking the user to clarify if values are not found.
+    Pass the user's literal values and candidate_field_names taken only from the discovered schema (string-like
+    categorical fields). Queries distinct values per field (separate ArcGIS calls) and uses coded domains from
+    the schema when the user's word matches a domain name or code. Returns the exact where_clause for
+    geo_query_geo_projects, or a clarification message if no field contains all values.
     """
     tid = tool_call_id or ""
     if not values or not candidate_field_names:
@@ -87,72 +170,47 @@ async def geo_resolve_attribute_filter(
 
     client = ArcGISClient(api_key=None, timeout=HTTP_TIMEOUT_QUERY)
     query_url = f"{GEO_PROJECT_REPRESENTATIVE_POINTS_URL}/query"
-    params = {
-        "where": "1=1",
-        "outFields": ",".join(valid_candidates),
-        "returnDistinctValues": "true",
-        "returnGeometry": "false",
-        "outSR": str(ARCGIS_SRID),
-        "f": "json",
-        "resultRecordCount": 10000,
+
+    distinct_sets = await asyncio.gather(
+        *[
+            _fetch_distinct_for_field(client, query_url, fn, HTTP_TIMEOUT_QUERY)
+            for fn in valid_candidates
+        ]
+    )
+    unique_by_field: dict[str, set[str]] = {
+        fn: distinct_sets[i] for i, fn in enumerate(valid_candidates)
     }
-    try:
-        data = await client.get(query_url, params, HTTP_TIMEOUT_QUERY)
-    except Exception as e:
-        logger.warning("geo_resolve_attribute_filter_query_failed", error=str(e))
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"Failed to query distinct values from ArcGIS: {e}",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
-    if data.get("error"):
-        return Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content=f"ArcGIS error: {data['error'].get('message', 'Unknown error')}",
-                        tool_call_id=tid,
-                    )
-                ],
-            },
-        )
-
-    unique_by_field: dict[str, set[str]] = {f: set() for f in valid_candidates}
-    for feat in data.get("features", []):
-        props = feat.get("attributes", feat.get("properties", {}))
-        for field in valid_candidates:
-            val = props.get(field)
-            if val is not None and str(val).strip():
-                unique_by_field[field].add(str(val))
 
     matched_field: str | None = None
-    matched_values: list[str] = []
+    matched_sql_literals: list[str] = []
 
     for field in valid_candidates:
         field_vals = unique_by_field.get(field, set())
-        found = []
+        field_def = _field_def_by_name(schema_data, field)
+        found_lit: list[str] = []
+        ok = True
         for uval in values:
+            hit: str | None = None
             for dval in field_vals:
                 if _values_match(uval, dval):
-                    found.append(dval)
+                    hit = _sql_scalar_literal(field_def, dval)
                     break
-        if len(found) == len(values):
+            if hit is None:
+                hit = _domain_literal_for_user_token(field_def, uval)
+            if hit is None:
+                ok = False
+                break
+            found_lit.append(hit)
+        if ok and len(found_lit) == len(values):
             matched_field = field
-            matched_values = found
+            matched_sql_literals = found_lit
             break
 
-    if matched_field and matched_values:
-        escaped = [f"'{_safe_where_value(v)}'" for v in matched_values]
-        if len(escaped) == 1:
-            where_clause = f"{matched_field}={escaped[0]}"
+    if matched_field and matched_sql_literals:
+        if len(matched_sql_literals) == 1:
+            where_clause = f"{matched_field}={matched_sql_literals[0]}"
         else:
-            where_clause = f"{matched_field} IN ({','.join(escaped)})"
+            where_clause = f"{matched_field} IN ({','.join(matched_sql_literals)})"
         content = f'Resolved: use where_clause="{where_clause}" in geo_query_geo_projects.'
         return Command(
             update={
@@ -163,12 +221,29 @@ async def geo_resolve_attribute_filter(
     all_suggestions: list[str] = []
     for field in valid_candidates:
         all_suggestions.extend(unique_by_field.get(field, set()))
-    unique_suggestions = sorted(set(v for v in all_suggestions if v))[:20]
-    suggestions_str = ", ".join(repr(s) for s in unique_suggestions)
+    pool = sorted(set(v for v in all_suggestions if v))
+    by_lower = {p.lower(): p for p in pool}
+    preview = pool[:50]
+    suggestions_str = ", ".join(repr(s) for s in preview)
+    fuzzy_lines: list[str] = []
+    for uval in values:
+        keys = list(by_lower.keys())
+        if not keys:
+            break
+        close_keys = difflib.get_close_matches(
+            _normalize(uval), keys, n=5, cutoff=0.45
+        )
+        if close_keys:
+            shown = [by_lower[k] for k in close_keys]
+            fuzzy_lines.append(f"near '{uval}': {', '.join(repr(s) for s in shown)}")
+    fuzzy_block = (" Closest spellings in those columns: " + "; ".join(fuzzy_lines)) if fuzzy_lines else ""
     content = (
-        f"The value(s) {values} were not found in any of the candidate fields ({valid_candidates}). "
-        "Please ask the user to clarify what they mean. "
-        f"Available values in those fields: {suggestions_str}"
+        f"The value(s) {values} are not equal to any stored value or domain name/code in fields {valid_candidates} "
+        f"(ArcGIS per-field distinct queries succeeded; there is no literal match). "
+        f"This is not an HTTP error — the service layer simply does not use that exact label in these columns. "
+        f"Tell the user their wording does not appear in the data; they must pick a real value or ask you to "
+        f"widen candidate_field_names using the full schema. "
+        f"Values observed in those columns (sample): {suggestions_str}.{fuzzy_block}"
     )
     return Command(
         update={

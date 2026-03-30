@@ -186,6 +186,28 @@ async def stream_chat(
                 )
                 continue
 
+        if thread_id:
+            try:
+                snap = await zeno_async.aget_state(config)
+                vals = getattr(snap, "values", None) or {}
+                ui_payload = {
+                    "geo_result_summary": vals.get("geo_result_summary"),
+                    "map_actions": vals.get("map_actions"),
+                    "charts_data": vals.get("charts_data"),
+                }
+                yield pack(
+                    {
+                        "node": "ui_state",
+                        "update": dumps(ui_payload),
+                    }
+                )
+            except Exception as e:
+                logger.warning(
+                    "ui_state_snapshot_failed",
+                    error=str(e),
+                    thread_id=thread_id,
+                )
+
         yield pack(
             {
                 "node": "trace_info",

@@ -690,6 +690,7 @@ async def geo_query_geo_projects(
     update: dict = {
         "map_actions": map_actions,
         "geo_result_summary": geo_result_summary,
+        "charts_data": charts_data,
         "messages": [ToolMessage(content=tool_content, tool_call_id=tid)],
     }
     if geo_project_geometry:

@@ -479,6 +479,21 @@ with chat_col:
                     try:
                         if stream.get("node") == "trace_info":
                             continue
+                        if stream.get("node") == "ui_state":
+                            update = json.loads(stream["update"])
+                            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                gs = update.get("geo_result_summary")
+                                if gs is not None:
+                                    st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
+                                    if isinstance(gs, dict) and gs.get("charts_data"):
+                                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
+                                ma = update.get("map_actions")
+                                if ma:
+                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = ma
+                                cd = update.get("charts_data")
+                                if cd:
+                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = cd
+                            continue
                         stream_count += 1
                         progress_placeholder.progress(
                             min(0.95, 0.05 + stream_count * 0.08),
@@ -493,24 +508,44 @@ with chat_col:
                             incoming = update["map_actions"]
                             existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
                             primary_types = {"addFeatureLayer"} | get_primary_action_types()
-                            is_primary_result = any(a.get("type") in primary_types for a in incoming)
+                            is_primary_result = any(
+                                a.get("type") in primary_types for a in (incoming or [])
+                            )
                             if is_primary_result:
-                                st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
+                                if incoming:
+                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
                             else:
-                                st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + incoming
+                                st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + (
+                                    incoming or []
+                                )
                         if "geo_result_summary" in update:
                             gs = update["geo_result_summary"]
                             if gs is None:
                                 st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
                             else:
                                 st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
-                        if "project_result" in update:
+                                if (
+                                    isinstance(gs, dict)
+                                    and gs.get("charts_data")
+                                    and st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                                    == "geo_lake_county"
+                                ):
+                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
+                        if update.get("charts_data") and st.session_state.get(
+                            SESSION_KEY_DATA_SOURCE
+                        ) == "geo_lake_county":
+                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
+                        if (
+                            "project_result" in update
+                            and st.session_state.get(SESSION_KEY_DATA_SOURCE) != "geo_lake_county"
+                        ):
                             pr = update["project_result"]
                             if pr is None:
                                 st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
                                 st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
                                 st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "lake_county":
+                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                                 st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
                                 st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                             elif pr.get("list"):
