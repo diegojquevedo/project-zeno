@@ -10,7 +10,9 @@ from langgraph.types import Command
 
 from src.agents.custom_tools_registry import register_tool
 from src.agents.tools.geo_build_result_summary import _build_charts_from_rows
-from src.agents.tools.geo_narrative_enrichment import compute_narrative_enrichment
+from src.agents.tools.geo_narrative_enrichment import (
+    compute_narrative_enrichment,
+)
 from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_CATEGORY_FLOOD_AUDITS,
     GEO_PROJECT_CATEGORY_PROJECTS,
@@ -35,6 +37,7 @@ from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.services.inflow_user_service import lookup_user_id_by_name
 from src.shared.lake_county_constants import LC_MUNICIPALITIES_URL
 from src.shared.logging_config import get_logger
+from src.shared.map_utils import create_zoom_to_action
 
 logger = get_logger(__name__)
 
@@ -570,6 +573,7 @@ async def geo_query_geo_projects(
             })
 
     map_actions: list[dict] = []
+    jurisdiction_boundary = None
 
     if spatial_boundary_data and spatial_boundary_data.get("features"):
         map_actions.append({
@@ -607,6 +611,14 @@ async def geo_query_geo_projects(
             "colorMap": GEO_PROJECT_TYPE_COLORS,
             "defaultColor": GEO_PROJECT_DEFAULT_COLOR,
         })
+
+    zoom_geometry = None
+    if spatial_boundary_data and spatial_boundary_data.get("features"):
+        zoom_geometry = spatial_boundary_data
+    elif jurisdiction_boundary and jurisdiction_boundary.get("features"):
+        zoom_geometry = jurisdiction_boundary
+    if zoom_geometry:
+        map_actions.insert(0, create_zoom_to_action(zoom_geometry))
 
     total = len(rep_features)
 

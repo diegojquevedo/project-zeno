@@ -3,6 +3,60 @@ import folium
 from custom_renderer_registry import get_renderer
 from shapely.geometry import shape
 
+from constants import (
+    FOLIUM_ZOOMFIT_MAX_ZOOM,
+    FOLIUM_ZOOMFIT_PADDING_PX,
+    FOLIUM_ZOOMFIT_POINT_BUFFER_DEG,
+)
+
+
+def _expand_degenerate_bounds(
+    minx: float,
+    miny: float,
+    maxx: float,
+    maxy: float,
+    buf: float,
+) -> tuple[float, float, float, float]:
+    dx = maxx - minx
+    dy = maxy - miny
+    if dx < 1e-9 and dy < 1e-9:
+        return minx - buf, miny - buf, maxx + buf, maxy + buf
+    if dx < 1e-8:
+        minx -= buf
+        maxx += buf
+    if dy < 1e-8:
+        miny -= buf
+        maxy += buf
+    return minx, miny, maxx, maxy
+
+
+def _sw_ne_bounds_from_zoom_geometry(raw: dict) -> list[list[float]] | None:
+    try:
+        from shapely.ops import unary_union
+
+        if raw.get("type") == "FeatureCollection":
+            shapes = [
+                shape(f["geometry"])
+                for f in raw.get("features", [])
+                if f.get("geometry")
+            ]
+            geom = unary_union(shapes) if shapes else None
+        else:
+            geom = shape(raw)
+        if geom is None or geom.is_empty:
+            return None
+        minx, miny, maxx, maxy = geom.bounds
+        minx, miny, maxx, maxy = _expand_degenerate_bounds(
+            minx,
+            miny,
+            maxx,
+            maxy,
+            FOLIUM_ZOOMFIT_POINT_BUFFER_DEG,
+        )
+        return [[miny, minx], [maxy, maxx]]
+    except Exception:
+        return None
+
 
 def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
     center = [42.34, -88.0]
@@ -14,6 +68,7 @@ def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
             raw = zoom_action["geometry"]
             if raw.get("type") == "FeatureCollection":
                 from shapely.ops import unary_union
+
                 shapes = [
                     shape(f["geometry"])
                     for f in raw.get("features", [])
@@ -37,20 +92,44 @@ def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
                 zoom_start = 11
             elif max_diff > 0.05:
                 zoom_start = 12
+            elif max_diff > 0.02:
+                zoom_start = 14
+            elif max_diff > 0.008:
+                zoom_start = 16
             else:
-                zoom_start = 13
+                zoom_start = 17
         except Exception:
             pass
 
     return center, zoom_start
 
 
-def render_geo_map(map_actions, width=700, height=400):
+def render_geo_map(map_actions, width: int | str | None = 700, height=400):
     if not map_actions:
         return None
 
+    map_width: int | str = "100%" if width is None else width
+
     center, zoom_start = _compute_center_and_zoom(map_actions)
-    m = folium.Map(location=center, zoom_start=zoom_start, tiles="OpenStreetMap")
+    m = folium.Map(
+        location=center,
+        zoom_start=zoom_start,
+        tiles="OpenStreetMap",
+        width=map_width,
+        height=height,
+    )
+
+    zoom_action = next((a for a in map_actions if a.get("type") == "zoomTo"), None)
+    if zoom_action and zoom_action.get("geometry"):
+        sw_ne = _sw_ne_bounds_from_zoom_geometry(zoom_action["geometry"])
+        if sw_ne:
+            pad = FOLIUM_ZOOMFIT_PADDING_PX
+            m.fit_bounds(
+                sw_ne,
+                padding_top_left=(pad, pad),
+                padding_bottom_right=(pad, pad),
+                max_zoom=FOLIUM_ZOOMFIT_MAX_ZOOM,
+            )
 
     for action in map_actions:
         action_type = action.get("type")
@@ -127,5 +206,5 @@ def render_geo_map(map_actions, width=700, height=400):
             if renderer:
                 renderer(m, action)
 
-    folium.LayerControl().add_to(m)
+    folium.LayerControl(position="bottomleft").add_to(m)
     return m

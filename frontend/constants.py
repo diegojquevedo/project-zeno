@@ -35,6 +35,8 @@ SESSION_KEY_MAP_JURISDICTION_BOUNDARY = "map_jurisdiction_boundary"
 SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY = "map_county_board_district_boundary"
 SESSION_KEY_MAP_ACTIONS = "map_actions"
 SESSION_KEY_GEO_RESULT_SUMMARY = "geo_result_summary"
+SESSION_KEY_GEO_MAP_TABLE_EXPANDED = "geo_map_table_expanded"
+SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW = "geo_map_table_focus_row"
 SESSION_KEY_DATA_SOURCE = "data_source"
 SESSION_KEY_MAP_CHAT_PENDING_INPUT = "map_chat_pending_input"
 SESSION_KEY_MAP_CHAT_USER_INPUT = "map_chat_user_input"
@@ -92,82 +94,162 @@ MAP_CHAT_GEMINI_DARK_SHADOW = (
 MAP_CHAT_GEMINI_DARK_SEND_FILL = "rgba(255, 255, 255, 0.1)"
 MAP_CHAT_GEMINI_DARK_SEND_ICON = "#e8eaed"
 
-GEO_MAP_IFRAME_MIN_HEIGHT_PX = 480
+GEO_MAP_IFRAME_MIN_HEIGHT_PX = 360
 GEO_MAP_IFRAME_HEIGHT_VH_OFFSET_REM = 10.5
 GEO_MAP_PANEL_TOP_SPACING_REM = 0.85
+GEO_MAP_STREAMLIT_KEY_IFRAME_HOST = "geo_map_iframe_host"
+GEO_MAP_STREAMLIT_KEY_BOTTOM_TABLE_WRAP = "geo_map_bottom_table_wrap"
+STREAMLIT_DEBUG_GEO_MAP_ENV = "STREAMLIT_DEBUG_GEO_MAP"
+GEO_MAP_ST_HEADER_REM = "3.75rem"
+GEO_MAP_RIGHT_PANEL_BORDER = "1px solid rgba(49,51,63,0.28)"
 
 FOLIUM_STATIC_DEFAULT_WIDTH = 1200
-FOLIUM_STATIC_DEFAULT_HEIGHT = 820
+FOLIUM_STATIC_DEFAULT_HEIGHT = 680
+FOLIUM_ZOOMFIT_MAX_ZOOM = 18
+FOLIUM_ZOOMFIT_PADDING_PX = 28
+FOLIUM_ZOOMFIT_POINT_BUFFER_DEG = 0.0025
+
+GEO_MAP_TABLE_NAME_DOM_MAX_CHARS = 512
+GEO_MAP_TABLE_ROW_PADDING_Y_PX = 2
+GEO_MAP_TABLE_ROW_PADDING_X_PX = 3
+GEO_MAP_TABLE_ROW_ACTION_GAP_PX = 3
+GEO_MAP_TABLE_HEADER_PADDING_Y_PX = 3
+GEO_MAP_TABLE_HEADER_PADDING_X_PX = 7
+GEO_MAP_TABLE_HEADER_GAP_PX = 6
+GEO_MAP_TABLE_ROW_LINE_HEIGHT = 1.25
+GEO_MAP_TABLE_NAME_CELL_STYLE = (
+    "margin:0;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+    f"max-width:100%;line-height:{GEO_MAP_TABLE_ROW_LINE_HEIGHT};color:rgba(49,51,63,0.92)"
+)
+GEO_MAP_TABLE_GOTO_BUTTON_PADDING = "2px 10px"
+GEO_MAP_TABLE_GOTO_BUTTON_MIN_HEIGHT_PX = 0
+GEO_MAP_TABLE_GOTO_BUTTON_FONT_SIZE_PX = 12
+GEO_MAP_TABLE_GOTO_BUTTON_MIN_WIDTH = "4.75rem"
+GEO_MAP_TABLE_GOTO_BUTTON_BG = "#4C78A8"
+GEO_MAP_TABLE_GOTO_BUTTON_HOVER = "#3a5d84"
+
+_GEO_MAP_RIGHT_COL_A = 'section[data-testid="stMain"] [data-testid="column"]:last-of-type'
+_GEO_MAP_RIGHT_COL_B = '[data-testid="stAppViewContainer"] [data-testid="column"]:last-of-type'
+_GEO_MAP_COL_IFRAME_HOST_SEL = (
+    f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"], '
+    f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"]'
+)
+GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL = _GEO_MAP_COL_IFRAME_HOST_SEL
 
 
 def build_geo_map_column_css() -> str:
     mnh = GEO_MAP_IFRAME_MIN_HEIGHT_PX
-    top_gap = GEO_MAP_PANEL_TOP_SPACING_REM
-    rem = GEO_MAP_IFRAME_HEIGHT_VH_OFFSET_REM + top_gap
+    sel = _GEO_MAP_COL_IFRAME_HOST_SEL
     return f"""
-    div[data-testid="stHorizontalBlock"] {{
-        align-items: stretch !important;
+    {sel} [data-testid="stIFrame"],
+    {sel} iframe {{
+        min-height: {mnh}px;
+        flex: 1 1 0;
+        width: 100%;
+        border: none;
     }}
-    [data-testid="column"]:last-of-type {{
-        display: flex !important;
-        flex-direction: column !important;
-        align-self: stretch !important;
+    {sel} [data-testid="stIFrame"] {{
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }}
-    [data-testid="column"]:last-of-type > div {{
-        flex: 1 1 auto !important;
+    """
+
+
+def build_geo_map_panel_result_rows_css(expanded: bool) -> str:
+    hdr = GEO_MAP_ST_HEADER_REM
+    host_flex = "6 1 0" if expanded else "9 1 0"
+    host_cap = f"calc((100vh - {hdr}) * 0.55)" if expanded else f"calc((100vh - {hdr}) * 0.9)"
+    sel_host = _GEO_MAP_COL_IFRAME_HOST_SEL
+    sel_iframe = (
+        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"], '
+        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] iframe, '
+        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"], '
+        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] iframe'
+    )
+    wrap_sel = (
+        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_table_debug_wrap"], '
+        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_table_debug_wrap"]'
+    )
+    map_vb = (
+        '[data-testid="column"]:last-of-type > div > [data-testid="stVerticalBlock"], '
+        '[data-testid="column"]:last-of-type > div > div > [data-testid="stVerticalBlock"]'
+    )
+    return f"""
+    <style>
+    {map_vb} > div:has([class*="st-key-geo_map_iframe_host"]) {{
+        flex: {host_flex} !important;
         min-height: 0 !important;
-        height: 100% !important;
+        max-height: {host_cap} !important;
+        overflow: hidden !important;
         display: flex !important;
         flex-direction: column !important;
     }}
-    [data-testid="column"]:last-of-type > div > *:first-child {{
-        padding-top: 0 !important;
-        margin-top: 0 !important;
+    {map_vb} > div:has([class*="st-key-geo_map_table_debug_wrap"]) {{
+        flex: 0 0 auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
     }}
-    [class*="st-key-geo_map_panel"] {{
+    {sel_host} {{
         flex: 1 1 0 !important;
         min-height: 0 !important;
+        max-height: 100% !important;
+        margin-top: 0 !important;
+        overflow: hidden !important;
         display: flex !important;
         flex-direction: column !important;
-        padding-top: {top_gap}rem !important;
+    }}
+    {sel_host} > div {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    {sel_host} [data-testid="stVerticalBlock"] {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    {sel_iframe} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        width: 100% !important;
+    }}
+    {_GEO_MAP_RIGHT_COL_A} [data-testid="stIFrame"],
+    {_GEO_MAP_RIGHT_COL_B} [data-testid="stIFrame"] {{
+        max-height: {host_cap} !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }}
+    {_GEO_MAP_RIGHT_COL_A} [data-testid="stIFrame"] iframe,
+    {_GEO_MAP_RIGHT_COL_A} iframe,
+    {_GEO_MAP_RIGHT_COL_B} [data-testid="stIFrame"] iframe,
+    {_GEO_MAP_RIGHT_COL_B} iframe {{
+        max-height: {host_cap} !important;
+        min-height: 0 !important;
+        height: 100% !important;
+    }}
+    {_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"],
+    {_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] {{
+        border: {GEO_MAP_RIGHT_PANEL_BORDER} !important;
+        border-radius: 8px !important;
         box-sizing: border-box !important;
     }}
-    [class*="st-key-geo_map_panel"] > div:first-child {{
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        overflow: hidden !important;
+    {wrap_sel} {{
+        margin-top: 4px !important;
+        overflow: visible !important;
     }}
-    [class*="st-key-geo_map_panel"] [data-testid="stVerticalBlock"] {{
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0 !important;
-        overflow: hidden !important;
+    {wrap_sel} > div,
+    {wrap_sel} > div > [data-testid="stVerticalBlock"] {{
+        overflow: visible !important;
     }}
-    [class*="st-key-geo_map_panel"] [data-testid="stVerticalBlock"] > [data-testid="element-container"]:first-of-type,
-    [class*="st-key-geo_map_panel"] [data-testid="stVerticalBlock"] > div:first-of-type {{
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        overflow: hidden !important;
-    }}
-    [class*="st-key-geo_map_panel"] [data-testid="stVerticalBlock"] > [data-testid="element-container"]:not(:first-of-type),
-    [class*="st-key-geo_map_panel"] [data-testid="stVerticalBlock"] > div:not(:first-of-type) {{
-        flex: 0 0 auto !important;
-    }}
-    [class*="st-key-geo_map_panel"] [data-testid="stIFrame"],
-    [class*="st-key-geo_map_panel"] iframe {{
-        flex: 1 1 0 !important;
-        min-height: {mnh}px !important;
-        height: 100% !important;
-        max-height: calc(100vh - {rem}rem) !important;
-        width: 100% !important;
-        border: none !important;
-    }}
+    </style>
     """
 
 

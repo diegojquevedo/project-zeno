@@ -9,8 +9,12 @@ from datetime import datetime, timezone
 import streamlit as st
 import streamlit.components.v1 as components
 from custom_renderer_registry import get_primary_action_types
+from geo_map_project_table import (
+    prepend_focus_zoom_if_any,
+    render_geo_map_bottom_table,
+)
 from geo_map_renderer import render_geo_map
-from streamlit_folium import folium_static
+from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
     _fetch_lake_county_boundary_cached,
@@ -32,8 +36,12 @@ from constants import (
     GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_SHORT,
+    GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL,
+    GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
     SESSION_KEY_DATA_SOURCE,
+    SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
+    SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
     SESSION_KEY_GEO_RESULT_SUMMARY,
     SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN,
     SESSION_KEY_MAP_ACTIONS,
@@ -50,6 +58,7 @@ from constants import (
     SESSION_KEY_MAP_PROJECT_LIST,
     SESSION_KEY_MAP_PROJECT_MATCHES,
     SESSION_KEY_TOKEN,
+    STREAMLIT_DEBUG_GEO_MAP_ENV,
     build_geo_map_column_css,
     build_map_chat_input_css,
 )
@@ -243,6 +252,8 @@ if SESSION_KEY_MAP_ACTIONS not in st.session_state:
     st.session_state[SESSION_KEY_MAP_ACTIONS] = []
 if SESSION_KEY_GEO_RESULT_SUMMARY not in st.session_state:
     st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+if SESSION_KEY_GEO_MAP_TABLE_EXPANDED not in st.session_state:
+    st.session_state[SESSION_KEY_GEO_MAP_TABLE_EXPANDED] = True
 
 token = st.query_params.get("token")
 if token:
@@ -264,34 +275,40 @@ st.set_page_config(
 )
 
 st.markdown(
-    """
+    f"""
     <style>
-    main .block-container, .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; overflow: visible !important; }
-    h1, h2, h3, [data-testid="stHeader"], [data-testid="stSubheader"] { overflow: visible !important; }
-    [data-testid="stSidebar"] { display: none !important; }
-    [data-testid="collapsedControl"] { display: none !important; }
+    main .block-container, .block-container {{ padding-top: 3.75rem !important; padding-bottom: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; max-width: 100% !important; max-height: 100vh !important; box-sizing: border-box !important; }}
+    h1, h2, h3, [data-testid="stHeader"], [data-testid="stSubheader"] {{ overflow: visible !important; }}
+    [data-testid="stSidebar"] {{ display: none !important; }}
+    [data-testid="collapsedControl"] {{ display: none !important; }}
     button[aria-label="Expand sidebar"],
     button[aria-label="Collapse sidebar"],
-    [data-testid="stSidebarCollapsedButton"] { display: none !important; }
+    [data-testid="stSidebarCollapsedButton"] {{ display: none !important; }}
 
-    [data-testid="column"]:first-of-type { height: 85vh !important; max-height: 85vh !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
-    [data-testid="column"]:first-of-type > div { flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
-    [data-testid="column"]:first-of-type > div > *:nth-child(1) { flex-shrink: 0 !important; overflow: visible !important; }
-    [data-testid="column"]:first-of-type > div > *:nth-child(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }
-    [data-testid="column"]:first-of-type > div > [data-testid="stVerticalBlock"]:nth-of-type(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; max-height: 100% !important; }
-    div.stHorizontalBlock > div:first-child { height: 85vh !important; max-height: 85vh !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
-    div.stHorizontalBlock > div:first-child > div { flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
-    div.stHorizontalBlock > div:first-child > div > div:nth-child(2) { flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }
-    [data-testid="column"]:first-of-type > div > *:nth-child(3) { flex-shrink: 0 !important; }
-    [data-testid="column"]:first-of-type { padding-bottom: 5.5rem !important; box-sizing: border-box !important; }
-    [class*="geo_chat_header"] { overflow: visible !important; }
+    [data-testid="column"]:first-of-type {{ height: calc(100vh - 3.75rem) !important; max-height: calc(100vh - 3.75rem) !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; padding-bottom: 5.5rem !important; box-sizing: border-box !important; }}
+    [data-testid="column"]:first-of-type > div {{ flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }}
+    [data-testid="column"]:first-of-type > div > *:nth-child(1) {{ flex-shrink: 0 !important; overflow: visible !important; }}
+    [data-testid="column"]:first-of-type > div > *:nth-child(2) {{ flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }}
+    [data-testid="column"]:first-of-type > div > *:nth-child(3) {{ flex-shrink: 0 !important; }}
+    [data-testid="column"]:last-of-type {{ height: calc(100vh - 3.75rem) !important; max-height: calc(100vh - 3.75rem) !important; overflow-x: hidden !important; overflow-y: auto !important; display: flex !important; flex-direction: column !important; }}
+    [data-testid="column"]:last-of-type > div {{ flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow-x: hidden !important; overflow-y: visible !important; }}
+    [data-testid="column"]:last-of-type > div > [data-testid="stVerticalBlock"] {{ flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow-x: hidden !important; overflow-y: visible !important; }}
+    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} {{ flex: 1 1 0; min-height: 0; overflow: hidden; margin-bottom: 0; padding-bottom: 0; }}
+    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} > div {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 0; padding-bottom: 0; }}
+    [class*="st-key-geo_map_table_debug_wrap"] {{ flex: 0 1 auto; min-height: 0; margin-top: 0; padding-top: 0; }}
+    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} [data-testid="stVerticalBlock"] {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }}
+    [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; }}
+    [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] > div {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }}
+    [data-testid="column"]:last-of-type [data-testid="stColumn"] {{ height: auto !important; min-height: 0 !important; }}
+    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} [data-testid="stVerticalBlock"]:not([data-test-scroll-behavior="normal"]):not([data-test-scroll-behavior="scroll-to-bottom"]) {{ flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden; }}
+    [class*="geo_chat_header"] {{ overflow: visible !important; }}
     [class*="geo_chat_header"] [data-testid="stHeader"],
-    [class*="geo_chat_header"] h1 { margin-top: 0 !important; margin-bottom: 0.2rem !important; padding: 0 !important; }
-    [class*="geo_chat_header"] [data-testid="stMarkdown"] { margin: 0 0 0.2rem 0 !important; }
-    [class*="geo_chat_header"] [data-testid="stCaptionContainer"] { margin: 0 0 0.2rem 0 !important; }
-    [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div { margin: 0 !important; }
-    [class*="geo_chat_header"] hr { margin: 0.25rem 0 !important; }
-    [class*="st-key-data_source_selector"] { display: none !important; }
+    [class*="geo_chat_header"] h1 {{ margin-top: 0 !important; margin-bottom: 0.2rem !important; padding: 0 !important; }}
+    [class*="geo_chat_header"] [data-testid="stMarkdown"] {{ margin: 0 0 0.2rem 0 !important; }}
+    [class*="geo_chat_header"] [data-testid="stCaptionContainer"] {{ margin: 0 0 0.2rem 0 !important; }}
+    [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div {{ margin: 0 !important; }}
+    [class*="geo_chat_header"] hr {{ margin: 0.25rem 0 !important; }}
+    [class*="st-key-data_source_selector"] {{ display: none !important; }}
     """ + build_map_chat_input_css() + build_geo_map_column_css() + """
     [data-testid="stChatMessageContent"] {
         margin: 0 !important;
@@ -461,6 +478,7 @@ with chat_col:
             with st.chat_message("assistant"):
                 if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                     st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                    st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
                 st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = False
                 timer_placeholder = st.empty()
                 progress_placeholder = st.empty()
@@ -734,9 +752,15 @@ with chat_col:
     )
 
 with map_col:
-    with st.container(key="geo_map_panel"):
+    with st.container(key=GEO_MAP_STREAMLIT_KEY_IFRAME_HOST):
         if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
             map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
+            geo_map_height = FOLIUM_STATIC_DEFAULT_HEIGHT
+            if os.environ.get(STREAMLIT_DEBUG_GEO_MAP_ENV):
+                st.caption(
+                    f"[debug] map_actions={len(map_actions)} "
+                    f"geo_summary={'yes' if st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY) else 'no'}"
+                )
             if map_actions and len(map_actions) > 0:
                 lc_boundary = _fetch_lake_county_boundary_cached(
                     API_BASE_URL, st.session_state.get(SESSION_KEY_TOKEN)
@@ -751,23 +775,30 @@ with map_col:
                             "label": "Lake County Boundary",
                         },
                     )
+                augmented_actions = prepend_focus_zoom_if_any(
+                    augmented_actions,
+                    map_actions,
+                    st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY),
+                )
                 geo_map = render_geo_map(
                     augmented_actions,
-                    width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                    height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+                    width=None,
+                    height=geo_map_height,
                 )
                 if geo_map:
-                    folium_static(
+                    st_folium(
                         geo_map,
-                        width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                        height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+                        use_container_width=True,
+                        height=geo_map_height + 10,
+                        returned_objects=["last_clicked"],
+                        key="geo_lake_county_folium_map",
                     )
             else:
                 render_dataset_map(
                     st.session_state[SESSION_KEY_MAP_DATASET_DATA],
                     st.session_state[SESSION_KEY_MAP_AOI_DATA],
                     width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                    height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+                    height=geo_map_height,
                 )
         elif st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
             matches = st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES]
@@ -816,3 +847,7 @@ with map_col:
                 width=FOLIUM_STATIC_DEFAULT_WIDTH,
                 height=FOLIUM_STATIC_DEFAULT_HEIGHT,
             )
+
+    if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+        with st.container(key="geo_map_table_debug_wrap"):
+            render_geo_map_bottom_table()
