@@ -129,6 +129,14 @@ async def stream_chat(
                     content = f"User selected daterange in UI: start_date: {action_data['start_date']}, end_date: {action_data['end_date']}"
                     state_updates["start_date"] = action_data["start_date"]
                     state_updates["end_date"] = action_data["end_date"]
+                case "geo_lake_county_map_context":
+                    aid = action_data.get("active_basemap_id") or "openstreetmap"
+                    content = (
+                        f"[Map state] The user's map is currently using basemap_id={aid!r}. "
+                        "When they ask to change the basemap (including clearer, darker, satellite, night, terrain, typos), "
+                        "call geo_query_geo_projects with basemap_id set to one canonical id you infer "
+                        "(openstreetmap, carto_positron, carto_dark, open_topo, esri_imagery); omit basemap_id if they did not ask to change it.\n\n"
+                    )
                 case _:
                     content = f"User performed action in UI: {action_type}\n\n"
             ui_action_message.append(content)

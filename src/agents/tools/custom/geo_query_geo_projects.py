@@ -35,9 +35,13 @@ from src.api.lake_county_constants import (
 )
 from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.services.inflow_user_service import lookup_user_id_by_name
+from src.shared.geo_basemap import GEO_BASEMAP_MODEL_INSTRUCTIONS
 from src.shared.lake_county_constants import LC_MUNICIPALITIES_URL
 from src.shared.logging_config import get_logger
-from src.shared.map_utils import create_zoom_to_action
+from src.shared.map_utils import (
+    create_set_basemap_action,
+    create_zoom_to_action,
+)
 
 logger = get_logger(__name__)
 
@@ -320,8 +324,7 @@ async def _batch_fetch_geometries(
     return result
 
 
-@tool("geo_query_geo_projects")
-async def geo_query_geo_projects(
+async def _geo_query_geo_projects(
     where_clause: str = "1=1",
     project_category: str = "projects",
     jurisdiction: str | None = None,
@@ -329,6 +332,7 @@ async def geo_query_geo_projects(
     boundary_layer_id: str | None = None,
     boundary_filter_field: str | None = None,
     boundary_filter_value: str | None = None,
+    basemap_id: str | None = None,
     tool_call_id: Annotated[str, InjectedToolCallId] = None,
 ) -> Command:
     """
@@ -366,6 +370,8 @@ async def geo_query_geo_projects(
         submitted_by_user_name: When the user asks for projects by a person (e.g. "Adam's projects",
             "projects from Adam, projects by Adam"), pass the person's name here. The tool will look up the user ID in the
             inflow database and filter projects by submitted_by. Only use when a person name is mentioned.
+        basemap_id: Optional. Omit if the user did not ask to change the map basemap. If they did, pass exactly one
+            canonical id per the basemap policy appended to this tool description (infer from natural language).
     """
     tid = tool_call_id or ""
     client = _arcgis_client()
@@ -620,6 +626,9 @@ async def geo_query_geo_projects(
     if zoom_geometry:
         map_actions.insert(0, create_zoom_to_action(zoom_geometry))
 
+    if basemap_id is not None and str(basemap_id).strip():
+        map_actions.append(create_set_basemap_action(str(basemap_id).strip()))
+
     total = len(rep_features)
 
     _skip = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
@@ -711,4 +720,9 @@ async def geo_query_geo_projects(
     return Command(update=update)
 
 
+_geo_query_geo_projects.__doc__ = (
+    (_geo_query_geo_projects.__doc__ or "").rstrip() + "\n\n" + GEO_BASEMAP_MODEL_INSTRUCTIONS
+)
+
+geo_query_geo_projects = tool("geo_query_geo_projects")(_geo_query_geo_projects)
 register_tool(geo_query_geo_projects)

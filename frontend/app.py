@@ -13,7 +13,11 @@ from geo_map_project_table import (
     prepend_focus_zoom_if_any,
     render_geo_map_bottom_table,
 )
-from geo_map_renderer import render_geo_map
+from geo_map_renderer import (
+    active_basemap_id_from_map_actions,
+    merge_persist_basemap_into_actions,
+    render_geo_map,
+)
 from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
@@ -472,6 +476,12 @@ with chat_col:
                     else None
                 ),
             }
+            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                ui_context["geo_lake_county_map_context"] = {
+                    "active_basemap_id": active_basemap_id_from_map_actions(
+                        st.session_state.get(SESSION_KEY_MAP_ACTIONS)
+                    ),
+                }
             ui_context = {k: v for k, v in ui_context.items() if v is not None}
 
             geo_ai_buffer: list[str] = []
@@ -507,7 +517,10 @@ with chat_col:
                                         st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
                                 ma = update.get("map_actions")
                                 if ma:
-                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = ma
+                                    prev_ma = st.session_state.get(SESSION_KEY_MAP_ACTIONS)
+                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = (
+                                        merge_persist_basemap_into_actions(ma, prev_ma)
+                                    )
                                 cd = update.get("charts_data")
                                 if cd:
                                     st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = cd
@@ -531,7 +544,9 @@ with chat_col:
                             )
                             if is_primary_result:
                                 if incoming:
-                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = incoming
+                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = (
+                                        merge_persist_basemap_into_actions(incoming, existing)
+                                    )
                             else:
                                 st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + (
                                     incoming or []

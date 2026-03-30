@@ -37,6 +37,14 @@ def create_zoom_to_action(geometry: dict) -> dict:
     }
 
 
+def create_set_basemap_action(basemap_id: str) -> dict:
+    from src.shared.geo_basemap import GEO_BASEMAP_DEFAULT_ID, validate_basemap_id
+
+    raw = (basemap_id or "").strip()
+    bid = validate_basemap_id(raw) if raw else GEO_BASEMAP_DEFAULT_ID
+    return {"type": "setBasemap", "basemap_id": bid}
+
+
 def create_boundary_layer_action(
     geojson: dict,
     label: str,

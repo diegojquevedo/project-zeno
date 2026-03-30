@@ -8,6 +8,11 @@ from constants import (
     FOLIUM_ZOOMFIT_PADDING_PX,
     FOLIUM_ZOOMFIT_POINT_BUFFER_DEG,
 )
+from src.shared.geo_basemap import (
+    GEO_BASEMAP_DEFAULT_ID,
+    GEO_BASEMAP_SPECS,
+    validate_basemap_id,
+)
 
 
 def _expand_degenerate_bounds(
@@ -104,6 +109,70 @@ def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
     return center, zoom_start
 
 
+def merge_persist_basemap_into_actions(
+    incoming: list | None,
+    previous_full: list | None,
+) -> list:
+    if not incoming:
+        return incoming or []
+    out = list(incoming)
+    if any(a.get("type") == "setBasemap" for a in out):
+        return out
+    prev_bid = None
+    if previous_full:
+        for a in reversed(previous_full):
+            if a.get("type") == "setBasemap" and a.get("basemap_id"):
+                prev_bid = a["basemap_id"]
+                break
+    if prev_bid:
+        out.append({"type": "setBasemap", "basemap_id": prev_bid})
+    return out
+
+
+def _basemap_id_from_actions(map_actions: list) -> str:
+    for a in reversed(map_actions):
+        if a.get("type") == "setBasemap":
+            raw = a.get("basemap_id")
+            if isinstance(raw, str) and raw.strip():
+                return validate_basemap_id(raw.strip())
+    return GEO_BASEMAP_DEFAULT_ID
+
+
+def active_basemap_id_from_map_actions(map_actions: list | None) -> str:
+    if not map_actions:
+        return GEO_BASEMAP_DEFAULT_ID
+    return _basemap_id_from_actions(map_actions)
+
+
+def _folium_map_with_basemap(
+    center: list[float],
+    zoom_start: int,
+    basemap_id: str,
+    map_width: int | str,
+    height: int,
+) -> folium.Map:
+    bid = basemap_id if basemap_id in GEO_BASEMAP_SPECS else GEO_BASEMAP_DEFAULT_ID
+    tiles_kw, url, attr = GEO_BASEMAP_SPECS[bid]
+    if url:
+        m = folium.Map(
+            location=center,
+            zoom_start=zoom_start,
+            tiles=None,
+            width=map_width,
+            height=height,
+        )
+        folium.TileLayer(tiles=url, attr=attr or "", name="Basemap").add_to(m)
+    else:
+        m = folium.Map(
+            location=center,
+            zoom_start=zoom_start,
+            tiles=tiles_kw,
+            width=map_width,
+            height=height,
+        )
+    return m
+
+
 def render_geo_map(map_actions, width: int | str | None = 700, height=400):
     if not map_actions:
         return None
@@ -111,13 +180,8 @@ def render_geo_map(map_actions, width: int | str | None = 700, height=400):
     map_width: int | str = "100%" if width is None else width
 
     center, zoom_start = _compute_center_and_zoom(map_actions)
-    m = folium.Map(
-        location=center,
-        zoom_start=zoom_start,
-        tiles="OpenStreetMap",
-        width=map_width,
-        height=height,
-    )
+    basemap_id = _basemap_id_from_actions(map_actions)
+    m = _folium_map_with_basemap(center, zoom_start, basemap_id, map_width, height)
 
     zoom_action = next((a for a in map_actions if a.get("type") == "zoomTo"), None)
     if zoom_action and zoom_action.get("geometry"):
@@ -133,6 +197,9 @@ def render_geo_map(map_actions, width: int | str | None = 700, height=400):
 
     for action in map_actions:
         action_type = action.get("type")
+
+        if action_type == "setBasemap":
+            continue
 
         if action_type == "addBoundaryLayer":
             geojson_data = action.get("geojson")

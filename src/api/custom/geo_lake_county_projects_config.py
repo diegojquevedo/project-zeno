@@ -100,6 +100,13 @@ When the user asks for projects by a person's name (e.g. "Show me Adam's project
 "Adam's projects"), pass submitted_by_user_name="Adam". The tool looks up the user in the inflow database
 and filters by submitted_by. Only use when a person name is clearly mentioned — the first matching user is used.
 
+MAP BASEMAP (geo_query_geo_projects, parameter basemap_id):
+- User messages may include [Map state] with the current active_basemap_id. Use it for relative wording such as
+  clearer, lighter, darker, night, satellite, terrain, or obvious typos (e.g. terra → terrain / open_topo).
+- Pass basemap_id as exactly one of: openstreetmap, carto_positron, carto_dark, open_topo, esri_imagery.
+  You choose the id from natural language; the server does not parse free-form basemap names.
+- Omit basemap_id entirely when the user does not ask to change the map background (previous basemap is kept).
+
 MAP RENDERING:
 - The tool emits geometry layers (styled using layer configuration) and representative point markers.
 - When boundary_layer_id is provided, the boundary polygon is shown automatically.
