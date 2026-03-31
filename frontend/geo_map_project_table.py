@@ -3,12 +3,26 @@ import html
 import streamlit as st
 
 from constants import (
+    GEO_MAP_TABLE_DIVIDER_DARK,
+    GEO_MAP_TABLE_DIVIDER_LIGHT,
+    GEO_MAP_TABLE_FG_BODY_DARK,
+    GEO_MAP_TABLE_FG_BODY_LIGHT,
+    GEO_MAP_TABLE_FG_MUTED_DARK,
+    GEO_MAP_TABLE_FG_MUTED_LIGHT,
     GEO_MAP_TABLE_GOTO_BUTTON_BG,
     GEO_MAP_TABLE_GOTO_BUTTON_FONT_SIZE_PX,
     GEO_MAP_TABLE_GOTO_BUTTON_HOVER,
     GEO_MAP_TABLE_GOTO_BUTTON_MIN_HEIGHT_PX,
     GEO_MAP_TABLE_GOTO_BUTTON_MIN_WIDTH,
     GEO_MAP_TABLE_GOTO_BUTTON_PADDING,
+    GEO_MAP_TABLE_GOTO_DISABLED_BG_DARK,
+    GEO_MAP_TABLE_GOTO_DISABLED_BG_LIGHT,
+    GEO_MAP_TABLE_GOTO_DISABLED_FG_DARK,
+    GEO_MAP_TABLE_GOTO_DISABLED_FG_LIGHT,
+    GEO_MAP_TABLE_HEAD_BG_DARK,
+    GEO_MAP_TABLE_HEAD_BG_LIGHT,
+    GEO_MAP_TABLE_HEAD_RULE_DARK,
+    GEO_MAP_TABLE_HEAD_RULE_LIGHT,
     GEO_MAP_TABLE_HEADER_GAP_PX,
     GEO_MAP_TABLE_HEADER_PADDING_X_PX,
     GEO_MAP_TABLE_HEADER_PADDING_Y_PX,
@@ -18,84 +32,20 @@ from constants import (
     GEO_MAP_TABLE_ROW_LINE_HEIGHT,
     GEO_MAP_TABLE_ROW_PADDING_X_PX,
     GEO_MAP_TABLE_ROW_PADDING_Y_PX,
+    GEO_MAP_TABLE_TOGGLE_BG_DARK,
+    GEO_MAP_TABLE_TOGGLE_BG_LIGHT,
+    GEO_MAP_TABLE_TOGGLE_BORDER_DARK,
+    GEO_MAP_TABLE_TOGGLE_BORDER_LIGHT,
+    GEO_MAP_TABLE_TOGGLE_FG_DARK,
+    GEO_MAP_TABLE_TOGGLE_FG_LIGHT,
+    GEO_MAP_TABLE_TOGGLE_HOVER_BG_DARK,
+    GEO_MAP_TABLE_TOGGLE_HOVER_BG_LIGHT,
     SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
     SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
     SESSION_KEY_GEO_RESULT_SUMMARY,
     SESSION_KEY_MAP_ACTIONS,
     build_geo_map_panel_result_rows_css,
 )
-
-_TOGGLE_CSS = """
-[class*="st-key-geo_tbl_toggle_wrap"] {
-    padding: 0 !important;
-    margin: 0 !important;
-}
-[class*="st-key-geo_tbl_toggle_wrap"] > div {
-    padding: 0 !important;
-    margin: 0 !important;
-    gap: 0 !important;
-}
-[class*="st-key-geo_tbl_toggle_wrap"] [data-testid="stVerticalBlock"] {
-    padding: 0 !important;
-    margin: 0 !important;
-    gap: 0 !important;
-}
-[class*="st-key-geo_map_tbl_exp"],
-[class*="st-key-geo_map_tbl_col"] {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-}
-[class*="st-key-geo_map_tbl_exp"] button,
-[class*="st-key-geo_map_tbl_col"] button {
-    width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 0.3rem 0.7rem !important;
-    min-height: 0 !important;
-    height: auto !important;
-    line-height: 1.4 !important;
-    font-size: 0.82rem !important;
-    background: rgba(49,51,63,0.04) !important;
-    border: 1px solid rgba(49,51,63,0.18) !important;
-    border-radius: 6px !important;
-    color: rgba(49,51,63,0.75) !important;
-    cursor: pointer !important;
-    box-sizing: border-box !important;
-    transition: background 0.15s !important;
-}
-[class*="st-key-geo_map_tbl_exp"] button:hover,
-[class*="st-key-geo_map_tbl_col"] button:hover {
-    background: rgba(49,51,63,0.09) !important;
-}
-[class*="st-key-geo_map_tbl_exp"] button p,
-[class*="st-key-geo_map_tbl_col"] button p {
-    flex: 1 1 auto !important;
-    text-align: left !important;
-    margin: 0 !important;
-}
-[class*="st-key-geo_map_tbl_exp"] button svg,
-[class*="st-key-geo_map_tbl_col"] button svg,
-[class*="st-key-geo_map_tbl_exp"] button [data-testid="baseButton-icon"],
-[class*="st-key-geo_map_tbl_col"] button [data-testid="baseButton-icon"] {
-    display: none !important;
-}
-[class*="st-key-geo_map_tbl_exp"] button::after {
-    content: "▼";
-    flex-shrink: 0 !important;
-    font-size: 0.7rem !important;
-    opacity: 0.5 !important;
-    margin-left: auto !important;
-}
-[class*="st-key-geo_map_tbl_col"] button::after {
-    content: "▶";
-    flex-shrink: 0 !important;
-    font-size: 0.7rem !important;
-    opacity: 0.5 !important;
-    margin-left: auto !important;
-}
-"""
 
 
 def geo_map_project_table_css_rules() -> str:
@@ -106,10 +56,179 @@ def geo_map_project_table_css_rules() -> str:
     goto_mnh = GEO_MAP_TABLE_GOTO_BUTTON_MIN_HEIGHT_PX
     goto_fs = GEO_MAP_TABLE_GOTO_BUTTON_FONT_SIZE_PX
     rpy = GEO_MAP_TABLE_ROW_PADDING_Y_PX
-    rpx = GEO_MAP_TABLE_ROW_PADDING_X_PX
     rag = GEO_MAP_TABLE_ROW_ACTION_GAP_PX
     rlh = GEO_MAP_TABLE_ROW_LINE_HEIGHT
-    return _TOGGLE_CSS.strip() + f"""
+    hpy = GEO_MAP_TABLE_HEADER_PADDING_Y_PX
+    hpx = GEO_MAP_TABLE_HEADER_PADDING_X_PX
+    hg = GEO_MAP_TABLE_HEADER_GAP_PX
+    fml = GEO_MAP_TABLE_FG_MUTED_LIGHT
+    fmd = GEO_MAP_TABLE_FG_MUTED_DARK
+    fbl = GEO_MAP_TABLE_FG_BODY_LIGHT
+    fbd = GEO_MAP_TABLE_FG_BODY_DARK
+    tfgl = GEO_MAP_TABLE_TOGGLE_FG_LIGHT
+    tfgd = GEO_MAP_TABLE_TOGGLE_FG_DARK
+    tbgl = GEO_MAP_TABLE_TOGGLE_BG_LIGHT
+    tbgd = GEO_MAP_TABLE_TOGGLE_BG_DARK
+    tbdl = GEO_MAP_TABLE_TOGGLE_BORDER_LIGHT
+    tbdd = GEO_MAP_TABLE_TOGGLE_BORDER_DARK
+    thbl = GEO_MAP_TABLE_TOGGLE_HOVER_BG_LIGHT
+    thbd = GEO_MAP_TABLE_TOGGLE_HOVER_BG_DARK
+    divl = GEO_MAP_TABLE_DIVIDER_LIGHT
+    divd = GEO_MAP_TABLE_DIVIDER_DARK
+    hbg_l = GEO_MAP_TABLE_HEAD_BG_LIGHT
+    hbg_d = GEO_MAP_TABLE_HEAD_BG_DARK
+    hrl_l = GEO_MAP_TABLE_HEAD_RULE_LIGHT
+    hrl_d = GEO_MAP_TABLE_HEAD_RULE_DARK
+    gdb_l = GEO_MAP_TABLE_GOTO_DISABLED_BG_LIGHT
+    gdb_d = GEO_MAP_TABLE_GOTO_DISABLED_BG_DARK
+    gdf_l = GEO_MAP_TABLE_GOTO_DISABLED_FG_LIGHT
+    gdf_d = GEO_MAP_TABLE_GOTO_DISABLED_FG_DARK
+    rpx_cells = GEO_MAP_TABLE_ROW_PADDING_X_PX
+    return f"""
+[class*="st-key-geo_tbl_toggle_wrap"] {{
+    padding: 0 !important;
+    margin: 0 !important;
+}}
+[class*="st-key-geo_tbl_toggle_wrap"] > div {{
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+}}
+[class*="st-key-geo_tbl_toggle_wrap"] [data-testid="stVerticalBlock"] {{
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+}}
+[class*="st-key-geo_map_tbl_exp"],
+[class*="st-key-geo_map_tbl_col"] {{
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+}}
+[class*="st-key-geo_map_tbl_exp"] button,
+[class*="st-key-geo_map_tbl_col"] button {{
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.3rem 0.7rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    font-size: 0.82rem !important;
+    background: {tbgl} !important;
+    border: 1px solid {tbdl} !important;
+    border-radius: 6px !important;
+    color: {tfgl} !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    transition: background 0.15s !important;
+}}
+[class*="st-key-geo_map_tbl_exp"] button:hover,
+[class*="st-key-geo_map_tbl_col"] button:hover {{
+    background: {thbl} !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_map_tbl_exp"] button,
+    [class*="st-key-geo_map_tbl_col"] button {{
+        background: {tbgd} !important;
+        border-color: {tbdd} !important;
+        color: {tfgd} !important;
+    }}
+    [class*="st-key-geo_map_tbl_exp"] button:hover,
+    [class*="st-key-geo_map_tbl_col"] button:hover {{
+        background: {thbd} !important;
+    }}
+}}
+@supports (background-color: light-dark(white, black)) {{
+    [class*="st-key-geo_map_tbl_exp"] button,
+    [class*="st-key-geo_map_tbl_col"] button {{
+        background: light-dark({tbgl}, {tbgd}) !important;
+        border-color: light-dark({tbdl}, {tbdd}) !important;
+        color: light-dark({tfgl}, {tfgd}) !important;
+    }}
+    [class*="st-key-geo_map_tbl_exp"] button:hover,
+    [class*="st-key-geo_map_tbl_col"] button:hover {{
+        background: light-dark({thbl}, {thbd}) !important;
+    }}
+}}
+[class*="st-key-geo_map_tbl_exp"] button p,
+[class*="st-key-geo_map_tbl_col"] button p {{
+    flex: 1 1 auto !important;
+    text-align: left !important;
+    margin: 0 !important;
+}}
+[class*="st-key-geo_map_tbl_exp"] button svg,
+[class*="st-key-geo_map_tbl_col"] button svg,
+[class*="st-key-geo_map_tbl_exp"] button [data-testid="baseButton-icon"],
+[class*="st-key-geo_map_tbl_col"] button [data-testid="baseButton-icon"] {{
+    display: none !important;
+}}
+[class*="st-key-geo_map_tbl_exp"] button::after {{
+    content: "▼";
+    flex-shrink: 0 !important;
+    font-size: 0.7rem !important;
+    opacity: 0.5 !important;
+    margin-left: auto !important;
+}}
+[class*="st-key-geo_map_tbl_col"] button::after {{
+    content: "▶";
+    flex-shrink: 0 !important;
+    font-size: 0.7rem !important;
+    opacity: 0.5 !important;
+    margin-left: auto !important;
+}}
+[class*="st-key-geo_map_table_debug_wrap"] .geo-map-tbl-header {{
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: {hpy}px {hpx}px !important;
+    gap: {hg}px !important;
+    background: {hbg_l} !important;
+    border-bottom: 1px solid {hrl_l} !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: {fml} !important;
+    box-sizing: border-box !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_map_table_debug_wrap"] .geo-map-tbl-header {{
+        background: {hbg_d} !important;
+        border-bottom-color: {hrl_d} !important;
+        color: {fmd} !important;
+    }}
+}}
+@supports (color: light-dark(white, black)) {{
+    [class*="st-key-geo_map_table_debug_wrap"] .geo-map-tbl-header {{
+        background: light-dark({hbg_l}, {hbg_d}) !important;
+        border-bottom-color: light-dark({hrl_l}, {hrl_d}) !important;
+        color: light-dark({fml}, {fmd}) !important;
+    }}
+}}
+[class*="st-key-geo_tbl_rows"] .geo-map-tbl-id {{
+    color: {fml} !important;
+}}
+[class*="st-key-geo_tbl_rows"] .geo-map-tbl-name {{
+    color: {fbl} !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_tbl_rows"] .geo-map-tbl-id {{
+        color: {fmd} !important;
+    }}
+    [class*="st-key-geo_tbl_rows"] .geo-map-tbl-name {{
+        color: {fbd} !important;
+    }}
+}}
+@supports (color: light-dark(white, black)) {{
+    [class*="st-key-geo_tbl_rows"] .geo-map-tbl-id {{
+        color: light-dark({fml}, {fmd}) !important;
+    }}
+    [class*="st-key-geo_tbl_rows"] .geo-map-tbl-name {{
+        color: light-dark({fbl}, {fbd}) !important;
+    }}
+}}
 [class*="st-key-geo_tbl_rows"] [data-testid="stVerticalBlock"] {{
     gap: 0 !important;
 }}
@@ -117,13 +236,23 @@ def geo_map_project_table_css_rules() -> str:
     flex-shrink: 0 !important;
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] {{
-    padding: {rpy}px {rpx}px !important;
-    border-bottom: 1px solid rgba(49,51,63,0.08) !important;
+    padding: {rpy}px {rpx_cells}px !important;
+    border-bottom: 1px solid {divl} !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
     width: 100% !important;
     flex-shrink: 0 !important;
     box-sizing: border-box !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] {{
+        border-bottom-color: {divd} !important;
+    }}
+}}
+@supports (border-color: light-dark(white, black)) {{
+    [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] {{
+        border-bottom-color: light-dark({divl}, {divd}) !important;
+    }}
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"]:last-child {{
     border-bottom: none !important;
@@ -198,8 +327,20 @@ def geo_map_project_table_css_rules() -> str:
     background-color: {goto_hov} !important;
 }}
 [class*="st-key-geo_map_goto_"] button:disabled {{
-    background-color: rgba(49,51,63,0.15) !important;
-    color: rgba(49,51,63,0.4) !important;
+    background-color: {gdb_l} !important;
+    color: {gdf_l} !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_map_goto_"] button:disabled {{
+        background-color: {gdb_d} !important;
+        color: {gdf_d} !important;
+    }}
+}}
+@supports (background-color: light-dark(white, black)) {{
+    [class*="st-key-geo_map_goto_"] button:disabled {{
+        background-color: light-dark({gdb_l}, {gdb_d}) !important;
+        color: light-dark({gdf_l}, {gdf_d}) !important;
+    }}
 }}
 """
 
@@ -345,16 +486,9 @@ def render_geo_map_bottom_table() -> None:
             st.rerun(scope="fragment")
 
     if expanded:
-        hpy = GEO_MAP_TABLE_HEADER_PADDING_Y_PX
-        hpx = GEO_MAP_TABLE_HEADER_PADDING_X_PX
-        hg = GEO_MAP_TABLE_HEADER_GAP_PX
         lh = GEO_MAP_TABLE_ROW_LINE_HEIGHT
         st.markdown(
-            f'<div style="display:flex;flex-direction:row;align-items:center;'
-            f"padding:{hpy}px {hpx}px;gap:{hg}px;"
-            "background:rgba(49,51,63,0.06);border-bottom:1px solid rgba(49,51,63,0.12);"
-            "font-size:0.72rem;font-weight:600;text-transform:uppercase;"
-            'letter-spacing:0.04em;color:rgba(49,51,63,0.55);">'
+            '<div class="geo-map-tbl-header">'
             '<span style="flex:0 0 10%">ID</span>'
             '<span style="flex:1 1 auto;min-width:0">Name</span>'
             '<span style="flex:0 0 auto;min-width:4.75rem"></span>'
@@ -375,14 +509,15 @@ def render_geo_map_bottom_table() -> None:
                 r1, r2, r3 = st.columns([10, 58, 14])
                 with r1:
                     st.markdown(
-                        f'<p style="margin:0;padding:0;font-size:0.78rem;'
-                        f'color:rgba(49,51,63,0.55);line-height:{lh};white-space:nowrap">'
-                        f"{html.escape(str(display_id))}</p>",
+                        '<p class="geo-map-tbl-id" style="margin:0;padding:0;font-size:0.78rem;'
+                        f'line-height:{lh};white-space:nowrap">'
+                        + html.escape(str(display_id))
+                        + "</p>",
                         unsafe_allow_html=True,
                     )
                 with r2:
                     st.markdown(
-                        f'<p style="{GEO_MAP_TABLE_NAME_CELL_STYLE}">'
+                        f'<p class="geo-map-tbl-name" style="{GEO_MAP_TABLE_NAME_CELL_STYLE}">'
                         f"{html.escape(_cell_name_text(str(name)))}</p>",
                         unsafe_allow_html=True,
                     )
