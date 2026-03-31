@@ -178,7 +178,7 @@ For user administration commands (making users admin, whitelisting emails), see 
 The system automatically loads `.env` first, then overrides with `.env.local` for local development.
 
 ```bash
-uv run streamlit run src/frontend/app.py
+uv run streamlit run frontend/app.py
 ```
 
 ## Setup Database

@@ -18,6 +18,7 @@ from geo_map_renderer import (
     merge_persist_basemap_into_actions,
     render_geo_map,
 )
+from main_header import render_main_header
 from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
@@ -40,7 +41,10 @@ from constants import (
     GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_SHORT,
+    GEO_MAP_CHAT_MAP_COLUMN_WEIGHTS,
+    GEO_MAP_CHAT_MAP_COLUMNS_GAP,
     GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL,
+    GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT,
     GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
     SESSION_KEY_DATA_SOURCE,
@@ -272,11 +276,13 @@ if SESSION_KEY_TOKEN not in st.session_state or st.session_state[SESSION_KEY_TOK
         st.session_state[SESSION_KEY_TOKEN] = None
 
 st.set_page_config(
-    page_title="Map Chat - Zeno",
+    page_title="Geo AI",
     page_icon="🌎",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+render_main_header()
 
 st.markdown(
     f"""
@@ -299,7 +305,7 @@ st.markdown(
     [data-testid="column"]:last-of-type > div > [data-testid="stVerticalBlock"] {{ flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow-x: hidden !important; overflow-y: visible !important; }}
     {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} {{ flex: 1 1 0; min-height: 0; overflow: hidden; margin-bottom: 0; padding-bottom: 0; }}
     {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} > div {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 0; padding-bottom: 0; }}
-    [class*="st-key-geo_map_table_debug_wrap"] {{ flex: 0 1 auto; min-height: 0; margin-top: 0; padding-top: 0; }}
+    [class*="st-key-geo_map_table_debug_wrap"] {{ flex: 0 0 auto !important; flex-shrink: 0 !important; min-height: 0 !important; }}
     {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} [data-testid="stVerticalBlock"] {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }}
     [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; }}
     [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] > div {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }}
@@ -312,8 +318,22 @@ st.markdown(
     [class*="geo_chat_header"] [data-testid="stCaptionContainer"] {{ margin: 0 0 0.2rem 0 !important; }}
     [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div {{ margin: 0 !important; }}
     [class*="geo_chat_header"] hr {{ margin: 0.25rem 0 !important; }}
-    [class*="st-key-data_source_selector"] {{ display: none !important; }}
-    """ + build_map_chat_input_css() + build_geo_map_column_css() + """
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-data_source_select"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([class*="st-key-data_source_select"]) {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }}
+    """
+    + build_map_chat_input_css()
+    + build_geo_map_column_css()
+    + """
     [data-testid="stChatMessageContent"] {
         margin: 0 !important;
     }
@@ -356,513 +376,517 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-chat_col, map_col = st.columns([1, 1])
+with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
+    chat_col, map_col = st.columns(
+        GEO_MAP_CHAT_MAP_COLUMN_WEIGHTS,
+        gap=GEO_MAP_CHAT_MAP_COLUMNS_GAP,
+    )
 
-with chat_col:
-    with st.container(key="geo_chat_header"):
-        st.header("Geo AI")
-        st.write("This is a friendly prompt-based system to filter and analyze mapping data.")
+    with chat_col:
+        with st.container(border=True, key="geo_main_col_chat"):
+            with st.container(key="geo_chat_header"):
+                st.markdown(
+                    "<p>This is a friendly prompt-based system to filter and analyze mapping data.</p>"
+                    '<div aria-hidden="true" style="border-top:1px solid rgba(49,51,63,0.22);margin:0.6rem 0 0.5rem 0;width:100%;"></div>',
+                    unsafe_allow_html=True,
+                )
 
-        with st.container(key="data_source_selector"):
-            _ds_idx = list(DATA_SOURCES.values()).index(
-                st.session_state[SESSION_KEY_DATA_SOURCE]
-            ) if st.session_state[SESSION_KEY_DATA_SOURCE] in DATA_SOURCES.values() else 0
-            data_source = st.selectbox(
-                "Data source",
-                options=list(DATA_SOURCES.keys()),
-                index=_ds_idx,
-                key="data_source_select",
-            )
-            ds_value = DATA_SOURCES[data_source]
-            if ds_value != st.session_state[SESSION_KEY_DATA_SOURCE]:
-                st.session_state[SESSION_KEY_DATA_SOURCE] = ds_value
-                if ds_value == "lake_county":
-                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
-                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
-                elif ds_value == "geo_lake_county":
-                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
-                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
-                    st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                    st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                    st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                    st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                    st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
-                    st.session_state[SESSION_KEY_MAP_ACTIONS] = []
-                else:
-                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
-                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
-                    st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                    st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                    st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                    st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                    st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
-
-            if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
-                st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
-
-        st.markdown(
-            '<div aria-hidden="true" style="border-top:1px solid rgba(49,51,63,0.22);margin:0.6rem 0 0.5rem 0;width:100%;"></div>',
-            unsafe_allow_html=True,
-        )
-
-    pending_input = st.session_state.pop(SESSION_KEY_MAP_CHAT_PENDING_INPUT, None)
-    if pending_input:
-        st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append({"role": "user", "content": pending_input})
-
-    messages = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
-    _is_geo_lc = st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
-
-    with st.container(height=600, key="geo_chat_history", border=False):
-        rest_msgs = messages[:-1] if len(messages) > 1 else []
-        last_msg = messages[-1] if messages else None
-        for message in rest_msgs:
-            with st.chat_message(message["role"]):
-                st.markdown(message.get("content") or "")
-
-        if last_msg:
-            with st.chat_message(last_msg["role"]):
-                if last_msg["role"] == "assistant" and _is_geo_lc:
-                    raw = (last_msg.get("content") or "").strip()
-                    geo_snap = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
-                    if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
-                        st.caption(raw)
-                        if geo_snap and isinstance(geo_snap, dict):
-                            _render_geo_result_summary(geo_snap)
+                _ds_idx = list(DATA_SOURCES.values()).index(
+                    st.session_state[SESSION_KEY_DATA_SOURCE]
+                ) if st.session_state[SESSION_KEY_DATA_SOURCE] in DATA_SOURCES.values() else 0
+                data_source = st.selectbox(
+                    "Data source",
+                    options=list(DATA_SOURCES.keys()),
+                    index=_ds_idx,
+                    key="data_source_select",
+                    label_visibility="collapsed",
+                )
+                ds_value = DATA_SOURCES[data_source]
+                if ds_value != st.session_state[SESSION_KEY_DATA_SOURCE]:
+                    st.session_state[SESSION_KEY_DATA_SOURCE] = ds_value
+                    if ds_value == "lake_county":
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
+                        st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+                    elif ds_value == "geo_lake_county":
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
+                        st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                        st.session_state[SESSION_KEY_MAP_ACTIONS] = []
                     else:
-                        sp, sug = _split_geo_narrative_for_display(raw)
-                        _render_geo_assistant_narrative_blocks(
-                            sp, sug, geo_snap, show_structured=True
-                        )
-                else:
-                    st.markdown(last_msg.get("content") or "")
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
+                        st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
+                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
 
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
-            project_list = st.session_state.get(SESSION_KEY_MAP_PROJECT_LIST)
-            charts_data = st.session_state.get(SESSION_KEY_MAP_CHARTS_DATA)
-            if project_list and isinstance(project_list, list) and len(project_list) > 0:
-                n = len(project_list)
-                by_type = Counter(
-                    m.get("attributes", {}).get("projecttype") or "(blank)"
-                    for m in project_list
-                )
-                top_types = ", ".join(f"{c} {t}" for t, c in by_type.most_common(5))
-                st.markdown(f"**Found {n} project{'s' if n != 1 else ''}**")
-                if top_types:
-                    st.caption(f"By type: {top_types}")
-                if charts_data and isinstance(charts_data, list):
-                    render_charts(charts_data)
+                if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+                    st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
 
-        if pending_input:
-            client = ZenoClient(base_url=API_BASE_URL, token=st.session_state[SESSION_KEY_TOKEN])
-            dataset = (
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA]
-                if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
-                else FOREST_CARBON_REMOVALS_DATASET
-            )
-            ui_context = {
-                "data_source_selected": {"data_source": st.session_state[SESSION_KEY_DATA_SOURCE]},
-                "dataset_selected": {"dataset": dataset},
-                "aoi_selected": (
-                    {
-                        "aoi": LAKE_COUNTY_AOI,
-                        "aoi_name": "Lake County",
-                        "subregion_aois": [],
-                        "subregion": "",
-                        "subtype": "",
-                    }
-                    if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
-                    else None
-                ),
-            }
-            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                ui_context["geo_lake_county_map_context"] = {
-                    "active_basemap_id": active_basemap_id_from_map_actions(
-                        st.session_state.get(SESSION_KEY_MAP_ACTIONS)
-                    ),
-                }
-            ui_context = {k: v for k, v in ui_context.items() if v is not None}
+            pending_input = st.session_state.pop(SESSION_KEY_MAP_CHAT_PENDING_INPUT, None)
+            if pending_input:
+                st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append({"role": "user", "content": pending_input})
 
-            geo_ai_buffer: list[str] = []
-            with st.chat_message("assistant"):
-                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                    st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
-                    st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
-                st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = False
-                timer_placeholder = st.empty()
-                progress_placeholder = st.empty()
-                progress_placeholder.progress(0, text="Connecting...")
-                start_time = time.perf_counter()
-                stream_count = 0
-                last_tool_content = [None]
-                last_tool_name = [None]
-                for stream in client.chat(
-                    query=pending_input,
-                    user_persona="Researcher",
-                    ui_context=ui_context,
-                    thread_id=st.session_state[SESSION_KEY_MAP_CHAT_SESSION_ID],
-                    user_id=st.session_state.get("user", {}).get("email", "anonymous"),
-                ):
-                    try:
-                        if stream.get("node") == "trace_info":
-                            continue
-                        if stream.get("node") == "ui_state":
-                            update = json.loads(stream["update"])
-                            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                                gs = update.get("geo_result_summary")
-                                if gs is not None:
-                                    st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
-                                    if isinstance(gs, dict) and gs.get("charts_data"):
-                                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
-                                ma = update.get("map_actions")
-                                if ma:
-                                    prev_ma = st.session_state.get(SESSION_KEY_MAP_ACTIONS)
-                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = (
-                                        merge_persist_basemap_into_actions(ma, prev_ma)
-                                    )
-                                cd = update.get("charts_data")
-                                if cd:
-                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = cd
-                            continue
-                        stream_count += 1
-                        progress_placeholder.progress(
-                            min(0.95, 0.05 + stream_count * 0.08),
-                            text=f"Generating... ({stream_count} updates)",
-                        )
-                        update = json.loads(stream["update"])
-                        if "aoi" in update:
-                            st.session_state[SESSION_KEY_MAP_AOI_DATA] = update["aoi"]
-                        if "dataset" in update:
-                            st.session_state[SESSION_KEY_MAP_DATASET_DATA] = update["dataset"]
-                        if "map_actions" in update:
-                            incoming = update["map_actions"]
-                            existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
-                            primary_types = {"addFeatureLayer"} | get_primary_action_types()
-                            is_primary_result = any(
-                                a.get("type") in primary_types for a in (incoming or [])
-                            )
-                            if is_primary_result:
-                                if incoming:
-                                    st.session_state[SESSION_KEY_MAP_ACTIONS] = (
-                                        merge_persist_basemap_into_actions(incoming, existing)
-                                    )
+            messages = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
+            _is_geo_lc = st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
+
+            with st.container(height=600, key="geo_chat_history", border=False):
+                rest_msgs = messages[:-1] if len(messages) > 1 else []
+                last_msg = messages[-1] if messages else None
+                for message in rest_msgs:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message.get("content") or "")
+
+                if last_msg:
+                    with st.chat_message(last_msg["role"]):
+                        if last_msg["role"] == "assistant" and _is_geo_lc:
+                            raw = (last_msg.get("content") or "").strip()
+                            geo_snap = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                            if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
+                                st.caption(raw)
+                                if geo_snap and isinstance(geo_snap, dict):
+                                    _render_geo_result_summary(geo_snap)
                             else:
-                                st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + (
-                                    incoming or []
+                                sp, sug = _split_geo_narrative_for_display(raw)
+                                _render_geo_assistant_narrative_blocks(
+                                    sp, sug, geo_snap, show_structured=True
                                 )
-                        if "geo_result_summary" in update:
-                            gs = update["geo_result_summary"]
-                            if gs is None:
-                                st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
-                            else:
-                                st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
-                                if (
-                                    isinstance(gs, dict)
-                                    and gs.get("charts_data")
-                                    and st.session_state.get(SESSION_KEY_DATA_SOURCE)
-                                    == "geo_lake_county"
-                                ):
-                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
-                        if update.get("charts_data") and st.session_state.get(
-                            SESSION_KEY_DATA_SOURCE
-                        ) == "geo_lake_county":
-                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
-                        if (
-                            "project_result" in update
-                            and st.session_state.get(SESSION_KEY_DATA_SOURCE) != "geo_lake_county"
-                        ):
-                            pr = update["project_result"]
-                            if pr is None:
-                                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "lake_county":
-                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
-                            elif pr.get("list"):
-                                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = pr.get("matches", [])
-                                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = pr.get("jurisdiction_boundary")
-                                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
-                                    pr.get("district_boundary") or pr.get("county_board_district_boundary")
-                                )
-                                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                                if update.get("charts_data"):
-                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
-                            elif pr.get("multiple"):
-                                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = pr.get("matches", [])
-                                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
-                            else:
-                                st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = pr
-                                st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                                st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
-                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
-                                st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
-                                st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
-                                    pr.get("district_boundary") or pr.get("county_board_district_boundary")
-                                )
-                        for msg in update.get("messages") or []:
-                            if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
-                                last_tool_content[0] = msg["kwargs"]["content"]
-                                last_tool_name[0] = msg["kwargs"].get("name")
-                        elapsed = time.perf_counter() - start_time
-                        if SHOW_RESPONSE_TIMER:
-                            timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
-                        _defer_charts = (
-                            st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
-                        )
-                        _buf = geo_ai_buffer if _defer_charts else None
-                        render_stream(
-                            stream,
-                            skip_maps=True,
-                            defer_stream_charts=_defer_charts,
-                            ai_text_buffer=_buf,
-                        )
-                    except Exception as e:
-                        st.error(f"Error processing stream: {e}")
-                chat_msgs = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
-                if chat_msgs and chat_msgs[-1].get("role") == "user":
-                    geo_snap = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
-                    combined_narrative = "\n\n".join(geo_ai_buffer).strip()
-                    assistant_body = None
-                    if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                        if combined_narrative:
-                            assistant_body = combined_narrative
-                        elif (
-                            geo_snap
-                            and isinstance(geo_snap, dict)
-                            and last_tool_name[0] in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS
-                        ):
-                            assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
-                        elif last_tool_content[0]:
-                            assistant_body = last_tool_content[0]
-                        elif geo_snap and isinstance(geo_snap, dict):
-                            assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
-                    elif last_tool_content[0]:
-                        if (
-                            st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
-                            and isinstance(st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY), dict)
-                            and last_tool_name[0] in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS
-                        ):
-                            assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
                         else:
-                            assistant_body = last_tool_content[0]
-                    if assistant_body:
-                        st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
-                            {"role": "assistant", "content": assistant_body}
+                            st.markdown(last_msg.get("content") or "")
+
+                if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+                    project_list = st.session_state.get(SESSION_KEY_MAP_PROJECT_LIST)
+                    charts_data = st.session_state.get(SESSION_KEY_MAP_CHARTS_DATA)
+                    if project_list and isinstance(project_list, list) and len(project_list) > 0:
+                        n = len(project_list)
+                        by_type = Counter(
+                            m.get("attributes", {}).get("projecttype") or "(blank)"
+                            for m in project_list
                         )
-                progress_placeholder.empty()
-                total_time = time.perf_counter() - start_time
-                if SHOW_RESPONSE_TIMER:
-                    timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
-                geo_summary = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
-                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                    combined_live = "\n\n".join(geo_ai_buffer).strip()
-                    if combined_live:
-                        sp, sug = _split_geo_narrative_for_display(combined_live)
-                        _render_geo_assistant_narrative_blocks(
-                            sp, sug, geo_summary, show_structured=True
-                        )
-                    elif geo_summary and isinstance(geo_summary, dict):
-                        _render_geo_result_summary(geo_summary)
-                elif geo_summary and isinstance(geo_summary, dict):
-                    _render_geo_result_summary(geo_summary)
+                        top_types = ", ".join(f"{c} {t}" for t, c in by_type.most_common(5))
+                        st.markdown(f"**Found {n} project{'s' if n != 1 else ''}**")
+                        if top_types:
+                            st.caption(f"By type: {top_types}")
+                        if charts_data and isinstance(charts_data, list):
+                            render_charts(charts_data)
 
-    if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
-        st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None
-
-    def handle_map_chat_input():
-        current = st.session_state.get(SESSION_KEY_MAP_CHAT_USER_INPUT, "")
-        if current and current.strip():
-            st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = current.strip()
-
-    _chat_msgs = st.session_state.get(SESSION_KEY_MAP_CHAT_MESSAGES, [])
-    _user_has_prompted = any(
-        isinstance(m, dict) and m.get("role") == "user" for m in _chat_msgs
-    )
-    if _user_has_prompted:
-        _chat_placeholder = GEO_CHAT_PLACEHOLDER_SHORT
-    else:
-        _base_ph = (
-            GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG
-            if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
-            else GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG
-            if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county"
-            else GEO_CHAT_PLACEHOLDER_FOREST_LONG
-        )
-        _chat_placeholder = _base_ph
-    st.chat_input(
-        _chat_placeholder,
-        key=SESSION_KEY_MAP_CHAT_USER_INPUT,
-        on_submit=handle_map_chat_input,
-    )
-
-    _scroll_chat_to_bottom_js = """
-    (function() {
-        var doc = null;
-        try { doc = window.parent.document; } catch (e) { return; }
-        function findScrollable(el) {
-            if (!el) return null;
-            try {
-                var s = window.parent.getComputedStyle(el);
-                if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el;
-            } catch (e) {}
-            for (var i = 0; i < (el.children || []).length; i++) {
-                var c = findScrollable(el.children[i]);
-                if (c) return c;
-            }
-            return null;
-        }
-        function getContainer() {
-            var c = doc.querySelector('[class*="st-key-geo_chat_history"]') || doc.querySelector('[class*="geo_chat_history"]');
-            if (c) return findScrollable(c) || c;
-            return null;
-        }
-        function scrollToBottom() {
-            var el = getContainer();
-            if (el) el.scrollTop = el.scrollHeight;
-        }
-        var rafId = null;
-        function isInsideExpander(node) {
-            if (!node || !node.closest) return false;
-            return !!(node.closest('[data-testid="stExpander"]') || node.closest('[class*="streamlit-expander"]') || node.closest('[class*="stExpander"]'));
-        }
-        function scheduleScroll(mutations) {
-            for (var i = 0; i < (mutations && mutations.length) || 0; i++) {
-                var m = mutations[i];
-                if (isInsideExpander(m.target)) return;
-            }
-            if (rafId) return;
-            rafId = window.parent.requestAnimationFrame(function() {
-                rafId = null;
-                scrollToBottom();
-            });
-        }
-        var attempts = 0;
-        function init() {
-            var el = getContainer();
-            if (!el && attempts < 60) {
-                attempts++;
-                window.parent.requestAnimationFrame(init);
-                return;
-            }
-            scrollToBottom();
-            if (el) {
-                var obs = new MutationObserver(scheduleScroll);
-                obs.observe(el, { childList: true, subtree: true });
-            }
-        }
-        window.parent.requestAnimationFrame(init);
-    })();
-    """
-    components.html(
-        f"<script>{_scroll_chat_to_bottom_js}</script>",
-        height=0,
-    )
-
-with map_col:
-    with st.container(key=GEO_MAP_STREAMLIT_KEY_IFRAME_HOST):
-        if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
-            map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
-            geo_map_height = FOLIUM_STATIC_DEFAULT_HEIGHT
-            if os.environ.get(STREAMLIT_DEBUG_GEO_MAP_ENV):
-                st.caption(
-                    f"[debug] map_actions={len(map_actions)} "
-                    f"geo_summary={'yes' if st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY) else 'no'}"
-                )
-            if map_actions and len(map_actions) > 0:
-                lc_boundary = _fetch_lake_county_boundary_cached(
-                    API_BASE_URL, st.session_state.get(SESSION_KEY_TOKEN)
-                )
-                augmented_actions = list(map_actions)
-                if lc_boundary and lc_boundary.get("features"):
-                    augmented_actions.insert(
-                        0,
-                        {
-                            "type": "addBoundaryLayer",
-                            "geojson": lc_boundary,
-                            "label": "Lake County Boundary",
-                        },
+                if pending_input:
+                    client = ZenoClient(base_url=API_BASE_URL, token=st.session_state[SESSION_KEY_TOKEN])
+                    dataset = (
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA]
+                        if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
+                        else FOREST_CARBON_REMOVALS_DATASET
                     )
-                augmented_actions = prepend_focus_zoom_if_any(
-                    augmented_actions,
-                    map_actions,
-                    st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY),
-                )
-                geo_map = render_geo_map(
-                    augmented_actions,
-                    width=None,
-                    height=geo_map_height,
-                )
-                if geo_map:
-                    st_folium(
-                        geo_map,
-                        use_container_width=True,
-                        height=geo_map_height + 10,
-                        returned_objects=["last_clicked"],
-                        key="geo_lake_county_folium_map",
-                    )
-            else:
-                render_dataset_map(
-                    st.session_state[SESSION_KEY_MAP_DATASET_DATA],
-                    st.session_state[SESSION_KEY_MAP_AOI_DATA],
-                    width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                    height=geo_map_height,
-                )
-        elif st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
-            matches = st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES]
-            project_list = st.session_state[SESSION_KEY_MAP_PROJECT_LIST]
-            if matches and not st.session_state[SESSION_KEY_MAP_PROJECT_DATA] and not project_list:
-                st.write("**Select a project to view on the map:**")
-                cols = st.columns(min(len(matches), 3))
-                for i, m in enumerate(matches):
-                    name = m.get("attributes", {}).get("Name", f"Project {i + 1}")
-                    with cols[i % 3]:
-                        if st.button(
-                            name[:60] + ("..." if len(name) > 60 else ""),
-                            key=f"lc_project_{i}",
-                        ):
-                            attrs = m.get("attributes", {})
-                            st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = {
-                                "rep_point_geojson": m.get("rep_point_geojson"),
-                                "geometry_geojson": m.get("geometry_geojson"),
-                                "geojson": m.get("geometry_geojson") or m.get("rep_point_geojson"),
-                                "attributes": attrs,
+                    ui_context = {
+                        "data_source_selected": {"data_source": st.session_state[SESSION_KEY_DATA_SOURCE]},
+                        "dataset_selected": {"dataset": dataset},
+                        "aoi_selected": (
+                            {
+                                "aoi": LAKE_COUNTY_AOI,
+                                "aoi_name": "Lake County",
+                                "subregion_aois": [],
+                                "subregion": "",
+                                "subtype": "",
                             }
-                            st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
-                            detail_lines = [f"# {attrs.get('Name', name)}"]
-                            for k, v in sorted(attrs.items()):
-                                if v is not None and str(v).strip() and k not in ("OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"):
-                                    label = k.replace("_", " ").title()
-                                    detail_lines.append(f"- **{label}:** {v}")
-                            st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
-                                {"role": "assistant", "content": "\n".join(detail_lines)}
-                            )
-                            st.rerun()
-            render_dataset_map(
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA],
-                st.session_state[SESSION_KEY_MAP_AOI_DATA],
-                width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                height=FOLIUM_STATIC_DEFAULT_HEIGHT,
-                project_data=st.session_state[SESSION_KEY_MAP_PROJECT_DATA],
-                project_list=st.session_state[SESSION_KEY_MAP_PROJECT_LIST],
-                jurisdiction_boundary=st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY],
-                county_board_district_boundary=st.session_state.get(SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY),
+                            if st.session_state[SESSION_KEY_DATA_SOURCE] in ("lake_county", "geo_lake_county")
+                            else None
+                        ),
+                    }
+                    if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                        ui_context["geo_lake_county_map_context"] = {
+                            "active_basemap_id": active_basemap_id_from_map_actions(
+                                st.session_state.get(SESSION_KEY_MAP_ACTIONS)
+                            ),
+                        }
+                    ui_context = {k: v for k, v in ui_context.items() if v is not None}
+
+                    geo_ai_buffer: list[str] = []
+                    with st.chat_message("assistant"):
+                        if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                            st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                            st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
+                        st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = False
+                        timer_placeholder = st.empty()
+                        progress_placeholder = st.empty()
+                        progress_placeholder.progress(0, text="Connecting...")
+                        start_time = time.perf_counter()
+                        stream_count = 0
+                        last_tool_content = [None]
+                        last_tool_name = [None]
+                        for stream in client.chat(
+                            query=pending_input,
+                            user_persona="Researcher",
+                            ui_context=ui_context,
+                            thread_id=st.session_state[SESSION_KEY_MAP_CHAT_SESSION_ID],
+                            user_id=st.session_state.get("user", {}).get("email", "anonymous"),
+                        ):
+                            try:
+                                if stream.get("node") == "trace_info":
+                                    continue
+                                if stream.get("node") == "ui_state":
+                                    update = json.loads(stream["update"])
+                                    if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                        gs = update.get("geo_result_summary")
+                                        if gs is not None:
+                                            st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
+                                            if isinstance(gs, dict) and gs.get("charts_data"):
+                                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
+                                        ma = update.get("map_actions")
+                                        if ma:
+                                            prev_ma = st.session_state.get(SESSION_KEY_MAP_ACTIONS)
+                                            st.session_state[SESSION_KEY_MAP_ACTIONS] = (
+                                                merge_persist_basemap_into_actions(ma, prev_ma)
+                                            )
+                                        cd = update.get("charts_data")
+                                        if cd:
+                                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = cd
+                                    continue
+                                stream_count += 1
+                                progress_placeholder.progress(
+                                    min(0.95, 0.05 + stream_count * 0.08),
+                                    text=f"Generating... ({stream_count} updates)",
+                                )
+                                update = json.loads(stream["update"])
+                                if "aoi" in update:
+                                    st.session_state[SESSION_KEY_MAP_AOI_DATA] = update["aoi"]
+                                if "dataset" in update:
+                                    st.session_state[SESSION_KEY_MAP_DATASET_DATA] = update["dataset"]
+                                if "map_actions" in update:
+                                    incoming = update["map_actions"]
+                                    existing = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
+                                    primary_types = {"addFeatureLayer"} | get_primary_action_types()
+                                    is_primary_result = any(
+                                        a.get("type") in primary_types for a in (incoming or [])
+                                    )
+                                    if is_primary_result:
+                                        if incoming:
+                                            st.session_state[SESSION_KEY_MAP_ACTIONS] = (
+                                                merge_persist_basemap_into_actions(incoming, existing)
+                                            )
+                                    else:
+                                        st.session_state[SESSION_KEY_MAP_ACTIONS] = existing + (
+                                            incoming or []
+                                        )
+                                if "geo_result_summary" in update:
+                                    gs = update["geo_result_summary"]
+                                    if gs is None:
+                                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                                    else:
+                                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
+                                        if (
+                                            isinstance(gs, dict)
+                                            and gs.get("charts_data")
+                                            and st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                                            == "geo_lake_county"
+                                        ):
+                                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
+                                if update.get("charts_data") and st.session_state.get(
+                                    SESSION_KEY_DATA_SOURCE
+                                ) == "geo_lake_county":
+                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
+                                if (
+                                    "project_result" in update
+                                    and st.session_state.get(SESSION_KEY_DATA_SOURCE) != "geo_lake_county"
+                                ):
+                                    pr = update["project_result"]
+                                    if pr is None:
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                                        if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "lake_county":
+                                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                                    elif pr.get("list"):
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = pr.get("matches", [])
+                                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = pr.get("jurisdiction_boundary")
+                                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
+                                            pr.get("district_boundary") or pr.get("county_board_district_boundary")
+                                        )
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                                        if update.get("charts_data"):
+                                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
+                                    elif pr.get("multiple"):
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = pr.get("matches", [])
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                                    else:
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = pr
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                                        st.session_state[SESSION_KEY_MAP_PROJECT_LIST] = None
+                                        st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                        st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
+                                        st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = (
+                                            pr.get("district_boundary") or pr.get("county_board_district_boundary")
+                                        )
+                                for msg in update.get("messages") or []:
+                                    if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
+                                        last_tool_content[0] = msg["kwargs"]["content"]
+                                        last_tool_name[0] = msg["kwargs"].get("name")
+                                elapsed = time.perf_counter() - start_time
+                                if SHOW_RESPONSE_TIMER:
+                                    timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
+                                _defer_charts = (
+                                    st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
+                                )
+                                _buf = geo_ai_buffer if _defer_charts else None
+                                render_stream(
+                                    stream,
+                                    skip_maps=True,
+                                    defer_stream_charts=_defer_charts,
+                                    ai_text_buffer=_buf,
+                                )
+                            except Exception as e:
+                                st.error(f"Error processing stream: {e}")
+                        chat_msgs = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
+                        if chat_msgs and chat_msgs[-1].get("role") == "user":
+                            geo_snap = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                            combined_narrative = "\n\n".join(geo_ai_buffer).strip()
+                            assistant_body = None
+                            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                if combined_narrative:
+                                    assistant_body = combined_narrative
+                                elif (
+                                    geo_snap
+                                    and isinstance(geo_snap, dict)
+                                    and last_tool_name[0] in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS
+                                ):
+                                    assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
+                                elif last_tool_content[0]:
+                                    assistant_body = last_tool_content[0]
+                                elif geo_snap and isinstance(geo_snap, dict):
+                                    assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
+                            elif last_tool_content[0]:
+                                if (
+                                    st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                                    and isinstance(st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY), dict)
+                                    and last_tool_name[0] in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS
+                                ):
+                                    assistant_body = GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER
+                                else:
+                                    assistant_body = last_tool_content[0]
+                            if assistant_body:
+                                st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
+                                    {"role": "assistant", "content": assistant_body}
+                                )
+                        progress_placeholder.empty()
+                        total_time = time.perf_counter() - start_time
+                        if SHOW_RESPONSE_TIMER:
+                            timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
+                        geo_summary = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                        if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                            combined_live = "\n\n".join(geo_ai_buffer).strip()
+                            if combined_live:
+                                sp, sug = _split_geo_narrative_for_display(combined_live)
+                                _render_geo_assistant_narrative_blocks(
+                                    sp, sug, geo_summary, show_structured=True
+                                )
+                            elif geo_summary and isinstance(geo_summary, dict):
+                                _render_geo_result_summary(geo_summary)
+                        elif geo_summary and isinstance(geo_summary, dict):
+                            _render_geo_result_summary(geo_summary)
+
+            if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
+                st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None
+
+            def handle_map_chat_input():
+                current = st.session_state.get(SESSION_KEY_MAP_CHAT_USER_INPUT, "")
+                if current and current.strip():
+                    st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = current.strip()
+
+            _chat_msgs = st.session_state.get(SESSION_KEY_MAP_CHAT_MESSAGES, [])
+            _user_has_prompted = any(
+                isinstance(m, dict) and m.get("role") == "user" for m in _chat_msgs
             )
-        else:
-            render_dataset_map(
-                st.session_state[SESSION_KEY_MAP_DATASET_DATA],
-                st.session_state[SESSION_KEY_MAP_AOI_DATA],
-                width=FOLIUM_STATIC_DEFAULT_WIDTH,
-                height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+            if _user_has_prompted:
+                _chat_placeholder = GEO_CHAT_PLACEHOLDER_SHORT
+            else:
+                _base_ph = (
+                    GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG
+                    if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county"
+                    else GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG
+                    if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county"
+                    else GEO_CHAT_PLACEHOLDER_FOREST_LONG
+                )
+                _chat_placeholder = _base_ph
+            st.chat_input(
+                _chat_placeholder,
+                key=SESSION_KEY_MAP_CHAT_USER_INPUT,
+                on_submit=handle_map_chat_input,
             )
 
-    if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-        with st.container(key="geo_map_table_debug_wrap"):
-            render_geo_map_bottom_table()
+        _scroll_chat_to_bottom_js = """
+            (function() {
+                var doc = null;
+                try { doc = window.parent.document; } catch (e) { return; }
+                function findScrollable(el) {
+                    if (!el) return null;
+                    try {
+                        var s = window.parent.getComputedStyle(el);
+                        if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el;
+                    } catch (e) {}
+                    for (var i = 0; i < (el.children || []).length; i++) {
+                        var c = findScrollable(el.children[i]);
+                        if (c) return c;
+                    }
+                    return null;
+                }
+                function getContainer() {
+                    var c = doc.querySelector('[class*="st-key-geo_chat_history"]') || doc.querySelector('[class*="geo_chat_history"]');
+                    if (c) return findScrollable(c) || c;
+                    return null;
+                }
+                function scrollToBottom() {
+                    var el = getContainer();
+                    if (el) el.scrollTop = el.scrollHeight;
+                }
+                var rafId = null;
+                function isInsideExpander(node) {
+                    if (!node || !node.closest) return false;
+                    return !!(node.closest('[data-testid="stExpander"]') || node.closest('[class*="streamlit-expander"]') || node.closest('[class*="stExpander"]'));
+                }
+                function scheduleScroll(mutations) {
+                    for (var i = 0; i < (mutations && mutations.length) || 0; i++) {
+                        var m = mutations[i];
+                        if (isInsideExpander(m.target)) return;
+                    }
+                    if (rafId) return;
+                    rafId = window.parent.requestAnimationFrame(function() {
+                        rafId = null;
+                        scrollToBottom();
+                    });
+                }
+                var attempts = 0;
+                function init() {
+                    var el = getContainer();
+                    if (!el && attempts < 60) {
+                        attempts++;
+                        window.parent.requestAnimationFrame(init);
+                        return;
+                    }
+                    scrollToBottom();
+                    if (el) {
+                        var obs = new MutationObserver(scheduleScroll);
+                        obs.observe(el, { childList: true, subtree: true });
+                    }
+                }
+                window.parent.requestAnimationFrame(init);
+            })();
+            """
+        components.html(
+            f"<script>{_scroll_chat_to_bottom_js}</script>",
+            height=0,
+        )
+
+    with map_col:
+        with st.container(border=True, key="geo_main_col_map"):
+            with st.container(key=GEO_MAP_STREAMLIT_KEY_IFRAME_HOST):
+                if st.session_state[SESSION_KEY_DATA_SOURCE] == "geo_lake_county":
+                    map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
+                    geo_map_height = FOLIUM_STATIC_DEFAULT_HEIGHT
+                    if os.environ.get(STREAMLIT_DEBUG_GEO_MAP_ENV):
+                        st.caption(
+                            f"[debug] map_actions={len(map_actions)} "
+                            f"geo_summary={'yes' if st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY) else 'no'}"
+                        )
+                    if map_actions and len(map_actions) > 0:
+                        lc_boundary = _fetch_lake_county_boundary_cached(
+                            API_BASE_URL, st.session_state.get(SESSION_KEY_TOKEN)
+                        )
+                        augmented_actions = list(map_actions)
+                        if lc_boundary and lc_boundary.get("features"):
+                            augmented_actions.insert(
+                                0,
+                                {
+                                    "type": "addBoundaryLayer",
+                                    "geojson": lc_boundary,
+                                    "label": "Lake County Boundary",
+                                },
+                            )
+                        augmented_actions = prepend_focus_zoom_if_any(
+                            augmented_actions,
+                            map_actions,
+                            st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY),
+                        )
+                        geo_map = render_geo_map(
+                            augmented_actions,
+                            width=None,
+                            height=geo_map_height,
+                        )
+                        if geo_map:
+                            st_folium(
+                                geo_map,
+                                use_container_width=True,
+                                height=geo_map_height + 10,
+                                returned_objects=["last_clicked"],
+                                key="geo_lake_county_folium_map",
+                            )
+                    else:
+                        render_dataset_map(
+                            st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+                            st.session_state[SESSION_KEY_MAP_AOI_DATA],
+                            width=FOLIUM_STATIC_DEFAULT_WIDTH,
+                            height=geo_map_height,
+                        )
+                elif st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
+                    matches = st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES]
+                    project_list = st.session_state[SESSION_KEY_MAP_PROJECT_LIST]
+                    if matches and not st.session_state[SESSION_KEY_MAP_PROJECT_DATA] and not project_list:
+                        st.write("**Select a project to view on the map:**")
+                        cols = st.columns(min(len(matches), 3))
+                        for i, m in enumerate(matches):
+                            name = m.get("attributes", {}).get("Name", f"Project {i + 1}")
+                            with cols[i % 3]:
+                                if st.button(
+                                    name[:60] + ("..." if len(name) > 60 else ""),
+                                    key=f"lc_project_{i}",
+                                ):
+                                    attrs = m.get("attributes", {})
+                                    st.session_state[SESSION_KEY_MAP_PROJECT_DATA] = {
+                                        "rep_point_geojson": m.get("rep_point_geojson"),
+                                        "geometry_geojson": m.get("geometry_geojson"),
+                                        "geojson": m.get("geometry_geojson") or m.get("rep_point_geojson"),
+                                        "attributes": attrs,
+                                    }
+                                    st.session_state[SESSION_KEY_MAP_PROJECT_MATCHES] = None
+                                    detail_lines = [f"# {attrs.get('Name', name)}"]
+                                    for k, v in sorted(attrs.items()):
+                                        if v is not None and str(v).strip() and k not in ("OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"):
+                                            label = k.replace("_", " ").title()
+                                            detail_lines.append(f"- **{label}:** {v}")
+                                    st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
+                                        {"role": "assistant", "content": "\n".join(detail_lines)}
+                                    )
+                                    st.rerun()
+                    render_dataset_map(
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+                        st.session_state[SESSION_KEY_MAP_AOI_DATA],
+                        width=FOLIUM_STATIC_DEFAULT_WIDTH,
+                        height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+                        project_data=st.session_state[SESSION_KEY_MAP_PROJECT_DATA],
+                        project_list=st.session_state[SESSION_KEY_MAP_PROJECT_LIST],
+                        jurisdiction_boundary=st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY],
+                        county_board_district_boundary=st.session_state.get(SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY),
+                    )
+                else:
+                    render_dataset_map(
+                        st.session_state[SESSION_KEY_MAP_DATASET_DATA],
+                        st.session_state[SESSION_KEY_MAP_AOI_DATA],
+                        width=FOLIUM_STATIC_DEFAULT_WIDTH,
+                        height=FOLIUM_STATIC_DEFAULT_HEIGHT,
+                    )
+
+            if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                with st.container(key="geo_map_table_debug_wrap"):
+                    render_geo_map_bottom_table()
