@@ -93,6 +93,8 @@ MAP_CHAT_GEMINI_DARK_SHADOW = (
 )
 MAP_CHAT_GEMINI_DARK_SEND_FILL = "rgba(255, 255, 255, 0.1)"
 MAP_CHAT_GEMINI_DARK_SEND_ICON = "#e8eaed"
+MAP_CHAT_GEMINI_LIGHT_COMPOSER_TEXT = MAP_CHAT_GEMINI_LIGHT_SEND_ICON
+MAP_CHAT_GEMINI_DARK_COMPOSER_TEXT = MAP_CHAT_GEMINI_DARK_SEND_ICON
 
 GEO_MAP_IFRAME_MIN_HEIGHT_PX = 360
 GEO_MAP_IFRAME_HEIGHT_VH_OFFSET_REM = 10.5
@@ -275,6 +277,8 @@ def build_map_chat_input_css() -> str:
     glsi = MAP_CHAT_GEMINI_LIGHT_SEND_ICON
     gdsf = MAP_CHAT_GEMINI_DARK_SEND_FILL
     gdsi = MAP_CHAT_GEMINI_DARK_SEND_ICON
+    glct = MAP_CHAT_GEMINI_LIGHT_COMPOSER_TEXT
+    gdct = MAP_CHAT_GEMINI_DARK_COMPOSER_TEXT
     shell_pad = MAP_CHAT_INPUT_SHELL_INNER_PADDING
     foot_min = MAP_CHAT_INPUT_FOOTER_MIN_HEIGHT
     foot_pad = MAP_CHAT_INPUT_FOOTER_PADDING
@@ -442,7 +446,8 @@ def build_map_chat_input_css() -> str:
         box-shadow: none !important;
         background: transparent !important;
         background-color: transparent !important;
-        color: var(--st-text-color, #262730) !important;
+        color: {glct} !important;
+        caret-color: {glct} !important;
         font-size: {fs} !important;
         line-height: {lh} !important;
         padding: {ta_pad} !important;
@@ -455,6 +460,24 @@ def build_map_chat_input_css() -> str:
         overflow-y: auto !important;
         resize: none !important;
         border-radius: 0 !important;
+    }}
+    @media (prefers-color-scheme: dark) {{
+        {ta_sel},
+        {wrap_clear} {{
+            color: {gdct} !important;
+        }}
+        {ta_sel} {{
+            caret-color: {gdct} !important;
+        }}
+    }}
+    @supports (color: light-dark(white, black)) {{
+        {ta_sel},
+        {wrap_clear} {{
+            color: light-dark({glct}, {gdct}) !important;
+        }}
+        {ta_sel} {{
+            caret-color: light-dark({glct}, {gdct}) !important;
+        }}
     }}
     [data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea::placeholder,
     [data-testid="stChatInputTextArea"]::placeholder {{
