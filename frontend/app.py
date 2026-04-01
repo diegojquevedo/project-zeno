@@ -19,6 +19,7 @@ from geo_map_renderer import (
     render_geo_map,
 )
 from main_header import render_main_header
+from map_chat_pdf_export import build_map_chat_pdf_bytes
 from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
@@ -47,10 +48,13 @@ from constants import (
     GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT,
     GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
+    MAP_CHAT_PDF_EXPORT_LABEL,
+    MAP_CHAT_PDF_FILENAME_PREFIX,
     SESSION_KEY_DATA_SOURCE,
     SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
     SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
     SESSION_KEY_GEO_RESULT_SUMMARY,
+    SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT,
     SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN,
     SESSION_KEY_MAP_ACTIONS,
     SESSION_KEY_MAP_AOI_DATA,
@@ -407,6 +411,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                     if ds_value == "lake_county":
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
+                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
                     elif ds_value == "geo_lake_county":
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
@@ -417,6 +422,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
                         st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                         st.session_state[SESSION_KEY_MAP_ACTIONS] = []
+                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
                     else:
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
@@ -426,6 +432,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                         st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
                         st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
+                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
 
                 if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
                     st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
@@ -696,6 +703,30 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                 _render_geo_result_summary(geo_summary)
                         elif geo_summary and isinstance(geo_summary, dict):
                             _render_geo_result_summary(geo_summary)
+
+            _export_msgs = st.session_state.get(SESSION_KEY_MAP_CHAT_MESSAGES, [])
+            if isinstance(_export_msgs, list) and any(
+                isinstance(m, dict) and m.get("role") in ("user", "assistant") for m in _export_msgs
+            ):
+                _gs = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                _sch = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
+                _ds_pdf = st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                _pdf_bytes = build_map_chat_pdf_bytes(
+                    _export_msgs,
+                    geo_summary=_gs if isinstance(_gs, dict) else None,
+                    schema_snapshot=_sch if isinstance(_sch, dict) else None,
+                    data_source=_ds_pdf if isinstance(_ds_pdf, str) else None,
+                )
+                _pdf_spacer, _pdf_btn_col = st.columns((5, 2))
+                with _pdf_btn_col:
+                    st.download_button(
+                        MAP_CHAT_PDF_EXPORT_LABEL,
+                        data=_pdf_bytes,
+                        file_name=f"{MAP_CHAT_PDF_FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
+                        mime="application/pdf",
+                        key="map_chat_export_pdf",
+                        use_container_width=True,
+                    )
 
             if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
                 st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None

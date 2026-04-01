@@ -22,6 +22,7 @@ from constants import (
     GEO_CHAT_SCHEMA_CONTAINER_KEY,
     LAKE_COUNTY_ZOOM,
     LC_BOUNDARY_STYLE,
+    SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT,
     SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN,
 )
 from src.shared.lake_county_constants import (
@@ -1059,10 +1060,18 @@ def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_bu
                     st.markdown("### Schema discovery")
                     _parts = content.split("\n## Fields\n", 1)
                     if len(_parts) == 2:
+                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
+                            "intro": (_parts[0] or "").strip(),
+                            "fields": (_parts[1] or "").strip(),
+                        }
                         _render_geo_schema_intro(_parts[0])
                         with st.expander("Fields", expanded=False):
                             st.markdown(_parts[1])
                     else:
+                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
+                            "intro": "",
+                            "fields": (content or "").strip() if isinstance(content, str) else "",
+                        }
                         st.markdown(content)
             elif tool_name == "geo_query_layer" and content:
                 with st.container():
