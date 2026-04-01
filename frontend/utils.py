@@ -1087,6 +1087,8 @@ def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_bu
                     st.success(content)
             elif tool_name in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS and content:
                 pass
+            elif tool_name == "geo_get_project_geometry" and content:
+                pass
             else:
                 st.markdown(content)
 

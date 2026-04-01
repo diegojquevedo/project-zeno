@@ -19,7 +19,11 @@ from geo_map_renderer import (
     render_geo_map,
 )
 from main_header import render_main_header
-from map_chat_pdf_export import build_map_chat_pdf_bytes
+from map_chat_pdf_export import (
+    _split_project_attributes_from_text,
+    _strip_md,
+    build_map_chat_pdf_bytes,
+)
 from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
@@ -50,6 +54,7 @@ from constants import (
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
     MAP_CHAT_PDF,
     SESSION_KEY_DATA_SOURCE,
+    SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT,
     SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
     SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
     SESSION_KEY_GEO_RESULT_SUMMARY,
@@ -130,16 +135,42 @@ def _split_geo_narrative_for_display(full: str) -> tuple[str, str]:
     return t, ""
 
 
+def _supplemental_project_attr_rows() -> list[tuple[str, str]] | None:
+    raw = st.session_state.get(SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT)
+    if not raw or not isinstance(raw, str):
+        return None
+    _, rows, _ = _split_project_attributes_from_text(raw.strip())
+    return rows if rows else None
+
+
 def _render_geo_assistant_narrative_blocks(
     summary_part: str,
     suggestions_part: str,
     geo_summary: dict | None,
     *,
     show_structured: bool,
+    supplemental_attr_rows: list[tuple[str, str]] | None = None,
 ) -> None:
-    if summary_part:
+    intro, attr_rows, attr_tail = _split_project_attributes_from_text(
+        (summary_part or "").strip(),
+    )
+    if supplemental_attr_rows and len(attr_rows) == 0:
+        attr_rows = list(supplemental_attr_rows)
+    has_attrs = len(attr_rows) > 0
+    summary_body = intro if has_attrs else (summary_part or "")
+
+    if has_attrs:
+        st.markdown(f"### {MAP_CHAT_PDF.SECTION.INDIVIDUAL_PROJECT_RESULTS_DETAIL}")
+        st.markdown(f"#### {MAP_CHAT_PDF.SECTION.PROJECT_ATTRIBUTES}")
+        for k, v in attr_rows:
+            st.markdown(f"- **{k}:** {v}")
+        if attr_tail.strip():
+            st.caption(_strip_md(attr_tail.strip()))
+
+    if summary_body.strip():
         st.markdown("### Summary")
-        st.markdown(summary_part)
+        st.markdown(summary_body)
+
     if show_structured and geo_summary and isinstance(geo_summary, dict):
         _render_geo_result_summary(geo_summary)
     if suggestions_part:
@@ -462,7 +493,11 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                             else:
                                 sp, sug = _split_geo_narrative_for_display(raw)
                                 _render_geo_assistant_narrative_blocks(
-                                    sp, sug, geo_snap, show_structured=True
+                                    sp,
+                                    sug,
+                                    geo_snap,
+                                    show_structured=True,
+                                    supplemental_attr_rows=_supplemental_project_attr_rows(),
                                 )
                         else:
                             st.markdown(last_msg.get("content") or "")
@@ -518,6 +553,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                             st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
                             st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
+                            st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
                         st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = False
                         timer_placeholder = st.empty()
                         progress_placeholder = st.empty()
@@ -640,6 +676,14 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                     if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
                                         last_tool_content[0] = msg["kwargs"]["content"]
                                         last_tool_name[0] = msg["kwargs"].get("name")
+                                        if (
+                                            msg["kwargs"].get("name") == "geo_get_project_geometry"
+                                            and st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                                            == "geo_lake_county"
+                                        ):
+                                            st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = (
+                                                msg["kwargs"]["content"]
+                                            )
                                 elapsed = time.perf_counter() - start_time
                                 if SHOW_RESPONSE_TIMER:
                                     timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
@@ -696,7 +740,11 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                             if combined_live:
                                 sp, sug = _split_geo_narrative_for_display(combined_live)
                                 _render_geo_assistant_narrative_blocks(
-                                    sp, sug, geo_summary, show_structured=True
+                                    sp,
+                                    sug,
+                                    geo_summary,
+                                    show_structured=True,
+                                    supplemental_attr_rows=_supplemental_project_attr_rows(),
                                 )
                             elif geo_summary and isinstance(geo_summary, dict):
                                 _render_geo_result_summary(geo_summary)
@@ -710,11 +758,13 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                 _gs = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
                 _sch = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
                 _ds_pdf = st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                _pdf_sup = _supplemental_project_attr_rows()
                 _pdf_bytes = build_map_chat_pdf_bytes(
                     _export_msgs,
                     geo_summary=_gs if isinstance(_gs, dict) else None,
                     schema_snapshot=_sch if isinstance(_sch, dict) else None,
                     data_source=_ds_pdf if isinstance(_ds_pdf, str) else None,
+                    supplemental_project_attributes=_pdf_sup,
                 )
                 _pdf_spacer, _pdf_btn_col = st.columns((5, 2))
                 with _pdf_btn_col:

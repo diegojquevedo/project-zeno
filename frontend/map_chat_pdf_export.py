@@ -69,6 +69,70 @@ def _format_cell(key: str, val) -> str:
         return str(val)
 
 
+def _strip_internal_instructions(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    kept: list[str] = []
+    for p in re.split(r"\n\s*\n+", t):
+        pl = p.strip()
+        if re.match(r"(?is)^If the user wants features within this project", pl):
+            continue
+        if re.match(r"(?is)^If the user only wanted project info", pl):
+            continue
+        if re.search(r"(?i)geo_spatial_intersection", pl) and "call" in pl.lower():
+            continue
+        kept.append(pl)
+    return "\n\n".join(kept).strip()
+
+
+def _split_project_attributes_from_text(text: str) -> tuple[str, list[tuple[str, str]], str]:
+    t = (text or "").strip()
+    if not t:
+        return "", [], ""
+    m = re.search(
+        r"(?is)(?:^|\n)\s*\*{0,2}\s*Project attributes\s*:?\s*\*{0,2}\s*\n",
+        t,
+    )
+    if not m:
+        return t, [], ""
+    intro = t[: m.start()].strip()
+    rest = t[m.end() :]
+    rows: list[tuple[str, str]] = []
+    lines = rest.splitlines()
+    tail_start = len(lines)
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s:
+            if rows:
+                tail_start = i
+                break
+            continue
+        bullet = re.match(r"^[-*•]\s*(.+)$", s)
+        if not bullet:
+            if rows:
+                tail_start = i
+                break
+            continue
+        inner = bullet.group(1).strip()
+        if ":" not in inner:
+            if rows:
+                tail_start = i
+                break
+            continue
+        k, _, v = inner.partition(":")
+        ks, vs = k.strip(), v.strip()
+        if ks:
+            rows.append((ks, _format_cell(ks, vs)))
+        else:
+            if rows:
+                tail_start = i
+                break
+    tail = "\n".join(lines[tail_start:]).strip()
+    tail = _strip_internal_instructions(tail)
+    return intro, rows, tail
+
+
 def _split_geo_narrative(full: str) -> tuple[str, str]:
     t = (full or "").strip()
     if not t:
@@ -170,14 +234,21 @@ def _word_wrap_lines_sized(
     return lines
 
 
-def _draw_hero_text_block(pdf: FPDF, main_title: str, session_utc: str) -> None:
+def _draw_hero_text_block(
+    pdf: FPDF,
+    main_title: str,
+    session_utc: str,
+    *,
+    hero_copy: Any = None,
+) -> None:
+    c = hero_copy if hero_copy is not None else MAP_CHAT_PDF.EXEC.COPY
     epw = pdf.epw
     pdf.set_font("Helvetica", "", MAP_CHAT_PDF.HERO.KICKER.PT)
     pdf.set_text_color(*COLOR.WHITE)
     pdf.multi_cell(
         epw,
         MAP_CHAT_PDF.HERO.KICKER.LINE_H_MM,
-        _pdf_text(_spaced_caps_line(MAP_CHAT_PDF.EXEC.COPY.HERO_KICKER)),
+        _pdf_text(_spaced_caps_line(c.HERO_KICKER)),
         align="C",
         new_x="LMARGIN",
         new_y="NEXT",
@@ -187,7 +258,7 @@ def _draw_hero_text_block(pdf: FPDF, main_title: str, session_utc: str) -> None:
     pdf.multi_cell(
         epw,
         MAP_CHAT_PDF.HERO.KICKER.LINE_H_MM,
-        _pdf_text(_spaced_caps_line(MAP_CHAT_PDF.EXEC.COPY.HERO_SUBKICKER)),
+        _pdf_text(_spaced_caps_line(c.HERO_SUBKICKER)),
         align="C",
         new_x="LMARGIN",
         new_y="NEXT",
@@ -195,11 +266,19 @@ def _draw_hero_text_block(pdf: FPDF, main_title: str, session_utc: str) -> None:
     pdf.ln(MAP_CHAT_PDF.HERO.LN_AFTER.KICKERS_MM)
     pdf.set_font("Helvetica", "B", MAP_CHAT_PDF.HERO.TITLE.PT)
     pdf.set_text_color(*COLOR.WHITE)
-    pdf.cell(epw, MAP_CHAT_PDF.HERO.TITLE.CELL_H_MM, _pdf_text(main_title)[:90], align="C")
+    title_txt = _pdf_text((main_title or "").strip())
+    pdf.multi_cell(
+        epw,
+        MAP_CHAT_PDF.HERO.TITLE.CELL_H_MM,
+        title_txt,
+        align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
     pdf.ln(MAP_CHAT_PDF.HERO.LN_AFTER.TITLE_MM)
     pdf.set_font("Helvetica", "", MAP_CHAT_PDF.HERO.SUBTITLE.PT)
     pdf.set_text_color(*COLOR.HERO_SUBTITLE)
-    pdf.cell(epw, MAP_CHAT_PDF.HERO.SUBTITLE.CELL_H_MM, MAP_CHAT_PDF.EXEC.COPY.HERO_SUBTITLE, align="C")
+    pdf.cell(epw, MAP_CHAT_PDF.HERO.SUBTITLE.CELL_H_MM, c.HERO_SUBTITLE, align="C")
     pdf.ln(MAP_CHAT_PDF.HERO.LN_AFTER.SUBTITLE_MM)
     pdf.set_font("Helvetica", "", MAP_CHAT_PDF.HERO.META.PT)
     pdf.set_text_color(*COLOR.LIGHT_BLUE)
@@ -216,12 +295,17 @@ def _draw_hero_text_block(pdf: FPDF, main_title: str, session_utc: str) -> None:
     )
 
 
-def _measure_hero_content_height_mm(main_title: str, session_utc: str) -> float:
+def _measure_hero_content_height_mm(
+    main_title: str,
+    session_utc: str,
+    *,
+    hero_copy: Any = None,
+) -> float:
     p = FPDF()
     p.set_margins(12, 14, 12)
     p.add_page()
     y0 = p.get_y()
-    _draw_hero_text_block(p, main_title, session_utc)
+    _draw_hero_text_block(p, main_title, session_utc, hero_copy=hero_copy)
     return p.get_y() - y0
 
 
@@ -472,9 +556,17 @@ def _chart_to_png(chart_data: dict) -> bytes | None:
 
 
 class _PDF(FPDF):
-    def __init__(self, *, executive: bool = False):
+    def __init__(
+        self,
+        *,
+        executive: bool = False,
+        banner_lead: str | None = None,
+        banner_tail: str | None = None,
+    ):
         super().__init__()
         self.executive = executive
+        self.banner_lead = banner_lead
+        self.banner_tail = banner_tail
         self.alias_nb_pages()
         self.set_auto_page_break(auto=True, margin=22)
         self.set_margins(12, 14, 12)
@@ -486,8 +578,18 @@ class _PDF(FPDF):
         if not self.executive:
             return
         self.set_font("Helvetica", "", 8)
-        lead = _pdf_text(_spaced_caps_line(MAP_CHAT_PDF.EXEC.BANNER.LEAD))
-        tail = _pdf_text(_spaced_caps_line(MAP_CHAT_PDF.EXEC.BANNER.TAIL))
+        lead_src = (
+            self.banner_lead
+            if self.banner_lead is not None
+            else MAP_CHAT_PDF.EXEC.BANNER.LEAD
+        )
+        tail_src = (
+            self.banner_tail
+            if self.banner_tail is not None
+            else MAP_CHAT_PDF.EXEC.BANNER.TAIL
+        )
+        lead = _pdf_text(_spaced_caps_line(lead_src))
+        tail = _pdf_text(_spaced_caps_line(tail_src))
         gap = "   "
         wl = self.get_string_width(lead)
         wg = self.get_string_width(gap)
@@ -530,15 +632,25 @@ class _PDF(FPDF):
         self.set_line_width(0.2)
         self.ln(3)
 
-    def hero_navy(self, main_title: str, session_utc: str) -> None:
-        content_h = _measure_hero_content_height_mm(main_title, session_utc)
+    def hero_navy(
+        self,
+        main_title: str,
+        session_utc: str,
+        *,
+        hero_copy: Any = None,
+    ) -> None:
+        content_h = _measure_hero_content_height_mm(
+            main_title,
+            session_utc,
+            hero_copy=hero_copy,
+        )
         pad_v = MAP_CHAT_PDF.HERO.PAD_V_MM
         h_box = content_h + 2 * pad_v
         y0 = self.get_y()
         self.set_fill_color(*COLOR.NAVY)
         self.rect(self.l_margin, y0, self.epw, h_box, "F")
         self.set_xy(self.l_margin, y0 + pad_v)
-        _draw_hero_text_block(self, main_title, session_utc)
+        _draw_hero_text_block(self, main_title, session_utc, hero_copy=hero_copy)
         self.set_xy(self.l_margin, y0 + h_box + 4)
 
     def kpi_four(self, total: int, wmb: int, s319: int, status_lbl: str) -> None:
@@ -773,17 +885,17 @@ class _PDF(FPDF):
                 )
         self.set_xy(x0, y0 + h_box + 6)
 
-    def numbered_followups(self, lines: list[str]) -> None:
+    def numbered_zebra_lines(self, lines: list[str], *, max_rows: int = 12) -> None:
         if not lines:
             return
-        self.section_spaced(MAP_CHAT_PDF.SECTION.SUGGESTED_FOLLOWUPS)
         num_w = MAP_CHAT_PDF.FOLLOWUP.NUM_COL_W_MM
         pad = MAP_CHAT_PDF.FOLLOWUP.CELL_PAD_MM
         line_h = MAP_CHAT_PDF.FOLLOWUP.LINE_H_MM
         text_w = self.epw - num_w
         text_inner = max(20.0, text_w - 2 * pad)
         ymax = self.h - self.b_margin - 6
-        for idx, ln in enumerate(lines[:12]):
+        capped = lines[:max_rows]
+        for idx, ln in enumerate(capped):
             i = idx + 1
             clean = _pdf_text(_strip_md(ln))
             self.set_font("Helvetica", "", 9)
@@ -817,6 +929,107 @@ class _PDF(FPDF):
             self.multi_cell(text_inner, line_h, clean, border=0, fill=False)
             self.set_xy(self.l_margin, y0 + row_h)
         self.ln(2)
+        if len(lines) > max_rows:
+            self.caption(f"... {len(lines) - max_rows} more rows not shown.")
+
+    def numbered_followups(
+        self,
+        lines: list[str],
+        *,
+        section_title: str | None = None,
+    ) -> None:
+        if not lines:
+            return
+        title = (
+            section_title
+            if section_title is not None
+            else MAP_CHAT_PDF.SECTION.SUGGESTED_FOLLOWUPS
+        )
+        self.section_spaced(title)
+        self.numbered_zebra_lines(lines, max_rows=12)
+
+    def section_subtitle_accent(self, text: str) -> None:
+        self.ln(1)
+        self._set(10, bold=True, color=COLOR.ACCENT)
+        self.multi_cell(0, 5.5, _pdf_text(text), new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+
+    def individual_project_results_attributes(
+        self,
+        attr_lines: list[str],
+    ) -> None:
+        if not attr_lines:
+            return
+        self.section_spaced(MAP_CHAT_PDF.SECTION.INDIVIDUAL_PROJECT_RESULTS_DETAIL)
+        self.section_subtitle_accent(MAP_CHAT_PDF.SECTION.PROJECT_ATTRIBUTES)
+        self.numbered_zebra_lines(attr_lines, max_rows=80)
+
+    def field_value_zebra_rows(self, rows: list[tuple[str, str]]) -> None:
+        if not rows:
+            return
+        self.section_spaced(MAP_CHAT_PDF.SECTION.PROJECT_ATTRIBUTES)
+        key_w = MAP_CHAT_PDF.PROJECT_ATTR.KEY_COL_W_MM
+        val_w = self.epw - key_w
+        pad = MAP_CHAT_PDF.FOLLOWUP.CELL_PAD_MM
+        line_h = MAP_CHAT_PDF.FOLLOWUP.LINE_H_MM
+        key_inner = max(12.0, key_w - 2 * pad)
+        val_inner = max(20.0, val_w - 2 * pad)
+        ymax = self.h - self.b_margin - 6
+        for idx, (key, val) in enumerate(rows[:80]):
+            k_txt = _pdf_text(_strip_md(str(key)))
+            v_txt = _pdf_text(_strip_md(str(val)))
+            self.set_font("Helvetica", "B", 8)
+            nk = max(
+                1,
+                len(_word_wrap_lines_sized(self, k_txt, key_inner, 8, True)),
+            )
+            self.set_font("Helvetica", "", 9)
+            nv = max(
+                1,
+                len(_word_wrap_lines_sized(self, v_txt, val_inner, 9, False)),
+            )
+            nlines = max(nk, nv)
+            row_h = max(8.0, nlines * line_h + 2 * pad)
+            y0 = self.get_y()
+            x0 = self.l_margin
+            if y0 + row_h > ymax:
+                self.add_page()
+                y0 = self.get_y()
+                x0 = self.l_margin
+            fill_right = COLOR.WHITE if idx % 2 == 0 else COLOR.TABLE_ZEBRA
+            self.set_fill_color(*COLOR.BLUE)
+            self.rect(x0, y0, key_w, row_h, "F")
+            self.set_fill_color(*fill_right)
+            self.rect(x0 + key_w, y0, val_w, row_h, "F")
+            self.set_draw_color(218, 222, 228)
+            self.line(x0, y0 + row_h, x0 + self.epw, y0 + row_h)
+            y_text = y0 + pad
+            self.set_xy(x0 + pad, y_text)
+            self.set_font("Helvetica", "B", 8)
+            self.set_text_color(*COLOR.WHITE)
+            self.multi_cell(
+                key_inner,
+                line_h,
+                k_txt,
+                align="L",
+                border=0,
+                fill=False,
+            )
+            self.set_xy(x0 + key_w + pad, y_text)
+            self.set_font("Helvetica", "", 9)
+            self.set_text_color(*COLOR.BLACK)
+            self.multi_cell(
+                val_inner,
+                line_h,
+                v_txt,
+                align="L",
+                border=0,
+                fill=False,
+            )
+            self.set_xy(self.l_margin, y0 + row_h)
+        self.ln(2)
+        if len(rows) > 80:
+            self.caption(f"... {len(rows) - 80} more attributes not shown.")
 
     def disclaimer(self) -> None:
         self.ln(4)
@@ -1255,25 +1468,168 @@ def _write_schema(pdf: _PDF, snap: dict):
         pdf.body(fields)
 
 
-def _write_message(pdf: _PDF, role: str, content: str, geo_fmt: bool):
-    label = "You" if role == "user" else "Assistant"
-    pdf.h2(label)
+def _last_user_message_text(messages: list[Any]) -> str:
+    for m in reversed(messages):
+        if isinstance(m, dict) and m.get("role") == "user":
+            return str(m.get("content") or "").strip()
+    return ""
+
+
+def _user_asks_about_one_project(user_text: str) -> bool:
+    t = (user_text or "").strip().lower()
+    if not t:
+        return False
+    if re.search(
+        r"(?i)tell me about|what (can you tell me )?about|information (on|about)|details (on|about|for)",
+        t,
+    ) and re.search(r"(?i)project", t):
+        return True
+    if re.search(
+        r"(?i)\b(show|describe|explain)\b.+\bproject\b",
+        t,
+    ):
+        return True
+    return False
+
+
+def _looks_like_multi_project_inventory(sp: str) -> bool:
+    s = (sp or "").strip()
+    if not s:
+        return False
+    if re.search(
+        r"(?i)found \d+\s+(projects|project results|matching|records)\b",
+        s,
+    ):
+        return True
+    if re.search(r"(?i)\bprojects identified\b|\bproject list\b", s[:1200]):
+        return True
+    return False
+
+
+def _should_use_individual_project_hero(
+    messages: list[Any],
+    supplemental_project_attributes: list[tuple[str, str]] | None = None,
+) -> bool:
+    if supplemental_project_attributes:
+        return True
+    user_t = _last_user_message_text(messages)
+    for m in reversed(messages):
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        raw = (m.get("content") or "").strip()
+        if not raw or raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
+            continue
+        sp, sug = _split_geo_narrative(raw)
+        if re.search(r"(?is)Project attributes\s*:", sp):
+            return True
+        if re.search(r"(?is)Found project\s+['\"]", raw):
+            return True
+        has_summary_heading = bool(
+            re.search(r"(?im)^#{1,4}\s*Summary\b", sp)
+            or re.search(r"\*\*Summary\*\*", sp[:1200])
+        )
+        if (
+            sug.strip()
+            and sp.strip()
+            and not _looks_like_multi_project_inventory(sp)
+        ):
+            if has_summary_heading:
+                return True
+            if _user_asks_about_one_project(user_t):
+                return True
+    return False
+
+
+def _project_title_from_summary_prose(sp: str) -> str | None:
+    chunk = (sp or "").strip()[:2000]
+    m = re.search(
+        r"(?is)(?:the\s+)?([A-Z][A-Za-z0-9 ,'\-]{0,78}?)(?:\s+project\s+is|\s+Subdivision|\s+Drainage Improvements\b)",
+        chunk,
+    )
+    if m:
+        return m.group(1).strip()[:90]
+    return None
+
+
+def _extract_individual_project_name(
+    messages: list[Any],
+    supplemental_project_attributes: list[tuple[str, str]] | None = None,
+) -> str:
+    if supplemental_project_attributes:
+        for k, v in supplemental_project_attributes:
+            if str(k).strip().lower() == "name" and str(v).strip():
+                return str(v).strip()[:90]
+    for m in reversed(messages):
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        raw = (m.get("content") or "").strip()
+        if not raw or raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
+            continue
+        sp, _ = _split_geo_narrative(raw)
+        intro, rows, _ = _split_project_attributes_from_text(sp)
+        for k, v in rows:
+            if str(k).strip().lower() == "name" and str(v).strip():
+                return str(v).strip()[:90]
+        ma = re.search(r"Found project\s+['\"]([^'\"]+)['\"]", raw)
+        if ma:
+            return ma.group(1).strip()[:90]
+        mb = re.search(r"Found project\s+['\"]([^'\"]+)['\"]", sp)
+        if mb:
+            return mb.group(1).strip()[:90]
+        guess = _project_title_from_summary_prose(sp)
+        if guess:
+            return guess
+    return "Project"
+
+
+def _write_message(
+    pdf: _PDF,
+    role: str,
+    content: str,
+    geo_fmt: bool,
+    *,
+    omit_role_labels: bool = False,
+    individual_project_pdf: bool = False,
+    supplemental_attr_rows: list[tuple[str, str]] | None = None,
+) -> None:
     raw = (content or "").strip()
     if not raw:
+        return
+    if not omit_role_labels:
+        label = "You" if role == "user" else "Assistant"
+        pdf.h2(label)
+    elif role == "user":
+        pdf.ln(2)
+        pdf.body(_strip_md(raw))
         return
     if role == "assistant" and geo_fmt:
         if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
             pdf.caption(raw)
             return
         summary_part, sugg_part = _split_geo_narrative(raw)
-        if summary_part:
-            pdf.h3(MAP_CHAT_PDF.SECTION.SUMMARY)
-            pdf.body(_strip_md(summary_part))
+        intro, attr_rows, attr_tail = _split_project_attributes_from_text(summary_part)
+        if supplemental_attr_rows and len(attr_rows) == 0:
+            attr_rows = list(supplemental_attr_rows)
+        has_attrs = len(attr_rows) > 0
+        narrative = intro if has_attrs else summary_part
+        if individual_project_pdf and has_attrs:
+            attr_lines = [f"{k}: {v}" for k, v in attr_rows]
+            pdf.individual_project_results_attributes(attr_lines)
+            if narrative.strip():
+                pdf.section_spaced(MAP_CHAT_PDF.SECTION.SUMMARY)
+                pdf.body(_strip_md(narrative.strip()))
+        else:
+            if narrative.strip():
+                pdf.section_spaced(MAP_CHAT_PDF.SECTION.SUMMARY)
+                pdf.body(_strip_md(narrative.strip()))
+            if has_attrs:
+                pdf.field_value_zebra_rows(attr_rows)
+        if attr_tail.strip():
+            pdf.caption(_strip_md(attr_tail.strip()))
         if sugg_part:
-            pdf.h3(MAP_CHAT_PDF.SECTION.FOLLOWUP)
             lines = [ln.strip().lstrip("-* ") for ln in sugg_part.splitlines() if ln.strip()]
-            pdf.bullet_list(lines)
-        if not summary_part and not sugg_part:
+            pdf.numbered_followups(lines, section_title=MAP_CHAT_PDF.SECTION.FOLLOWUP)
+        if not summary_part.strip() and not sugg_part:
             pdf.body(_strip_md(raw))
     else:
         pdf.body(_strip_md(raw))
@@ -1284,21 +1640,64 @@ def _build_legacy_pdf(
     geo_summary: dict | None,
     schema_snapshot: dict | None,
     data_source: str | None,
+    supplemental_project_attributes: list[tuple[str, str]] | None = None,
 ) -> bytes:
-    pdf = _PDF(executive=False)
     geo_fmt = data_source == "geo_lake_county"
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    use_individual_hero = geo_fmt and _should_use_individual_project_hero(
+        messages,
+        supplemental_project_attributes,
+    )
+    if use_individual_hero:
+        proj_title = _extract_individual_project_name(
+            messages,
+            supplemental_project_attributes,
+        )
+        pdf = _PDF(
+            executive=True,
+            banner_lead=MAP_CHAT_PDF.EXEC.INDIVIDUAL.BANNER_LEAD,
+            banner_tail=MAP_CHAT_PDF.EXEC.BANNER.TAIL,
+        )
+        pdf.footer_left = _pdf_text(f"{proj_title} · Lake County")
+        pdf.session_line = stamp
+        pdf.hero_navy(proj_title, stamp, hero_copy=MAP_CHAT_PDF.EXEC.INDIVIDUAL)
+    else:
+        pdf = _PDF(executive=False)
+        pdf.h1(MAP_CHAT_PDF.DOCUMENT.TITLE)
+        pdf.caption(stamp)
+        pdf.divider()
 
-    pdf.h1(MAP_CHAT_PDF.DOCUMENT.TITLE)
-    pdf.caption(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
-    pdf.divider()
+    last_assistant_i: int | None = None
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
+        if isinstance(m, dict) and m.get("role") == "assistant":
+            last_assistant_i = i
+            break
 
-    for m in messages:
+    for i, m in enumerate(messages):
         if not isinstance(m, dict):
             continue
         role = m.get("role")
         if role not in ("user", "assistant"):
             continue
-        _write_message(pdf, str(role), str(m.get("content") or ""), geo_fmt)
+        sup = (
+            supplemental_project_attributes
+            if (
+                last_assistant_i is not None
+                and i == last_assistant_i
+                and role == "assistant"
+            )
+            else None
+        )
+        _write_message(
+            pdf,
+            str(role),
+            str(m.get("content") or ""),
+            geo_fmt,
+            omit_role_labels=use_individual_hero,
+            individual_project_pdf=use_individual_hero,
+            supplemental_attr_rows=sup,
+        )
 
     if isinstance(schema_snapshot, dict):
         _write_schema(pdf, schema_snapshot)
@@ -1315,9 +1714,16 @@ def build_map_chat_pdf_bytes(
     geo_summary: dict | None = None,
     schema_snapshot: dict | None = None,
     data_source: str | None = None,
+    supplemental_project_attributes: list[tuple[str, str]] | None = None,
 ) -> bytes:
     geo_fmt = data_source == "geo_lake_county"
     rows = geo_summary.get("feature_rows") if isinstance(geo_summary, dict) else None
     if geo_fmt and isinstance(geo_summary, dict) and isinstance(rows, list) and len(rows) > 0:
         return _build_executive_geo_pdf(messages, geo_summary, schema_snapshot)
-    return _build_legacy_pdf(messages, geo_summary, schema_snapshot, data_source)
+    return _build_legacy_pdf(
+        messages,
+        geo_summary,
+        schema_snapshot,
+        data_source,
+        supplemental_project_attributes=supplemental_project_attributes,
+    )

@@ -53,6 +53,7 @@ SESSION_KEY_MAP_JURISDICTION_BOUNDARY = "map_jurisdiction_boundary"
 SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY = "map_county_board_district_boundary"
 SESSION_KEY_MAP_ACTIONS = "map_actions"
 SESSION_KEY_GEO_RESULT_SUMMARY = "geo_result_summary"
+SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT = "geo_last_project_tool_text"
 SESSION_KEY_GEO_MAP_TABLE_EXPANDED = "geo_map_table_expanded"
 SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW = "geo_map_table_focus_row"
 SESSION_KEY_DATA_SOURCE = "data_source"
@@ -141,6 +142,11 @@ class MAP_CHAT_PDF:
         PORTFOLIO_SUMMARY = "Portfolio distribution summary"
         THEMATIC_CONTEXT = "Thematic context"
         SUGGESTED_FOLLOWUPS = "Suggested analytical follow-ups"
+        PROJECT_ATTRIBUTES = "Project attributes"
+        INDIVIDUAL_PROJECT_RESULTS_DETAIL = "Individual project results detail"
+
+    class PROJECT_ATTR:
+        KEY_COL_W_MM = 48.0
 
     class CHART:
         IMAGE_MAX_W_MM = 160.0
@@ -160,6 +166,12 @@ class MAP_CHAT_PDF:
             HERO_KICKER = "GEO AI · DRAINAGE DISTRICT INTELLIGENCE"
             HERO_SUBKICKER = "REPORT"
             HERO_SUBTITLE = "Drainage District Project Review"
+
+        class INDIVIDUAL:
+            BANNER_LEAD = "GEO AI | INDIVIDUAL PROJECT INFORMATION"
+            HERO_KICKER = "GEO AI · INDIVIDUAL PROJECT INTELLIGENCE"
+            HERO_SUBKICKER = "REPORT"
+            HERO_SUBTITLE = "Individual Project Information Review"
 
         PREPARED_BY = "Prepared by Geo AI"
         KEY_SCHEMA_LABEL = "Key schema fields"
