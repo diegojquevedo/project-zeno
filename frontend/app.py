@@ -48,8 +48,7 @@ from constants import (
     GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT,
     GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
-    MAP_CHAT_PDF_EXPORT_LABEL,
-    MAP_CHAT_PDF_FILENAME_PREFIX,
+    MAP_CHAT_PDF,
     SESSION_KEY_DATA_SOURCE,
     SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
     SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
@@ -720,9 +719,9 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                 _pdf_spacer, _pdf_btn_col = st.columns((5, 2))
                 with _pdf_btn_col:
                     st.download_button(
-                        MAP_CHAT_PDF_EXPORT_LABEL,
+                        MAP_CHAT_PDF.EXPORT.LABEL,
                         data=_pdf_bytes,
-                        file_name=f"{MAP_CHAT_PDF_FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
+                        file_name=f"{MAP_CHAT_PDF.EXPORT.FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
                         mime="application/pdf",
                         key="map_chat_export_pdf",
                         use_container_width=True,

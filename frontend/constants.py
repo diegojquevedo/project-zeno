@@ -13,6 +13,24 @@ CHART_HEIGHT = 400
 CHART_NOMINAL_COLOR_SCHEME = "tableau10"
 CHART_PIE_COLOR_SCHEME = "tableau20"
 
+
+class COLOR:
+    GRAY = (90, 90, 90)
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    NAVY = (26, 43, 76)
+    LIGHT_BLUE = (88, 140, 200)
+    HERO_SUBTITLE = (232, 238, 248)
+    HEADER_BG = (240, 242, 248)
+    ROW_ALT = (249, 250, 252)
+    TABLE_ZEBRA = (237, 243, 248)
+    DIVIDER = (210, 214, 220)
+    ACCENT = (50, 100, 180)
+    BLUE = (30, 80, 160)
+    KPI_BG = (236, 241, 248)
+    CARD_BLUE = (230, 240, 252)
+    CARD_NAVY = (26, 43, 76)
+
 CACHE_TTL_LAKE_COUNTY_BOUNDARY = 3600
 
 LC_BOUNDARY_STYLE = {
@@ -97,21 +115,160 @@ MAP_CHAT_GEMINI_DARK_SEND_ICON = "#e8eaed"
 MAP_CHAT_GEMINI_LIGHT_COMPOSER_TEXT = MAP_CHAT_GEMINI_LIGHT_SEND_ICON
 MAP_CHAT_GEMINI_DARK_COMPOSER_TEXT = MAP_CHAT_GEMINI_DARK_SEND_ICON
 
-MAP_CHAT_PDF_DOCUMENT_TITLE = "Geo AI"
-MAP_CHAT_PDF_EXPORT_LABEL = "Export chat as PDF"
-MAP_CHAT_PDF_FILENAME_PREFIX = "geo-ai-chat"
-MAP_CHAT_PDF_SECTION_SUMMARY = "Summary"
-MAP_CHAT_PDF_SECTION_FOLLOWUP = "Follow-up suggestions"
-MAP_CHAT_PDF_SECTION_SCHEMA = "Schema discovery"
-MAP_CHAT_PDF_SECTION_FIELDS = "Fields"
-MAP_CHAT_PDF_SECTION_RESULTS_DETAIL = "Results detail"
-MAP_CHAT_PDF_SECTION_RICH_CONTEXT = "Rich context"
-MAP_CHAT_PDF_SECTION_RECORD_DETAIL = "Record detail"
-MAP_CHAT_PDF_SECTION_PROJECT_LIST = "Project list"
-MAP_CHAT_PDF_SECTION_FULL_TABLE = "Full results table"
-MAP_CHAT_PDF_SECTION_CHARTS = "Charts"
-MAP_CHAT_PDF_FULL_TABLE_MAX_COLUMNS = 12
-MAP_CHAT_PDF_FULL_TABLE_MAX_ROWS = 100
+
+class MAP_CHAT_PDF:
+    class DOCUMENT:
+        TITLE = "Geo AI"
+
+    class EXPORT:
+        LABEL = "Export chat as PDF"
+        FILENAME_PREFIX = "geo-ai-chat"
+
+    class SECTION:
+        SUMMARY = "Summary"
+        FOLLOWUP = "Follow-up suggestions"
+        SCHEMA = "Schema discovery"
+        FIELDS = "Fields"
+        RESULTS_DETAIL = "Results detail"
+        RICH_CONTEXT = "Rich context"
+        RECORD_DETAIL = "Record detail"
+        PROJECT_LIST = "Project list"
+        FULL_TABLE = "Full results table"
+        CHARTS = "Charts"
+        EXECUTIVE_SUMMARY = "Executive summary"
+        DATA_SOURCE_SCHEMA = "Data source & schema"
+        PROJECT_INVENTORY = "Project inventory"
+        PORTFOLIO_SUMMARY = "Portfolio distribution summary"
+        THEMATIC_CONTEXT = "Thematic context"
+        SUGGESTED_FOLLOWUPS = "Suggested analytical follow-ups"
+
+    class CHART:
+        IMAGE_MAX_W_MM = 160.0
+        IMAGE_BOTTOM_GAP_MM = 12.0
+        SECTION_RESERVE_MM = 22.0
+
+    class FULL_TABLE:
+        MAX_COLUMNS = 12
+        MAX_ROWS = 100
+
+    class EXEC:
+        class BANNER:
+            LEAD = "GEO AI | DRAINAGE DISTRICT ANALYSIS"
+            TAIL = "CONFIDENTIAL · STAKEHOLDER REVIEW"
+
+        class COPY:
+            HERO_KICKER = "GEO AI · DRAINAGE DISTRICT INTELLIGENCE"
+            HERO_SUBKICKER = "REPORT"
+            HERO_SUBTITLE = "Drainage District Project Review"
+
+        PREPARED_BY = "Prepared by Geo AI"
+        KEY_SCHEMA_LABEL = "Key schema fields"
+        DISCLAIMER = (
+            "This report was generated automatically by the Geo AI spatial intelligence system. "
+            "All underlying data is sourced from Lake County GIS drainage district and project layers. "
+            "Figures reflect records as of the session timestamp above."
+        )
+
+    class FOLLOWUP:
+        CELL_PAD_MM = 1.4
+        LINE_H_MM = 5.0
+        NUM_COL_W_MM = 16.0
+
+    class HERO:
+        PAD_V_MM = 6.0
+
+        class KICKER:
+            PT = 10
+            LINE_H_MM = 5.5
+
+        class LN_AFTER:
+            KICKERS_MM = 8.0
+            TITLE_MM = 14.0
+            SUBTITLE_MM = 12.0
+
+        class TITLE:
+            PT = 24
+            CELL_H_MM = 12.0
+
+        class SUBTITLE:
+            PT = 13
+            CELL_H_MM = 7.0
+
+        class META:
+            PT = 10
+            LINE_H_MM = 5.0
+
+    class KPI:
+        VALUE_PT = 14
+        VALUE_LINE_H_MM = 6.5
+        VALUE_NUM_PT = 22
+        VALUE_NUM_LINE_H_MM = 9.0
+        LABEL_PT = 8
+        LABEL_LINE_H_MM = 3.8
+        TOP_PAD_MM = 3.0
+        VALUE_LABEL_GAP_MM = 2.0
+        BOTTOM_PAD_MM = 3.0
+
+    class PROJECT_TABLE:
+        INTRO_WRAP_HINT = (
+            "Long text wraps within cells; row height follows the tallest cell in each row."
+        )
+
+    class INVENTORY:
+        COL_WEIGHT_DEFAULT = 1.0
+        COL_WEIGHT_WIDE = 2.6
+        WIDE_COLUMN_KEYS = frozenset({"name", "description"})
+        HEADER_LABELS: dict[str, str] = {
+            "name": "NAME",
+            "description": "DESCRIPTION",
+            "projecttype": "PROJECT TYPE",
+            "startyear": "START YEAR",
+            "endyear": "END YEAR",
+            "projectpartners": "PROJECT PARTNERS",
+            "dollarsrequested": "DOLLARS REQUESTED",
+            "estimatedcost": "ESTIMATED COST",
+            "finalcost": "FINAL COST",
+            "breakdown": "BREAKDOWN",
+            "smcmanager": "SMC MANAGER",
+            "agreementstatus": "AGREEMENT STATUS",
+            "projectname": "PROJECT NAME",
+            "objectid": "OBJECT ID",
+            "globalid": "GLOBAL ID",
+        }
+        HDR_FONT_PT = 7
+        HDR_LINE_H_MM = 4.0
+        HDR_PAD_MM = 1.0
+
+    class PORTFOLIO:
+        CARD_HEIGHT_MM = 42.0
+        CARD_INSET_MM = 2.5
+
+        class LIGHT:
+            TITLE_PT = 9
+            TITLE_CELL_H_MM = 5.5
+            BODY_PT = 9
+            BODY_LINE_H_MM = 5.0
+            GAP_AFTER_TITLE_MM = 3.0
+
+        class NAVY:
+            TITLE_PT = 9
+            TITLE_LINE_H_MM = 3.8
+            GAP_AFTER_TITLE_MM = 3.5
+            VALUE_PT = 22
+            VALUE_LINE_H_MM = 10.0
+            GAP_AFTER_VALUE_MM = 3.0
+            SUBTITLE_PT = 8
+            SUBTITLE_LINE_H_MM = 4.5
+
+    class SCHEMA_TABLE:
+        COL_FIELD = "Field"
+        COL_TYPE = "Type"
+        COL_ALIAS = "Alias"
+
+
+MAP_CHAT_PDF.EXEC.BANNER.FULL = (
+    MAP_CHAT_PDF.EXEC.BANNER.LEAD + "  " + MAP_CHAT_PDF.EXEC.BANNER.TAIL
+)
 
 GEO_MAP_CHAT_MAP_COLUMNS_GAP = "medium"
 GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT = "geo_chat_map_split"
