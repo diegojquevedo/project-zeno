@@ -5,11 +5,11 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/home/ubuntu/project-zeno
-Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/ubuntu/project-zeno/.env
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/project-zeno
+Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/home/ec2-user/project-zeno/.env
 ExecStart=/usr/bin/env uv run uvicorn src.api.app:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
