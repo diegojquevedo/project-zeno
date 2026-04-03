@@ -36,6 +36,7 @@ from constants import (
     GEO_MAP_TABLE_ROW_PADDING_LEFT_PX,
     GEO_MAP_TABLE_ROW_PADDING_RIGHT_PX,
     GEO_MAP_TABLE_ROW_PADDING_Y_PX,
+    GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT,
     GEO_MAP_TABLE_TOGGLE_BG_DARK,
     GEO_MAP_TABLE_TOGGLE_BG_LIGHT,
     GEO_MAP_TABLE_TOGGLE_BORDER_DARK,
@@ -91,6 +92,12 @@ def geo_map_project_table_css_rules() -> str:
     name_fs = GEO_MAP_TABLE_NAME_FONT_SIZE_REM
     fly_mh = GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS
     fly_z = GEO_MAP_TABLE_FLYOUT_Z_INDEX
+    scroll_n = GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT
+    tbl_body_scroll_max_px = scroll_n * (
+        2 * GEO_MAP_TABLE_ROW_PADDING_Y_PX
+        + GEO_MAP_TABLE_GOTO_BUTTON_HEIGHT_PX
+        + 4
+    ) + max(0, scroll_n - 1)
     tbl_hdr_min_px = max(hpy * 2 + 14, 40)
     dbg_u = '[class*="geo_map_table_debug_wrap"]'
     dbg_k = '[class*="geo-map-table-debug-wrap"]'
@@ -112,8 +119,8 @@ def geo_map_project_table_css_rules() -> str:
         f'{dbg_k} [data-testid="stVerticalBlock"] > div:has({fly_k})'
     )
     sel_fly_vb = (
-        f'{fly_u} [data-testid="stVerticalBlock"], '
-        f'{fly_k} [data-testid="stVerticalBlock"]'
+        f'{fly_u} [data-testid="stVerticalBlock"]:not([class*="st-key-geo_tbl_rows"]), '
+        f'{fly_k} [data-testid="stVerticalBlock"]:not([class*="st-key-geo_tbl_rows"])'
     )
     sel_fly_hdr_ec = (
         f'{fly_u} [data-testid="stElementContainer"]:has(.geo-map-tbl-header), '
@@ -277,6 +284,36 @@ def geo_map_project_table_css_rules() -> str:
     }}
     [class*="st-key-geo_tbl_rows"] .geo-map-tbl-name {{
         color: light-dark({fbl}, {fbd}) !important;
+    }}
+}}
+[data-testid="stVerticalBlock"][class*="st-key-geo_map_table_flyout"],
+[data-testid="stVerticalBlock"][class*="st-key-geo-map-table-flyout"] {{
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    min-height: 0 !important;
+    flex-shrink: 1 !important;
+    max-width: 100% !important;
+}}
+[data-testid="stVerticalBlock"][class*="st-key-geo_tbl_rows"] {{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: {tbl_body_scroll_max_px}px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: thin !important;
+    -webkit-overflow-scrolling: touch !important;
+}}
+[data-testid="stVerticalBlock"][class*="st-key-geo_tbl_rows"]::-webkit-scrollbar {{
+    width: 8px !important;
+}}
+[data-testid="stVerticalBlock"][class*="st-key-geo_tbl_rows"]::-webkit-scrollbar-thumb {{
+    background: rgba(49, 51, 63, 0.35) !important;
+    border-radius: 4px !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [data-testid="stVerticalBlock"][class*="st-key-geo_tbl_rows"]::-webkit-scrollbar-thumb {{
+        background: rgba(232, 234, 237, 0.35) !important;
     }}
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stVerticalBlock"] {{

@@ -300,6 +300,7 @@ GEO_MAP_STREAMLIT_KEY_BOTTOM_TABLE_WRAP = "geo_map_bottom_table_wrap"
 GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT = "geo_map_table_flyout"
 GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS = "min(50vh, 400px)"
 GEO_MAP_TABLE_FLYOUT_Z_INDEX = 40
+GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT = 5
 STREAMLIT_DEBUG_GEO_MAP_ENV = "STREAMLIT_DEBUG_GEO_MAP"
 GEO_MAP_ST_HEADER_REM = "3.75rem"
 # Split host (black border): margin-top = TOP (real gap below block padding). Height = 100vh − title bar − TOP − BOTTOM so the box still ends BOTTOM px above the viewport bottom.
