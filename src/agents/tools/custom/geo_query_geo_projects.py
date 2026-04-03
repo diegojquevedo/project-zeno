@@ -337,9 +337,10 @@ async def _geo_query_geo_projects(
 ) -> Command:
     """
     Query Lake County stormwater projects in geo_lake_county mode.
-    Fetches project attributes from the representative points layer, then fetches actual
-    geometries (point, polyline, polygon) in parallel batches using project_id as join key.
-    Emits map actions: one layer per geometry type + one layer for representative points.
+    Fetches project attributes from the representative points layer, then concurrently runs
+    geometry batch fetches (per geometry type, parallel), optional municipality boundary lookup,
+    and narrative enrichment (schema + LLM). Emits map actions: one layer per geometry type
+    plus one layer for representative points.
 
     IMPORTANT: Before calling this tool for any attribute-based filter, call
     geo_discover_project_schema first to inspect available fields, types, and domain values.
@@ -550,7 +551,64 @@ async def _geo_query_geo_projects(
             if layer_key:
                 project_ids_by_geom_type.setdefault(layer_key, []).append(pid)
 
-    geom_features_by_pid = await _batch_fetch_geometries(client, project_ids_by_geom_type)
+    total = len(rep_features)
+    _skip = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
+    feature_rows: list[dict] = []
+    for feat in rep_features:
+        props = feat.get("properties", {})
+        row: dict = {}
+        for k, v in props.items():
+            if k in _skip:
+                continue
+            if v is None:
+                continue
+            if isinstance(v, str) and not v.strip():
+                continue
+            row[k] = _json_safe_scalar(v)
+        if not row:
+            pid = props.get(GEO_PROJECT_ID_FIELD)
+            if pid is not None:
+                row[GEO_PROJECT_ID_FIELD] = _json_safe_scalar(pid)
+        if row:
+            feature_rows.append(row)
+
+    charts_data = _build_charts_from_rows(feature_rows, [])
+    geo_result_summary = {
+        "total": total,
+        "label": "project",
+        "label_plural": "projects",
+        "feature_rows": feature_rows,
+        "charts_data": charts_data,
+        "filters": {
+            k: v for k, v in {
+                "category": project_category,
+                "where": where_clause if where_clause and where_clause.strip() != "1=1" else None,
+                "boundary": spatial_boundary_label,
+                "jurisdiction": jurisdiction if jurisdiction and jurisdiction.strip() else None,
+            }.items() if v
+        },
+    }
+
+    async def _municipality_if_needed() -> dict | None:
+        if spatial_boundary_data and spatial_boundary_data.get("features"):
+            return None
+        if not jurisdiction or not str(jurisdiction).strip():
+            return None
+        return await _fetch_municipality_boundary(jurisdiction.strip())
+
+    geom_features_by_pid, narrative_enrichment, jurisdiction_boundary = await asyncio.gather(
+        _batch_fetch_geometries(client, project_ids_by_geom_type),
+        compute_narrative_enrichment(
+            feature_rows,
+            GEO_PROJECT_REPRESENTATIVE_POINTS_URL,
+            total=total,
+            result_label="Lake County projects",
+        ),
+        _municipality_if_needed(),
+    )
+
+    if narrative_enrichment:
+        geo_result_summary["narrative_enrichment"] = narrative_enrichment
 
     geom_features_with_projecttype: list[dict] = []
     rep_features_enriched: list[dict] = []
@@ -579,7 +637,6 @@ async def _geo_query_geo_projects(
             })
 
     map_actions: list[dict] = []
-    jurisdiction_boundary = None
 
     if spatial_boundary_data and spatial_boundary_data.get("features"):
         map_actions.append({
@@ -588,7 +645,6 @@ async def _geo_query_geo_projects(
             "label": f"Boundary: {spatial_boundary_label or boundary_filter_value}",
         })
     elif jurisdiction:
-        jurisdiction_boundary = await _fetch_municipality_boundary(jurisdiction)
         if jurisdiction_boundary and jurisdiction_boundary.get("features"):
             boundary_props = jurisdiction_boundary["features"][0].get("properties", {})
             label = boundary_props.get("NAME1") or boundary_props.get("NAME") or jurisdiction
@@ -628,54 +684,6 @@ async def _geo_query_geo_projects(
 
     if basemap_id is not None and str(basemap_id).strip():
         map_actions.append(create_set_basemap_action(str(basemap_id).strip()))
-
-    total = len(rep_features)
-
-    _skip = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
-    feature_rows: list[dict] = []
-    for feat in rep_features:
-        props = feat.get("properties", {})
-        row: dict = {}
-        for k, v in props.items():
-            if k in _skip:
-                continue
-            if v is None:
-                continue
-            if isinstance(v, str) and not v.strip():
-                continue
-            row[k] = _json_safe_scalar(v)
-        if not row:
-            pid = props.get(GEO_PROJECT_ID_FIELD)
-            if pid is not None:
-                row[GEO_PROJECT_ID_FIELD] = _json_safe_scalar(pid)
-        if row:
-            feature_rows.append(row)
-
-    charts_data = _build_charts_from_rows(feature_rows, [])
-    geo_result_summary = {
-        "total": total,
-        "label": "project",
-        "label_plural": "projects",
-        "feature_rows": feature_rows,
-        "charts_data": charts_data,
-        "filters": {
-            k: v for k, v in {
-                "category": project_category,
-                "where": where_clause if where_clause and where_clause.strip() != "1=1" else None,
-                "boundary": spatial_boundary_label,
-                "jurisdiction": jurisdiction if jurisdiction and jurisdiction.strip() else None,
-            }.items() if v
-        },
-    }
-
-    narrative_enrichment = await compute_narrative_enrichment(
-        feature_rows,
-        GEO_PROJECT_REPRESENTATIVE_POINTS_URL,
-        total=total,
-        result_label="Lake County projects",
-    )
-    if narrative_enrichment:
-        geo_result_summary["narrative_enrichment"] = narrative_enrichment
 
     filter_label_parts = []
     if project_category and project_category != "projects":
