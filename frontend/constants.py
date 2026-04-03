@@ -88,15 +88,15 @@ DATA_SOURCES = {
 }
 
 MAP_CHAT_INPUT_RADIUS = "28px"
-MAP_CHAT_INPUT_COMPOSITE_MIN_HEIGHT = "104px"
-MAP_CHAT_INPUT_TEXTAREA_MIN_HEIGHT = "36px"
+MAP_CHAT_INPUT_COMPOSITE_MIN_HEIGHT = "76px"
+MAP_CHAT_INPUT_TEXTAREA_MIN_HEIGHT = "32px"
 MAP_CHAT_INPUT_TEXTAREA_MAX_LINE_COUNT = 5
-MAP_CHAT_INPUT_TEXTAREA_VERTICAL_PAD_SUM_PX = 12
-MAP_CHAT_INPUT_TEXTAREA_MAX_HEIGHT_FALLBACK = "132px"
-MAP_CHAT_INPUT_TEXTAREA_PADDING = "6px 12px 6px 18px"
-MAP_CHAT_INPUT_SHELL_INNER_PADDING = "10px 10px 0 10px"
-MAP_CHAT_INPUT_FOOTER_MIN_HEIGHT = "36px"
-MAP_CHAT_INPUT_FOOTER_PADDING = "6px 10px 6px 10px"
+MAP_CHAT_INPUT_TEXTAREA_VERTICAL_PAD_SUM_PX = 10
+MAP_CHAT_INPUT_TEXTAREA_MAX_HEIGHT_FALLBACK = "128px"
+MAP_CHAT_INPUT_TEXTAREA_PADDING = "5px 10px 5px 14px"
+MAP_CHAT_INPUT_SHELL_INNER_PADDING = "5px 6px 0 6px"
+MAP_CHAT_INPUT_FOOTER_MIN_HEIGHT = "32px"
+MAP_CHAT_INPUT_FOOTER_PADDING = "4px 8px 4px 8px"
 MAP_CHAT_INPUT_FONT_SIZE = "1rem"
 MAP_CHAT_INPUT_LINE_HEIGHT = "1.5"
 MAP_CHAT_GEMINI_LIGHT_SURFACE = "#ffffff"
@@ -285,6 +285,12 @@ MAP_CHAT_PDF.EXEC.BANNER.FULL = (
 GEO_MAP_CHAT_MAP_COLUMNS_GAP = "medium"
 GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT = "geo_chat_map_split"
 GEO_MAP_CHAT_MAP_COLUMN_WEIGHTS: list[int] = [1, 1]
+GEO_CHAT_HISTORY_CONTAINER_MIN_HEIGHT_PX = 300
+GEO_CHAT_HISTORY_STREAMLIT_SCROLL_HEIGHT_PX = 420
+GEO_MAIN_COL_CHAT_MIN_HEIGHT_PX = 480
+GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_MIN_HEIGHT = "26px"
+GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_PADDING = "3px 8px 4px 8px"
+GEO_MAP_SPLIT_CHAT_INPUT_SHELL_MIN_HEIGHT = "0"
 
 GEO_MAP_IFRAME_MIN_HEIGHT_PX = 360
 GEO_MAP_IFRAME_HEIGHT_VH_OFFSET_REM = 10.5
@@ -296,6 +302,9 @@ GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS = "min(50vh, 400px)"
 GEO_MAP_TABLE_FLYOUT_Z_INDEX = 40
 STREAMLIT_DEBUG_GEO_MAP_ENV = "STREAMLIT_DEBUG_GEO_MAP"
 GEO_MAP_ST_HEADER_REM = "3.75rem"
+# Split host (black border): margin-top = TOP (real gap below block padding). Height = 100vh − title bar − TOP − BOTTOM so the box still ends BOTTOM px above the viewport bottom.
+GEO_MAP_SPLIT_MARGIN_TOP_PX = 0
+GEO_MAP_SPLIT_MARGIN_BOTTOM_PX = 34
 STREAMLIT_APP_TOP_BAR_TITLE = "Geo AI"
 STREAMLIT_APP_TOP_BAR_TITLE_FONT_SIZE = "2.25rem"
 STREAMLIT_APP_TOP_BAR_TITLE_PAD_LEFT = "1rem"
@@ -353,36 +362,297 @@ GEO_MAP_TABLE_GOTO_BUTTON_MIN_WIDTH = "4.75rem"
 GEO_MAP_TABLE_GOTO_BUTTON_BG = "#4C78A8"
 GEO_MAP_TABLE_GOTO_BUTTON_HOVER = "#3a5d84"
 
-_GEO_MAP_RIGHT_COL_A = 'section[data-testid="stMain"] [data-testid="column"]:last-of-type'
-_GEO_MAP_RIGHT_COL_B = '[data-testid="stAppViewContainer"] [data-testid="column"]:last-of-type'
-_GEO_MAP_COL_IFRAME_HOST_SEL = (
-    f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"], '
-    f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"]'
+_GEO_MAP_LAST_OF_TYPE_COL = (
+    ':is([data-testid="column"], [data-testid="stColumn"]):last-of-type',
+    ':is([data-testid="column"] > div, [data-testid="stColumn"]):last-of-type',
 )
+_GEO_MAP_NTH_CHILD_2_COL = (
+    ':is([data-testid="column"], [data-testid="stColumn"]):nth-child(2)',
+    ':is([data-testid="column"] > div, [data-testid="stColumn"]):nth-child(2)',
+)
+_GEO_MAP_SPLIT_HOST_PREFIXES = (
+    '[class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > ',
+    '[class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > ',
+    '[class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > ',
+    '[class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > ',
+    '[class*="geo-chat-map-split"] > div > ',
+    '[class*="geo_chat_map_split"] > div > ',
+)
+
+
+def _geo_map_col_iframe_host_fragments() -> list[str]:
+    rows: list[str] = []
+    for tail in _GEO_MAP_LAST_OF_TYPE_COL:
+        rows.append(f'section[data-testid="stMain"] {tail} [class*="st-key-geo_map_iframe_host"]')
+        rows.append(f'[data-testid="stAppViewContainer"] {tail} [class*="st-key-geo_map_iframe_host"]')
+    for pref in _GEO_MAP_SPLIT_HOST_PREFIXES:
+        for c2 in _GEO_MAP_NTH_CHILD_2_COL:
+            rows.append(f'{pref}{c2} [class*="st-key-geo_map_iframe_host"]')
+    return rows
+
+
+_GEO_MAP_COL_IFRAME_HOST_SEL = ",\n    ".join(_geo_map_col_iframe_host_fragments())
 GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL = _GEO_MAP_COL_IFRAME_HOST_SEL
+
+
+def _geo_map_col_iframe_host_parts() -> list[str]:
+    return [p.strip() for p in _GEO_MAP_COL_IFRAME_HOST_SEL.split(",") if p.strip()]
+
+
+def _geo_map_host_descendants(host_comma_sel: str, descendant_tail: str) -> str:
+    parts = [p.strip() for p in host_comma_sel.split(",") if p.strip()]
+    t = descendant_tail.strip()
+    return ",\n    ".join(f"{p} {t}" for p in parts)
+
+
+def _geo_map_iframe_host_inner_flex_css() -> str:
+    h = _geo_map_col_iframe_host_parts()
+    ec_tails = (
+        '> div > [data-testid="stElementContainer"]:has(iframe)',
+        '> div > [data-testid="stElementContainer"]:has([data-testid="stIFrame"])',
+        '> [data-testid="stElementContainer"]:has(iframe)',
+        '> [data-testid="stElementContainer"]:has([data-testid="stIFrame"])',
+    )
+    ec_rows: list[str] = []
+    vb_rows: list[str] = []
+    lw_rows: list[str] = []
+    host_child_div_rows: list[str] = []
+    for p in h:
+        host_child_div_rows.append(f"{p} > div")
+        lw_rows.append(f'{p} > div > [data-testid="stLayoutWrapper"]')
+        lw_rows.append(f'{p} > [data-testid="stLayoutWrapper"]')
+        for t in ec_tails:
+            ec_rows.append(f"{p} {t}")
+            vb_rows.append(f'{p} {t} [data-testid="stVerticalBlock"]')
+    ec_map = ",\n    ".join(ec_rows)
+    lw_map = ",\n    ".join(lw_rows)
+    vb_under_ec = ",\n    ".join(vb_rows)
+    vb_scroll = ",\n    ".join(
+        f'{s}:not([data-test-scroll-behavior="normal"]):not([data-test-scroll-behavior="scroll-to-bottom"])'
+        for s in vb_rows
+    )
+    host_child_div = ",\n    ".join(host_child_div_rows)
+    ec_any_child_div = ",\n    ".join(f"{row} > div" for row in ec_rows)
+    ec_inner_div = ",\n    ".join(
+        f"{row} > div:has(iframe)" if i % 2 == 0 else f'{row} > div:has([data-testid="stIFrame"])'
+        for row in ec_rows
+        for i in (0, 1)
+    )
+    vb_any_child_div = ",\n    ".join(f"{row} > div" for row in vb_rows)
+    vb_inner_div = ",\n    ".join(
+        f"{row} > div:has(iframe)" if i % 2 == 0 else f'{row} > div:has([data-testid="stIFrame"])'
+        for row in vb_rows
+        for i in (0, 1)
+    )
+    return f"""
+    {host_child_div} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }}
+    {ec_map} {{
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-self: stretch !important;
+    }}
+    {lw_map} {{
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        margin-top: auto !important;
+        align-self: stretch !important;
+        min-height: 0 !important;
+    }}
+    {vb_under_ec} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    {vb_scroll} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }}
+    {ec_any_child_div} {{
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        align-self: stretch !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }}
+    {ec_inner_div} {{
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        align-self: stretch !important;
+    }}
+    {vb_any_child_div} {{
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }}
+    {vb_inner_div} {{
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }}"""
 
 
 def build_geo_map_column_css() -> str:
     mnh = GEO_MAP_IFRAME_MIN_HEIGHT_PX
-    hdr = GEO_MAP_ST_HEADER_REM
-    host_cap_global = f"calc((100vh - {hdr}) * 0.9)"
-    folium_iframe_cap_global = f"min({FOLIUM_STATIC_DEFAULT_HEIGHT + 32}px, {host_cap_global})"
     sel = _GEO_MAP_COL_IFRAME_HOST_SEL
+    st_iframe_el = _geo_map_host_descendants(sel, '[data-testid="stIFrame"]')
+    st_iframe_iframe = _geo_map_host_descendants(sel, '[data-testid="stIFrame"] iframe')
+    iframe_any = _geo_map_host_descendants(sel, "iframe")
+    iframe_cc = _geo_map_host_descendants(sel, "iframe.stCustomComponentV1")
+    iframe_cc_cls = _geo_map_host_descendants(sel, 'iframe[class*="stCustomComponentV1"]')
     return f"""
-    {sel} [data-testid="stIFrame"],
-    {sel} iframe {{
-        min-height: {mnh}px;
-        max-height: {folium_iframe_cap_global} !important;
-        height: {folium_iframe_cap_global} !important;
-        flex: 1 1 0;
-        width: 100%;
-        border: none;
+    {sel} {{
+        flex: 1 1 0 !important;
+        min-height: {mnh}px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
     }}
-    {sel} [data-testid="stIFrame"] {{
-        flex: 1 1 0;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
+    {_geo_map_iframe_host_inner_flex_css()}
+    {st_iframe_el} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }}
+    {st_iframe_iframe},
+    {iframe_any} {{
+        flex: 1 1 0 !important;
+        min-height: {mnh}px !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        width: 100% !important;
+        align-self: stretch !important;
+        border: none !important;
+    }}
+    {iframe_cc},
+    {iframe_cc_cls} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        width: 100% !important;
+        align-self: stretch !important;
+        border: none !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:has([data-testid="stEmpty"]) {{
+        flex: 0 0 0 !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        border: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:has([data-testid="stEmpty"]) > div {{
+        display: none !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div[class*="st-emotion-cache"] {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        overflow: hidden !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        overflow: hidden !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div > iframe,
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div > [data-testid="stIFrame"],
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div > [data-testid="stIFrame"] > div {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }}
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) > div > [data-testid="stIFrame"] iframe,
+    [class*="st-key-geo_map_iframe_host"] [data-testid="stElementContainer"]:is(:has(iframe), :has([data-testid="stIFrame"])) iframe {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        width: 100% !important;
+        align-self: stretch !important;
+        border: none !important;
     }}
     """
 
@@ -391,17 +661,19 @@ def build_geo_map_panel_result_rows_css(expanded: bool) -> str:
     hdr = GEO_MAP_ST_HEADER_REM
     host_flex = "6 1 0" if expanded else "9 1 0"
     host_cap = f"calc((100vh - {hdr}) * 0.55)" if expanded else f"calc((100vh - {hdr}) * 0.9)"
-    folium_iframe_cap = f"min({FOLIUM_STATIC_DEFAULT_HEIGHT + 32}px, {host_cap})"
+    mnh_panel = GEO_MAP_IFRAME_MIN_HEIGHT_PX
     sel_host = _GEO_MAP_COL_IFRAME_HOST_SEL
-    sel_iframe = (
-        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"], '
-        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] iframe, '
-        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"], '
-        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] iframe'
-    )
-    wrap_sel = (
-        f'{_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_table_debug_wrap"], '
-        f'{_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_table_debug_wrap"]'
+    st_iframe_el_h = _geo_map_host_descendants(sel_host, '[data-testid="stIFrame"]')
+    st_iframe_iframe_h = _geo_map_host_descendants(sel_host, '[data-testid="stIFrame"] iframe')
+    iframe_any_h = _geo_map_host_descendants(sel_host, "iframe")
+    iframe_cc_h = _geo_map_host_descendants(sel_host, "iframe.stCustomComponentV1")
+    iframe_cc_cls_h = _geo_map_host_descendants(sel_host, 'iframe[class*="stCustomComponentV1"]')
+    wrap_sel = ",\n    ".join(
+        f'{p} [class*="st-key-geo_map_table_debug_wrap"]'
+        for p in (
+            *[f'section[data-testid="stMain"] {t}' for t in _GEO_MAP_LAST_OF_TYPE_COL],
+            *[f'[data-testid="stAppViewContainer"] {t}' for t in _GEO_MAP_LAST_OF_TYPE_COL],
+        )
     )
     gmmc_inner_vb = (
         '[class*="geo_main_col_map"] > div > [data-testid="stVerticalBlock"], '
@@ -446,11 +718,24 @@ def build_geo_map_panel_result_rows_css(expanded: bool) -> str:
         z-index: 1 !important;
     }}
     {gmmc_row_map} [data-testid="stIFrame"] {{
+        flex: 1 1 0 !important;
         align-self: stretch !important;
         width: 100% !important;
         max-width: 100% !important;
-        max-height: {folium_iframe_cap} !important;
-        height: auto !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }}
+    {gmmc_row_map} [data-testid="stIFrame"] iframe,
+    {gmmc_row_map} iframe {{
+        flex: 1 1 0 !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        border: none !important;
     }}
     {gmmc_row_tbl} {{
         flex: 0 0 auto !important;
@@ -470,46 +755,36 @@ def build_geo_map_panel_result_rows_css(expanded: bool) -> str:
         display: flex !important;
         flex-direction: column !important;
     }}
-    {sel_host} > div {{
+    {_geo_map_iframe_host_inner_flex_css()}
+    {st_iframe_el_h} {{
         flex: 1 1 0 !important;
         min-height: 0 !important;
-        overflow: hidden !important;
         display: flex !important;
         flex-direction: column !important;
-    }}
-    {sel_host} [data-testid="stVerticalBlock"] {{
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-    }}
-    {sel_iframe} {{
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        max-height: {folium_iframe_cap} !important;
-        height: {folium_iframe_cap} !important;
-        width: 100% !important;
-    }}
-    {_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"],
-    {_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"] {{
-        max-height: {folium_iframe_cap} !important;
-        min-height: 0 !important;
-        height: {folium_iframe_cap} !important;
         overflow: hidden !important;
     }}
-    {_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"] iframe,
-    {_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"] iframe,
-    {_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] [data-testid="stIFrame"] iframe,
-    {_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] iframe {{
-        max-height: {folium_iframe_cap} !important;
-        min-height: 0 !important;
-        height: {folium_iframe_cap} !important;
+    {st_iframe_iframe_h},
+    {iframe_any_h} {{
+        flex: 1 1 0 !important;
+        min-height: {mnh_panel}px !important;
+        height: 100% !important;
+        max-height: 100% !important;
         width: 100% !important;
+        align-self: stretch !important;
+        border: none !important;
     }}
-    {_GEO_MAP_RIGHT_COL_A} [class*="st-key-geo_map_iframe_host"],
-    {_GEO_MAP_RIGHT_COL_B} [class*="st-key-geo_map_iframe_host"] {{
-        border: {GEO_MAP_RIGHT_PANEL_BORDER} !important;
+    {iframe_cc_h},
+    {iframe_cc_cls_h} {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        width: 100% !important;
+        align-self: stretch !important;
+        border: none !important;
+    }}
+    {_GEO_MAP_COL_IFRAME_HOST_SEL} {{
+        box-shadow: inset 0 0 0 1px rgba(49, 51, 63, 0.28) !important;
         border-radius: 8px !important;
         box-sizing: border-box !important;
     }}

@@ -1,6 +1,8 @@
 import custom  # noqa: F401 — registers all custom renderers
 import folium
+from branca.element import MacroElement
 from custom_renderer_registry import get_renderer
+from jinja2 import Template
 from shapely.geometry import shape
 
 from constants import (
@@ -13,6 +15,162 @@ from src.shared.geo_basemap import (
     GEO_BASEMAP_SPECS,
     validate_basemap_id,
 )
+
+_STREAMLIT_FOLIUM_RESIZE_MACRO = Template(
+    """
+{% macro script(this, kwargs) %}
+{% raw %}
+(function () {
+    var win = window;
+    function invalidateLeafletMaps() {
+        try {
+            for (var k in win) {
+                if (!Object.prototype.hasOwnProperty.call(win, k) || k.indexOf("map_") !== 0) {
+                    continue;
+                }
+                var mm = win[k];
+                if (mm && typeof mm.invalidateSize === "function") {
+                    mm.invalidateSize({ animate: false });
+                }
+            }
+        } catch (e0) {}
+    }
+    function stretchLayout() {
+        try {
+            var fe = null;
+            try {
+                fe = win.frameElement;
+            } catch (eFe) {}
+            var fromFrame = 0;
+            if (fe) {
+                fromFrame = Math.floor(fe.getBoundingClientRect().height);
+                if (fromFrame < 1) {
+                    fromFrame = Math.floor(fe.clientHeight);
+                }
+            }
+            var inner = Math.floor(win.innerHeight ?? 0);
+            var docEl = document.documentElement;
+            var clientDoc = docEl ? Math.floor(docEl.clientHeight) : 0;
+            var h = Math.max(80, fromFrame, inner, clientDoc);
+            if (h < 120) {
+                var bc = document.body ? document.body.clientHeight : 0;
+                h = Math.max(120, Math.floor(bc));
+            }
+            var html = document.documentElement;
+            if (html) {
+                html.style.setProperty("height", h + "px", "important");
+                html.style.setProperty("max-height", h + "px", "important");
+                html.style.setProperty("overflow", "hidden", "important");
+            }
+            var body = document.body;
+            if (body) {
+                body.style.setProperty("height", h + "px", "important");
+                body.style.setProperty("max-height", h + "px", "important");
+                body.style.setProperty("overflow", "hidden", "important");
+                body.style.setProperty("margin", "0", "important");
+            }
+            var root = document.getElementById("root");
+            if (root) {
+                root.style.setProperty("height", h + "px", "important");
+                root.style.setProperty("max-height", h + "px", "important");
+                root.style.setProperty("overflow", "hidden", "important");
+                root.style.setProperty("display", "flex", "important");
+                root.style.setProperty("flex-direction", "column", "important");
+                root.style.setProperty("min-height", "0", "important");
+            }
+            var parentEl = document.getElementById("parent") || document.querySelector(".float-container");
+            if (parentEl) {
+                parentEl.style.setProperty("float", "none", "important");
+                parentEl.style.setProperty("display", "flex", "important");
+                parentEl.style.setProperty("flex-direction", "column", "important");
+                parentEl.style.setProperty("height", "100%", "important");
+                parentEl.style.setProperty("min-height", "0", "important");
+                parentEl.style.setProperty("flex", "1 1 0", "important");
+                parentEl.style.setProperty("overflow", "hidden", "important");
+                parentEl.style.setProperty("width", "100%", "important");
+                var fc = parentEl.querySelectorAll(".float-child");
+                for (var i = 0; i < fc.length; i++) {
+                    var cell = fc[i];
+                    var hasMap = cell.querySelector && cell.querySelector(".leaflet-container");
+                    if (hasMap) {
+                        cell.style.setProperty("float", "none", "important");
+                        cell.style.setProperty("width", "100%", "important");
+                        cell.style.setProperty("flex", "1 1 0", "important");
+                        cell.style.setProperty("min-height", "0", "important");
+                        cell.style.setProperty("display", "flex", "important");
+                        cell.style.setProperty("flex-direction", "column", "important");
+                        cell.style.setProperty("overflow", "hidden", "important");
+                        var me = cell.querySelector(".leaflet-container");
+                        if (me) {
+                            me.style.setProperty("height", "100%", "important");
+                            me.style.setProperty("max-height", "none", "important");
+                            me.style.setProperty("width", "100%", "important");
+                            me.style.setProperty("flex", "1 1 0", "important");
+                            me.style.setProperty("min-height", "0", "important");
+                        }
+                    } else {
+                        cell.style.setProperty("float", "none", "important");
+                        cell.style.setProperty("flex-shrink", "0", "important");
+                        cell.style.setProperty("flex-grow", "0", "important");
+                    }
+                }
+            }
+            var md = document.getElementById("map_div");
+            if (md) {
+                md.style.setProperty("height", "100%", "important");
+                md.style.setProperty("max-height", "none", "important");
+                md.style.setProperty("width", "100%", "important");
+                md.style.setProperty("flex", "1 1 0", "important");
+                md.style.setProperty("min-height", "0", "important");
+            }
+            var maps = document.querySelectorAll(".leaflet-container");
+            for (var j = 0; j < maps.length; j++) {
+                maps[j].style.setProperty("height", "100%", "important");
+                maps[j].style.setProperty("max-height", "none", "important");
+                maps[j].style.setProperty("width", "100%", "important");
+                maps[j].style.setProperty("flex", "1 1 0", "important");
+                maps[j].style.setProperty("min-height", "0", "important");
+            }
+            invalidateLeafletMaps();
+            win.dispatchEvent(new Event("resize"));
+        } catch (e1) {}
+    }
+    var raf = null;
+    function schedule() {
+        if (raf) return;
+        raf = win.requestAnimationFrame(function () {
+            raf = null;
+            stretchLayout();
+        });
+    }
+    win.addEventListener("resize", schedule, { passive: true });
+    try {
+        var pw = win.parent;
+        if (pw && pw !== win) {
+            pw.addEventListener("resize", schedule, { passive: true });
+        }
+    } catch (ePw) {}
+    if (win.visualViewport) {
+        win.visualViewport.addEventListener("resize", schedule, { passive: true });
+    }
+    if (win.ResizeObserver) {
+        var ro = new win.ResizeObserver(schedule);
+        ro.observe(document.documentElement);
+    }
+    schedule();
+    win.addEventListener("load", schedule, { passive: true });
+    setTimeout(schedule, 80);
+    setTimeout(schedule, 400);
+    setTimeout(schedule, 1200);
+})();
+{% endraw %}
+{% endmacro %}
+"""
+)
+
+
+class _StreamlitFoliumResizeBridge(MacroElement):
+    _template = _STREAMLIT_FOLIUM_RESIZE_MACRO
 
 
 def _expand_degenerate_bounds(
@@ -274,4 +432,5 @@ def render_geo_map(map_actions, width: int | str | None = 700, height=400):
                 renderer(m, action)
 
     folium.LayerControl(position="bottomleft").add_to(m)
+    _StreamlitFoliumResizeBridge().add_to(m)
     return m

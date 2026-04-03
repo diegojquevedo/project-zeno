@@ -42,13 +42,22 @@ from constants import (
     FOREST_CARBON_REMOVALS_DATASET,
     GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS,
     GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER,
+    GEO_CHAT_HISTORY_CONTAINER_MIN_HEIGHT_PX,
+    GEO_CHAT_HISTORY_STREAMLIT_SCROLL_HEIGHT_PX,
     GEO_CHAT_PLACEHOLDER_FOREST_LONG,
     GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_SHORT,
+    GEO_MAIN_COL_CHAT_MIN_HEIGHT_PX,
     GEO_MAP_CHAT_MAP_COLUMN_WEIGHTS,
     GEO_MAP_CHAT_MAP_COLUMNS_GAP,
     GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL,
+    GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_MIN_HEIGHT,
+    GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_PADDING,
+    GEO_MAP_SPLIT_CHAT_INPUT_SHELL_MIN_HEIGHT,
+    GEO_MAP_SPLIT_MARGIN_BOTTOM_PX,
+    GEO_MAP_SPLIT_MARGIN_TOP_PX,
+    GEO_MAP_ST_HEADER_REM,
     GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT,
     GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
@@ -318,10 +327,282 @@ st.set_page_config(
 
 render_main_header()
 
+_GEO_SPLIT_USABLE_HEIGHT = (
+    f"calc(100vh - {GEO_MAP_ST_HEADER_REM} - {GEO_MAP_SPLIT_MARGIN_TOP_PX}px - {GEO_MAP_SPLIT_MARGIN_BOTTOM_PX}px)"
+)
+
+_APP_MAP_IFRAME_HOST_SEL = GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL
+
+_APP_CHAT_LEFT_STRETCH_CSS = """
+    [class*="geo-chat-map-split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:has([class*="st-key-geo_main_col_chat"]) {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_chat"]) {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stElementContainer"]:not(:has([class*="st-key-geo_main_col_chat"])) {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > [data-testid="stVerticalBlock"]:not(:has([class*="st-key-geo_main_col_chat"])) {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) [data-testid="stElementContainer"]:has([data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"])) {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        height: 100% !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"]),
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_main_col_chat"]) {
+        min-height: __GEO_MAIN_COL_MIN_PX__px !important;
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        max-height: none !important;
+        height: 100% !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        height: 100% !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        padding-bottom: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child,
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        gap: 0.4rem !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child) {
+        flex: 0 0 auto !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        gap: 0.4rem !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child):has([class*="st-key-geo_chat_history"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child):has([class*="st-key-geo_chat_history"]),
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child)[class*="st-key-geo_chat_history"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:not(:only-child)[class*="st-key-geo_chat_history"] {
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"] {
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(> [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(> [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]) {
+        flex: 1 1 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(> [data-testid="stVerticalBlock"][class*="st-key-geo_chat_header"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(> [data-testid="stVerticalBlock"][class*="st-key-geo_chat_header"]) {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div > [data-testid="stElementContainer"] {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_header"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_header"]) {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+        align-self: stretch !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_history"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_history"]) {
+        flex: 1 1 0 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+        align-self: stretch !important;
+        min-width: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        align-self: stretch !important;
+    }
+    [class*="st-key-geo_chat_header"][data-testid="stVerticalBlock"],
+    [class*="st-key-geo_chat_header"] [data-testid="stVerticalBlock"] {
+        gap: 0.3rem !important;
+    }
+    [class*="st-key-geo_main_col_chat"] [class*="st-key-geo_chat_header"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_header"]) {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_main_col_chat"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"] {
+        flex: 1 1 0 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([class*="st-key-geo_chat_history"]) {
+        flex: 1 1 0 !important;
+        flex-shrink: 1 !important;
+        min-height: __GCH_MIN_PX__px !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+        box-sizing: border-box !important;
+    }
+    [class*="st-key-geo_chat_history"][data-testid="stVerticalBlock"] > div {
+        flex: 0 0 auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        align-items: stretch !important;
+    }
+    [class*="st-key-geo_chat_history"][data-testid="stVerticalBlock"] > div > [data-testid="stElementContainer"] {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+""".replace(
+    "__GCH_MIN_PX__",
+    str(GEO_CHAT_HISTORY_CONTAINER_MIN_HEIGHT_PX),
+).replace(
+    "__GEO_MAIN_COL_MIN_PX__",
+    str(GEO_MAIN_COL_CHAT_MIN_HEIGHT_PX),
+)
+
 st.markdown(
     f"""
     <style>
-    main .block-container, .block-container {{ padding-top: 3.75rem !important; padding-bottom: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; max-width: 100% !important; max-height: 100vh !important; box-sizing: border-box !important; }}
+    main .block-container, .block-container {{ padding-top: {GEO_MAP_ST_HEADER_REM} !important; padding-bottom: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; max-width: 100% !important; max-height: 100vh !important; box-sizing: border-box !important; gap: 0 !important; }}
+    main .block-container > [data-testid="stVerticalBlock"],
+    .block-container > [data-testid="stVerticalBlock"] {{ gap: 0 !important; padding-bottom: 0 !important; }}
     h1, h2, h3, [data-testid="stHeader"], [data-testid="stSubheader"] {{ overflow: visible !important; }}
     [data-testid="stSidebar"] {{ display: none !important; }}
     [data-testid="collapsedControl"] {{ display: none !important; }}
@@ -329,22 +610,264 @@ st.markdown(
     button[aria-label="Collapse sidebar"],
     [data-testid="stSidebarCollapsedButton"] {{ display: none !important; }}
 
-    [data-testid="column"]:first-of-type {{ height: calc(100vh - 3.75rem) !important; max-height: calc(100vh - 3.75rem) !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; padding-bottom: 5.5rem !important; box-sizing: border-box !important; }}
-    [data-testid="column"]:first-of-type > div {{ flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }}
-    [data-testid="column"]:first-of-type > div > *:nth-child(1) {{ flex-shrink: 0 !important; overflow: visible !important; }}
-    [data-testid="column"]:first-of-type > div > *:nth-child(2) {{ flex: 1 1 0 !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch !important; }}
-    [data-testid="column"]:first-of-type > div > *:nth-child(3) {{ flex-shrink: 0 !important; }}
-    [data-testid="column"]:last-of-type {{ height: calc(100vh - 3.75rem) !important; max-height: calc(100vh - 3.75rem) !important; overflow-x: hidden !important; overflow-y: auto !important; display: flex !important; flex-direction: column !important; }}
-    [data-testid="column"]:last-of-type > div {{ flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow-x: hidden !important; overflow-y: visible !important; }}
-    [data-testid="column"]:last-of-type > div > [data-testid="stVerticalBlock"] {{ flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow-x: hidden !important; overflow-y: visible !important; }}
-    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} {{ flex: 1 1 0; min-height: 0; overflow: hidden; margin-bottom: 0; padding-bottom: 0; }}
-    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} > div {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 0; padding-bottom: 0; }}
+    [class*="geo-chat-map-split"],
+    [class*="geo_chat_map_split"] {{
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        height: {_GEO_SPLIT_USABLE_HEIGHT} !important;
+        max-height: {_GEO_SPLIT_USABLE_HEIGHT} !important;
+        min-height: 0 !important;
+        margin-top: {GEO_MAP_SPLIT_MARGIN_TOP_PX}px !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        overflow: visible !important;
+        gap: 0 !important;
+        padding: 0 !important;
+    }}
+    [class*="geo-chat-map-split"] > [data-testid="stElementContainer"]:has(iframe),
+    [class*="geo_chat_map_split"] > [data-testid="stElementContainer"]:has(iframe) {{
+        height: 0 !important;
+        max-height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        border: none !important;
+        visibility: hidden !important;
+        flex: 0 0 0 !important;
+        line-height: 0 !important;
+    }}
+    [class*="geo-chat-map-split"] > [data-testid="stElementContainer"]:has(iframe) iframe,
+    [class*="geo_chat_map_split"] > [data-testid="stElementContainer"]:has(iframe) iframe {{
+        width: 1px !important;
+        height: 1px !important;
+        max-height: 1px !important;
+        border: none !important;
+        opacity: 0 !important;
+        display: block !important;
+        pointer-events: none !important;
+    }}
+    [class*="geo-chat-map-split"] > div,
+    [class*="geo_chat_map_split"] > div {{
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }}
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"],
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] {{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        align-items: stretch !important;
+        overflow: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"],
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] {{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        align-items: stretch !important;
+        overflow: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) {{
+        max-height: 100% !important;
+        min-height: 0 !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div,
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div,
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div,
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div,
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div,
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(1) {{
+        flex-shrink: 0 !important;
+        overflow: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(2) {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        overflow-y: visible !important;
+        overflow-x: hidden !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(1) > div > *:nth-child(3) {{
+        flex-shrink: 0 !important;
+    }}
+    """
+    + _APP_CHAT_LEFT_STRETCH_CSS
+    + f"""
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) {{
+        max-height: 100% !important;
+        min-height: 0 !important;
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow-x: hidden !important;
+        overflow-y: hidden !important;
+        box-sizing: border-box !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div,
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div,
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div,
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div,
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div,
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"],
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"],
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"],
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"],
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"],
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stVerticalBlock"] {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) > div > [data-testid="stElementContainer"]:has([class*="st-key-geo_main_col_map"]) {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]),
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-geo_main_col_map"]) {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"],
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"],
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"],
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"],
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"],
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stVerticalBlock"][class*="st-key-geo_main_col_map"] {{
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }}
+    {_APP_MAP_IFRAME_HOST_SEL} {{ flex: 1 1 0 !important; min-height: 0 !important; overflow: hidden !important; margin-bottom: 0; padding-bottom: 0; display: flex; flex-direction: column; }}
     [class*="st-key-geo_map_table_debug_wrap"] {{ flex: 0 0 auto !important; flex-shrink: 0 !important; min-height: 0 !important; }}
-    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} [data-testid="stVerticalBlock"] {{ flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }}
-    [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; }}
-    [data-testid="column"]:last-of-type [data-testid="stHorizontalBlock"] > div {{ flex: 0 0 auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }}
-    [data-testid="column"]:last-of-type [data-testid="stColumn"] {{ height: auto !important; min-height: 0 !important; }}
-    {GEO_MAP_IFRAME_HOST_RIGHT_COL_SEL} [data-testid="stVerticalBlock"]:not([data-test-scroll-behavior="normal"]):not([data-test-scroll-behavior="scroll-to-bottom"]) {{ flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden; }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"],
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"],
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"],
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"],
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"],
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] {{
+        flex: 0 0 auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div,
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div,
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div,
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div,
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div,
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stHorizontalBlock"] > div {{
+        flex: 0 0 auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }}
+    [class*="geo-chat-map-split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"],
+    [class*="geo-chat-map-split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"],
+    [class*="geo_chat_map_split"] > div > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"],
+    [class*="geo_chat_map_split"] > [data-testid="stHorizontalBlock"] > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"],
+    [class*="geo-chat-map-split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"],
+    [class*="geo_chat_map_split"] > div > :is([data-testid="column"], [data-testid="stColumn"]):nth-child(2) [data-testid="stColumn"] {{
+        height: auto !important;
+        min-height: 0 !important;
+    }}
     [class*="geo_chat_header"] {{ overflow: visible !important; }}
     [class*="geo_chat_header"] [data-testid="stHeader"],
     [class*="geo_chat_header"] h1 {{ margin-top: 0 !important; margin-bottom: 0.2rem !important; padding: 0 !important; }}
@@ -366,6 +889,47 @@ st.markdown(
     }}
     """
     + build_map_chat_input_css()
+    + f"""
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInputContainer"],
+    [class*="st-key-geo_main_col_chat"] .stChatFloatingInputContainer {{
+        margin: 0 !important;
+        padding-bottom: 0 !important;
+        height: auto !important;
+        min-height: 0 !important;
+    }}
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInputContainer"] > *,
+    [class*="st-key-geo_main_col_chat"] .stChatFloatingInputContainer > * {{
+        margin-bottom: 0 !important;
+    }}
+    [class*="st-key-map_chat_user_input"],
+    [class*="st-key-map-chat-user-input"] {{
+        margin: 0 !important;
+        padding: 0 !important;
+        height: fit-content !important;
+        max-height: none !important;
+    }}
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInput"] {{
+        height: auto !important;
+        min-height: 0 !important;
+    }}
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInput"] > div {{
+        min-height: {GEO_MAP_SPLIT_CHAT_INPUT_SHELL_MIN_HEIGHT} !important;
+        height: auto !important;
+    }}
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInput"] > div > div:has([data-testid="InputInstructions"]) {{
+        flex: 0 0 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }}
+    [class*="st-key-geo_main_col_chat"] [data-testid="stChatInput"] > div > div:has(button) {{
+        min-height: {GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_MIN_HEIGHT} !important;
+        padding: {GEO_MAP_SPLIT_CHAT_INPUT_FOOTER_PADDING} !important;
+    }}
+    """
     + build_geo_map_column_css()
     + """
     [data-testid="stChatMessageContent"] {
@@ -384,6 +948,103 @@ st.markdown(
         flex-grow: 0 !important;
         flex-shrink: 0 !important;
         min-height: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stLayoutWrapper"]:has([data-testid="stChatMessage"]),
+    [class*="geo_chat_map_split"] [data-testid="stLayoutWrapper"]:has([data-testid="stChatMessage"]) {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        height: fit-content !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stElementContainer"]:has([data-testid="stChatMessage"]),
+    [class*="geo_chat_map_split"] [data-testid="stElementContainer"]:has([data-testid="stChatMessage"]) {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        align-self: stretch !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stChatMessage"],
+    [class*="geo_chat_map_split"] [data-testid="stChatMessage"] {
+        flex: 0 0 auto !important;
+        align-items: flex-start !important;
+        align-content: flex-start !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-height: 0 !important;
+        height: auto !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stChatMessage"] [data-testid="stChatMessageContent"],
+    [class*="geo_chat_map_split"] [data-testid="stChatMessage"] [data-testid="stChatMessageContent"] {
+        margin: 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: auto !important;
+        min-width: 0 !important;
+        align-self: flex-start !important;
+        height: auto !important;
+        min-height: 0 !important;
+    }
+    [class*="geo-chat-map-split"] [data-testid="stChatMessage"] [data-testid="stChatMessageContent"] > div,
+    [class*="geo_chat_map_split"] [data-testid="stChatMessage"] [data-testid="stChatMessageContent"] > div {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        align-self: flex-start !important;
+        height: auto !important;
+        min-height: 0 !important;
+        width: 100% !important;
+    }
+    [class*="st-key-geo_chat_history"] [data-testid="stChatMessage"] {
+        flex: 0 0 auto !important;
+        align-items: flex-start !important;
+        width: 100% !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_chat_history"] [data-testid="stChatMessage"] [data-testid="stChatMessageContent"] {
+        margin: 0 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 1 !important;
+        flex-basis: auto !important;
+        min-width: 0 !important;
+        align-self: flex-start !important;
+        height: auto !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_chat_history"] [data-testid="stChatMessage"] [data-testid="stLayoutWrapper"] {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        height: fit-content !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        align-self: flex-start !important;
+    }
+    [class*="st-key-geo_chat_history"] [data-testid="stChatMessage"] [data-testid="stVerticalBlock"] {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+    }
+    [class*="st-key-geo_chat_history"] [data-testid="stChatMessageContent"] > div {
+        flex: 0 0 auto !important;
+        flex-grow: 0 !important;
+        flex-shrink: 0 !important;
+        align-self: flex-start !important;
+        height: auto !important;
+        min-height: 0 !important;
+        width: 100% !important;
     }
     [data-testid="stChatMessage"] h2,
     [data-testid="stChatMessage"] h3 {
@@ -405,6 +1066,40 @@ st.markdown(
         margin-top: 0.08rem !important;
         margin-bottom: 0 !important;
     }
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]),
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]) {{
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        min-height: 0 !important;
+        -webkit-overflow-scrolling: touch !important;
+    }}
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"] > div,
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"] > div {{
+        flex: 0 0 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }}
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"],
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"] {{
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(49, 51, 63, 0.5) rgba(240, 242, 248, 1) !important;
+    }}
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]::-webkit-scrollbar,
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]::-webkit-scrollbar {{
+        width: 8px !important;
+    }}
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]::-webkit-scrollbar-thumb,
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]::-webkit-scrollbar-thumb {{
+        background: rgba(49, 51, 63, 0.35) !important;
+        border-radius: 4px !important;
+    }}
+    [class*="geo-chat-map-split"] [data-testid="stVerticalBlock"][class*="st-key-geo_map_iframe_host"],
+    [class*="geo_chat_map_split"] [data-testid="stVerticalBlock"][class*="st-key-geo_map_iframe_host"] {{
+        box-sizing: border-box !important;
+        height: auto !important;
+        max-height: none !important;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -474,7 +1169,11 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
             messages = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
             _is_geo_lc = st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
 
-            with st.container(height=600, key="geo_chat_history", border=False):
+            with st.container(
+                key="geo_chat_history",
+                border=False,
+                height=GEO_CHAT_HISTORY_STREAMLIT_SCROLL_HEIGHT_PX,
+            ):
                 rest_msgs = messages[:-1] if len(messages) > 1 else []
                 last_msg = messages[-1] if messages else None
                 for message in rest_msgs:
@@ -766,16 +1465,14 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                     data_source=_ds_pdf if isinstance(_ds_pdf, str) else None,
                     supplemental_project_attributes=_pdf_sup,
                 )
-                _pdf_spacer, _pdf_btn_col = st.columns((5, 2))
-                with _pdf_btn_col:
-                    st.download_button(
-                        MAP_CHAT_PDF.EXPORT.LABEL,
-                        data=_pdf_bytes,
-                        file_name=f"{MAP_CHAT_PDF.EXPORT.FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
-                        mime="application/pdf",
-                        key="map_chat_export_pdf",
-                        use_container_width=True,
-                    )
+                st.download_button(
+                    MAP_CHAT_PDF.EXPORT.LABEL,
+                    data=_pdf_bytes,
+                    file_name=f"{MAP_CHAT_PDF.EXPORT.FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
+                    mime="application/pdf",
+                    key="map_chat_export_pdf",
+                    use_container_width=True,
+                )
 
             if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
                 st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None
@@ -805,69 +1502,6 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                 key=SESSION_KEY_MAP_CHAT_USER_INPUT,
                 on_submit=handle_map_chat_input,
             )
-
-        _scroll_chat_to_bottom_js = """
-            (function() {
-                var doc = null;
-                try { doc = window.parent.document; } catch (e) { return; }
-                function findScrollable(el) {
-                    if (!el) return null;
-                    try {
-                        var s = window.parent.getComputedStyle(el);
-                        if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el;
-                    } catch (e) {}
-                    for (var i = 0; i < (el.children || []).length; i++) {
-                        var c = findScrollable(el.children[i]);
-                        if (c) return c;
-                    }
-                    return null;
-                }
-                function getContainer() {
-                    var c = doc.querySelector('[class*="st-key-geo_chat_history"]') || doc.querySelector('[class*="geo_chat_history"]');
-                    if (c) return findScrollable(c) || c;
-                    return null;
-                }
-                function scrollToBottom() {
-                    var el = getContainer();
-                    if (el) el.scrollTop = el.scrollHeight;
-                }
-                var rafId = null;
-                function isInsideExpander(node) {
-                    if (!node || !node.closest) return false;
-                    return !!(node.closest('[data-testid="stExpander"]') || node.closest('[class*="streamlit-expander"]') || node.closest('[class*="stExpander"]'));
-                }
-                function scheduleScroll(mutations) {
-                    for (var i = 0; i < (mutations && mutations.length) || 0; i++) {
-                        var m = mutations[i];
-                        if (isInsideExpander(m.target)) return;
-                    }
-                    if (rafId) return;
-                    rafId = window.parent.requestAnimationFrame(function() {
-                        rafId = null;
-                        scrollToBottom();
-                    });
-                }
-                var attempts = 0;
-                function init() {
-                    var el = getContainer();
-                    if (!el && attempts < 60) {
-                        attempts++;
-                        window.parent.requestAnimationFrame(init);
-                        return;
-                    }
-                    scrollToBottom();
-                    if (el) {
-                        var obs = new MutationObserver(scheduleScroll);
-                        obs.observe(el, { childList: true, subtree: true });
-                    }
-                }
-                window.parent.requestAnimationFrame(init);
-            })();
-            """
-        components.html(
-            f"<script>{_scroll_chat_to_bottom_js}</script>",
-            height=0,
-        )
 
     with map_col:
         with st.container(border=True, key="geo_main_col_map"):
@@ -970,3 +1604,232 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
             if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                 with st.container(key="geo_map_table_debug_wrap"):
                     render_geo_map_bottom_table()
+    _map_resize_js = """
+        (function() {
+            var doc = null;
+            try { doc = window.parent.document; } catch (e) { return; }
+            function getHost() {
+                return doc.querySelector('[data-testid="stVerticalBlock"][class*="st-key-geo_map_iframe_host"]') ||
+                    doc.querySelector('[class*="st-key-geo_map_iframe_host"]');
+            }
+            var PW = window.parent;
+            function mapSlotFromHost(host) {
+                var inner = host.querySelector(":scope > div");
+                var row = inner || host;
+                var kids = row.children;
+                for (var i = 0; i < kids.length; i++) {
+                    var el = kids[i];
+                    if (!el.querySelector) continue;
+                    var hasEmpty = el.querySelector("[data-testid=\"stEmpty\"]");
+                    var hasIframe = el.querySelector("iframe");
+                    if (hasEmpty && !hasIframe) continue;
+                    if (hasIframe) return el;
+                }
+                return null;
+            }
+            function mapIframeInSlot(slot) {
+                if (!slot || !slot.querySelectorAll) return null;
+                var list = slot.querySelectorAll("iframe");
+                if (!list.length) return null;
+                var i;
+                for (i = 0; i < list.length; i++) {
+                    var f = list[i];
+                    if (f.classList && f.classList.contains("stCustomComponentV1")) return f;
+                }
+                for (i = 0; i < list.length; i++) {
+                    var g = list[i];
+                    var gcls = g.getAttribute("class");
+                    if (gcls && gcls.indexOf("stCustomComponent") >= 0) return g;
+                }
+                var best = null;
+                var bestArea = 0;
+                for (i = 0; i < list.length; i++) {
+                    var h = list[i];
+                    var r = h.getBoundingClientRect();
+                    var a = Math.max(0, r.width) * Math.max(0, r.height);
+                    if (a > bestArea) { bestArea = a; best = h; }
+                }
+                return best;
+            }
+            function resizeMapIframe() {
+                var host = getHost();
+                if (!host) return;
+                host.style.removeProperty("height");
+                host.style.removeProperty("max-height");
+                var slot = mapSlotFromHost(host);
+                if (!slot) return;
+                var iframe = mapIframeInSlot(slot);
+                if (!iframe) return;
+                var sr = slot.getBoundingClientRect();
+                var ch = Math.floor(slot.clientHeight);
+                var avail = ch > 0 ? ch : Math.floor(sr.height);
+                if (avail < 120) avail = Math.max(120, Math.floor(sr.height * 0.92));
+                if (avail > 60) {
+                    iframe.removeAttribute("width");
+                    iframe.removeAttribute("height");
+                    iframe.style.setProperty("width", "100%", "important");
+                    iframe.style.setProperty("height", avail + "px", "important");
+                    iframe.style.setProperty("max-height", avail + "px", "important");
+                    var wrap = iframe.closest("[data-testid=\"stIFrame\"]");
+                    if (wrap) {
+                        wrap.style.setProperty("flex", "1 1 0", "important");
+                        wrap.style.setProperty("min-height", "0", "important");
+                        wrap.style.setProperty("height", avail + "px", "important");
+                        wrap.style.setProperty("max-height", avail + "px", "important");
+                    } else {
+                        var pw = iframe.parentElement;
+                        if (pw && slot.contains(pw)) {
+                            pw.style.setProperty("min-height", "0", "important");
+                            pw.style.setProperty("flex", "1 1 0", "important");
+                            pw.style.setProperty("display", "flex", "important");
+                            pw.style.setProperty("flex-direction", "column", "important");
+                            pw.style.setProperty("height", avail + "px", "important");
+                            pw.style.setProperty("max-height", avail + "px", "important");
+                            pw.style.setProperty("box-sizing", "border-box", "important");
+                        }
+                        var cur = pw ? pw.parentElement : null;
+                        var up = 0;
+                        while (cur && cur !== slot && up < 5) {
+                            if (cur.nodeType === 1) {
+                                cur.style.setProperty("flex", "1 1 0", "important");
+                                cur.style.setProperty("min-height", "0", "important");
+                                if (cur.getAttribute && cur.getAttribute("data-testid") === "stVerticalBlock") {
+                                    break;
+                                }
+                            }
+                            cur = cur.parentElement;
+                            up++;
+                        }
+                    }
+                }
+            }
+            var parentResizeRaf = null;
+            function scheduleResizeMapFromParent() {
+                if (parentResizeRaf) return;
+                parentResizeRaf = PW.requestAnimationFrame(function() {
+                    parentResizeRaf = null;
+                    resizeMapIframe();
+                });
+            }
+            PW.addEventListener("resize", scheduleResizeMapFromParent, { passive: true });
+            try {
+                if (PW.visualViewport) {
+                    PW.visualViewport.addEventListener("resize", scheduleResizeMapFromParent, { passive: true });
+                }
+            } catch (eVV) {}
+            var roAttempts = 0;
+            function initResizeObserver() {
+                var host = getHost();
+                if (!host && roAttempts < 90) {
+                    roAttempts++;
+                    window.parent.requestAnimationFrame(initResizeObserver);
+                    return;
+                }
+                if (!host) return;
+                var slot = mapSlotFromHost(host);
+                resizeMapIframe();
+                window.parent.requestAnimationFrame(function() {
+                    window.parent.requestAnimationFrame(resizeMapIframe);
+                });
+                setTimeout(resizeMapIframe, 300);
+                setTimeout(resizeMapIframe, 800);
+                setTimeout(resizeMapIframe, 2000);
+                if (window.parent.ResizeObserver) {
+                    var ro = new window.parent.ResizeObserver(function() {
+                        resizeMapIframe();
+                    });
+                    ro.observe(host);
+                    if (slot) ro.observe(slot);
+                }
+                var mo = new window.parent.MutationObserver(function() {
+                    resizeMapIframe();
+                });
+                mo.observe(host, { childList: true, subtree: true });
+                var mapIframe = slot ? mapIframeInSlot(slot) : null;
+                if (mapIframe) {
+                    mapIframe.addEventListener("load", function() {
+                        setTimeout(resizeMapIframe, 50);
+                        setTimeout(resizeMapIframe, 400);
+                    });
+                }
+            }
+            window.parent.requestAnimationFrame(initResizeObserver);
+        })();
+    """
+    _scroll_chat_to_bottom_js = """
+        (function() {
+            var doc = null;
+            try { doc = window.parent.document; } catch (e) { return; }
+            function findScrollable(el) {
+                if (!el) return null;
+                try {
+                    var s = window.parent.getComputedStyle(el);
+                    if (s.overflowY === 'auto' || s.overflowY === 'scroll') return el;
+                } catch (e) {}
+                for (var i = 0; i < (el.children || []).length; i++) {
+                    var c = findScrollable(el.children[i]);
+                    if (c) return c;
+                }
+                return null;
+            }
+            function getContainer() {
+                var vb = doc.querySelector('[data-testid="stVerticalBlock"][class*="st-key-geo_chat_history"]');
+                if (!vb) vb = doc.querySelector('[class*="st-key-geo_chat_history"]');
+                if (!vb) return null;
+                try {
+                    var svb = window.parent.getComputedStyle(vb);
+                    if (svb.overflowY === "auto" || svb.overflowY === "scroll") return vb;
+                } catch (e0) {}
+                var bw = vb.closest('[data-testid="stVerticalBlockBorderWrapper"]');
+                if (bw) {
+                    try {
+                        var st = window.parent.getComputedStyle(bw);
+                        if (st.overflowY === "auto" || st.overflowY === "scroll") return bw;
+                    } catch (e1) {}
+                }
+                return findScrollable(vb) || vb;
+            }
+            function scrollToBottom() {
+                var el = getContainer();
+                if (el) el.scrollTop = el.scrollHeight;
+            }
+            var rafId = null;
+            function isInsideExpander(node) {
+                if (!node || !node.closest) return false;
+                return !!(node.closest('[data-testid="stExpander"]') || node.closest('[class*="streamlit-expander"]') || node.closest('[class*="stExpander"]'));
+            }
+            function scheduleScroll(mutations) {
+                for (var i = 0; i < (mutations && mutations.length) || 0; i++) {
+                    var m = mutations[i];
+                    if (isInsideExpander(m.target)) return;
+                }
+                if (rafId) return;
+                rafId = window.parent.requestAnimationFrame(function() {
+                    rafId = null;
+                    scrollToBottom();
+                });
+            }
+            var attempts = 0;
+            function init() {
+                var el = getContainer();
+                if (!el && attempts < 60) {
+                    attempts++;
+                    window.parent.requestAnimationFrame(init);
+                    return;
+                }
+                scrollToBottom();
+                if (el) {
+                    var obs = new MutationObserver(scheduleScroll);
+                    obs.observe(el, { childList: true, subtree: true });
+                }
+            }
+            window.parent.requestAnimationFrame(init);
+        })();
+        """
+    components.html(
+        f"<script>{_map_resize_js}\n{_scroll_chat_to_bottom_js}</script>",
+        width=1,
+        height=1,
+        scrolling=False,
+    )
+
