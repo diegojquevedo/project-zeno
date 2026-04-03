@@ -42,8 +42,11 @@ from constants import (
     FOREST_CARBON_REMOVALS_DATASET,
     GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS,
     GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER,
+    GEO_CHAT_HEADER_DIVIDER_HTML_CLASS,
+    GEO_CHAT_HEADER_DIVIDER_LINE_COLOR,
     GEO_CHAT_HISTORY_CONTAINER_MIN_HEIGHT_PX,
     GEO_CHAT_HISTORY_STREAMLIT_SCROLL_HEIGHT_PX,
+    GEO_CHAT_INPUT_MARGIN_BOTTOM_PX,
     GEO_CHAT_PLACEHOLDER_FOREST_LONG,
     GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
@@ -521,11 +524,18 @@ _APP_CHAT_LEFT_STRETCH_CSS = """
     [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
     [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
     [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
-    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
-    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"],
     [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
     [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
-    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
+    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"] {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+        margin: 0 0 __GEO_CHAT_INPUT_MARGIN_BOTTOM_PX__px 0 !important;
+        padding: 0 !important;
+        align-self: stretch !important;
+    }
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
+    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"],
     [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
     [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
         flex: 0 0 auto !important;
@@ -580,7 +590,13 @@ _APP_CHAT_LEFT_STRETCH_CSS = """
     }
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([data-testid="stChatInput"]),
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map_chat_user_input"],
-    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"],
+    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-user-input"] {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        min-height: 0 !important;
+        margin: 0 0 __GEO_CHAT_INPUT_MARGIN_BOTTOM_PX__px 0 !important;
+        padding: 0 !important;
+    }
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
         flex: 0 0 auto !important;
@@ -595,6 +611,9 @@ _APP_CHAT_LEFT_STRETCH_CSS = """
 ).replace(
     "__GEO_MAIN_COL_MIN_PX__",
     str(GEO_MAIN_COL_CHAT_MIN_HEIGHT_PX),
+).replace(
+    "__GEO_CHAT_INPUT_MARGIN_BOTTOM_PX__",
+    str(GEO_CHAT_INPUT_MARGIN_BOTTOM_PX),
 )
 
 st.markdown(
@@ -874,7 +893,22 @@ st.markdown(
     [class*="geo_chat_header"] [data-testid="stMarkdown"] {{ margin: 0 0 0.2rem 0 !important; }}
     [class*="geo_chat_header"] [data-testid="stCaptionContainer"] {{ margin: 0 0 0.2rem 0 !important; }}
     [class*="geo_chat_header"] [data-testid="stVerticalBlock"] > div {{ margin: 0 !important; }}
-    [class*="geo_chat_header"] hr {{ margin: 0.25rem 0 !important; }}
+    [class*="geo_chat_header"] [data-testid="stElementContainer"]:has([data-testid="stHtml"]) {{
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }}
+    [class*="geo_chat_header"] [data-testid="stHtml"] {{
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 1px !important;
+    }}
+    [class*="geo_chat_header"] [data-testid="stHtml"] .{GEO_CHAT_HEADER_DIVIDER_HTML_CLASS} {{
+        width: 100% !important;
+        height: 1px !important;
+        margin: 10px 0 6px 0 !important;
+        background-color: {GEO_CHAT_HEADER_DIVIDER_LINE_COLOR} !important;
+        flex-shrink: 0 !important;
+    }}
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-data_source_select"],
     [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"]:has([class*="st-key-data_source_select"]) {{
         display: none !important;
@@ -1115,10 +1149,10 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
         with st.container(border=True, key="geo_main_col_chat"):
             with st.container(key="geo_chat_header"):
                 st.markdown(
-                    "<p>This is a friendly prompt-based system to filter and analyze mapping data.</p>"
-                    '<div aria-hidden="true" style="border-top:1px solid rgba(49,51,63,0.22);margin:0.6rem 0 0.5rem 0;width:100%;"></div>',
+                    "<p>This is a friendly prompt-based system to filter and analyze mapping data.</p>",
                     unsafe_allow_html=True,
                 )
+                st.html(f'<div class="{GEO_CHAT_HEADER_DIVIDER_HTML_CLASS}"></div>')
 
                 _ds_idx = list(DATA_SOURCES.values()).index(
                     st.session_state[SESSION_KEY_DATA_SOURCE]
