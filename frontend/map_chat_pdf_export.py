@@ -160,7 +160,7 @@ def _strip_md(text: str) -> str:
 
 def _pdf_text(s: str) -> str:
     t = "" if s is None else str(s)
-    return (
+    t = (
         t.replace("\u2014", " - ")
         .replace("\u2013", "-")
         .replace("\u2026", "...")
@@ -169,7 +169,17 @@ def _pdf_text(s: str) -> str:
         .replace("\u201c", '"')
         .replace("\u201d", '"')
         .replace("\u00a0", " ")
+        .replace("\u2022", "-")
+        .replace("\u00b7", "-")
+        .replace("\u2219", "-")
+        .replace("\u25cf", "-")
+        .replace("\u25aa", "-")
+        .replace("\u200b", "")
+        .replace("\u200c", "")
+        .replace("\u200d", "")
+        .replace("\ufeff", "")
     )
+    return t.encode("latin-1", errors="replace").decode("latin-1")
 
 
 def _landscape_cell_style(col_idx: int, key: str) -> tuple[tuple[int, int, int], bool]:
