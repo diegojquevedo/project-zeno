@@ -63,14 +63,19 @@ async def geo_get_project_geometry(
         "resultRecordCount": 5,
     }
 
+    rep_query_url = f"{GEO_PROJECT_REPRESENTATIVE_POINTS_URL}/query"
     try:
         rep_data = await client.get(
-            f"{GEO_PROJECT_REPRESENTATIVE_POINTS_URL}/query",
+            rep_query_url,
             rep_params,
             HTTP_TIMEOUT_QUERY,
         )
     except Exception as e:
-        logger.error("geo_get_project_geometry_rep_failed", error=str(e))
+        logger.error(
+            "geo_get_project_geometry_rep_failed",
+            error=str(e),
+            query_url=rep_query_url,
+        )
         return Command(
             update={
                 "messages": [
