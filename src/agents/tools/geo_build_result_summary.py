@@ -7,7 +7,9 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 
 from src.agents.state import AgentState
-from src.agents.tools.geo_narrative_enrichment import compute_narrative_enrichment
+from src.agents.tools.geo_narrative_enrichment import (
+    compute_narrative_enrichment,
+)
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
 
 _SKIP_FIELDS = frozenset({"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length", "_color"})
@@ -192,6 +194,8 @@ async def geo_build_result_summary(
         "charts_data": charts_data,
         "filters": {},
     }
+    if layer_id_for_schema:
+        geo_result_summary["layer_id"] = layer_id_for_schema
     if narrative_enrichment:
         geo_result_summary["narrative_enrichment"] = narrative_enrichment
 

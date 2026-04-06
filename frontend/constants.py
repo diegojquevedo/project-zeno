@@ -55,6 +55,7 @@ SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY = "map_county_board_district_boun
 SESSION_KEY_MAP_ACTIONS = "map_actions"
 SESSION_KEY_GEO_RESULT_SUMMARY = "geo_result_summary"
 SESSION_KEY_REPORT_PDF_METADATA = "report_pdf_metadata"
+SESSION_KEY_REPORT_PDF_KPIS = "report_pdf_kpis"
 SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT = "geo_last_project_tool_text"
 SESSION_KEY_GEO_MAP_TABLE_EXPANDED = "geo_map_table_expanded"
 SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW = "geo_map_table_focus_row"
@@ -67,7 +68,7 @@ GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS = frozenset(
 )
 
 GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS = frozenset(
-    {"generate_report_pdf_metadata"},
+    {"generate_report_pdf_metadata", "generate_report_pdf_kpis"},
 )
 
 GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER = (

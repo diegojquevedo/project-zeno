@@ -68,6 +68,7 @@ class AgentState(TypedDict, total=False):
     geo_project_geometry: dict[str, Any] | None
 
     report_pdf_metadata: dict[str, Any] | None
+    report_pdf_kpis: dict[str, Any] | None
 
     map_actions: Annotated[list[dict[str, Any]], add_map_actions]
 

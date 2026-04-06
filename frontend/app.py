@@ -95,6 +95,7 @@ from constants import (
     SESSION_KEY_MAP_PROJECT_DATA,
     SESSION_KEY_MAP_PROJECT_LIST,
     SESSION_KEY_MAP_PROJECT_MATCHES,
+    SESSION_KEY_REPORT_PDF_KPIS,
     SESSION_KEY_REPORT_PDF_METADATA,
     SESSION_KEY_TOKEN,
     STREAMLIT_DEBUG_GEO_MAP_ENV,
@@ -122,22 +123,26 @@ def _find_preceding_user_content(messages: list, idx: int) -> str:
     return ""
 
 
-def _apply_report_pdf_metadata_from_update(update: dict) -> None:
+def _apply_report_pdf_exports_from_update(update: dict) -> None:
     if not isinstance(update, dict):
         return
-    if "report_pdf_metadata" in update:
-        v = update["report_pdf_metadata"]
-        st.session_state[SESSION_KEY_REPORT_PDF_METADATA] = (
-            v if isinstance(v, dict) else None
-        )
-        return
-    for val in update.values():
-        if isinstance(val, dict) and "report_pdf_metadata" in val:
-            v = val["report_pdf_metadata"]
+
+    def apply_flat(d: dict) -> None:
+        if "report_pdf_metadata" in d:
+            v = d["report_pdf_metadata"]
             st.session_state[SESSION_KEY_REPORT_PDF_METADATA] = (
                 v if isinstance(v, dict) else None
             )
-            return
+        if "report_pdf_kpis" in d:
+            v = d["report_pdf_kpis"]
+            st.session_state[SESSION_KEY_REPORT_PDF_KPIS] = (
+                v if isinstance(v, dict) else None
+            )
+
+    apply_flat(update)
+    for val in update.values():
+        if isinstance(val, dict):
+            apply_flat(val)
 
 
 def _normalize_supplemental_rows(
@@ -186,11 +191,13 @@ def _capture_export_snapshot() -> dict:
     sch = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
     sup = _supplemental_project_attr_rows()
     rpm = st.session_state.get(SESSION_KEY_REPORT_PDF_METADATA)
+    rpk = st.session_state.get(SESSION_KEY_REPORT_PDF_KPIS)
     return {
         "geo_summary": copy.deepcopy(gs) if isinstance(gs, dict) else None,
         "schema_snapshot": copy.deepcopy(sch) if isinstance(sch, dict) else None,
         "supplemental_project_attributes": list(sup) if sup else None,
         "report_pdf_metadata": copy.deepcopy(rpm) if isinstance(rpm, dict) else None,
+        "report_pdf_kpis": copy.deepcopy(rpk) if isinstance(rpk, dict) else None,
     }
 
 
@@ -282,6 +289,11 @@ def _render_response_pdf_button(
         if isinstance(export_snapshot, dict)
         else None
     )
+    _rpk = (
+        export_snapshot.get("report_pdf_kpis")
+        if isinstance(export_snapshot, dict)
+        else None
+    )
     pdf_bytes = build_single_response_pdf_bytes(
         user_content,
         assistant_content,
@@ -290,6 +302,7 @@ def _render_response_pdf_button(
         data_source=_ds if isinstance(_ds, str) else None,
         supplemental_project_attributes=_sup,
         report_pdf_metadata=_rpm if isinstance(_rpm, dict) else None,
+        report_pdf_kpis=_rpk if isinstance(_rpk, dict) else None,
     )
     _sig = hashlib.md5(f"{user_content}\n{assistant_content}".encode()).hexdigest()[:14]
     _pdf_d = hashlib.sha256(pdf_bytes).hexdigest()[:16]
@@ -544,6 +557,8 @@ if SESSION_KEY_GEO_RESULT_SUMMARY not in st.session_state:
     st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
 if SESSION_KEY_REPORT_PDF_METADATA not in st.session_state:
     st.session_state[SESSION_KEY_REPORT_PDF_METADATA] = None
+if SESSION_KEY_REPORT_PDF_KPIS not in st.session_state:
+    st.session_state[SESSION_KEY_REPORT_PDF_KPIS] = None
 if SESSION_KEY_GEO_MAP_TABLE_EXPANDED not in st.session_state:
     st.session_state[SESSION_KEY_GEO_MAP_TABLE_EXPANDED] = True
 
@@ -1648,6 +1663,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                             st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
                             st.session_state[SESSION_KEY_REPORT_PDF_METADATA] = None
+                            st.session_state[SESSION_KEY_REPORT_PDF_KPIS] = None
                             st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
                             st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
@@ -1708,7 +1724,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                         cd = update.get("charts_data")
                                         if cd:
                                             st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = cd
-                                        _apply_report_pdf_metadata_from_update(update)
+                                        _apply_report_pdf_exports_from_update(update)
                                     continue
                                 stream_count += 1
                                 progress_placeholder.progress(
@@ -1771,7 +1787,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                     SESSION_KEY_DATA_SOURCE
                                 ) == "geo_lake_county":
                                     st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = update["charts_data"]
-                                _apply_report_pdf_metadata_from_update(update)
+                                _apply_report_pdf_exports_from_update(update)
                                 if (
                                     "project_result" in update
                                     and st.session_state.get(SESSION_KEY_DATA_SOURCE) != "geo_lake_county"

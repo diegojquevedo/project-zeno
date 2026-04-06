@@ -225,6 +225,18 @@ def _inventory_column_weight(key: str) -> float:
     return MAP_CHAT_PDF.INVENTORY.COL_WEIGHT_DEFAULT
 
 
+def _hero_title_visual_lines(pdf: FPDF, main_title: str) -> list[str]:
+    inner = max(30.0, pdf.epw - 16.0)
+    pdf.set_font("Helvetica", "B", MAP_CHAT_PDF.HERO.TITLE.PT)
+    return _word_wrap_lines_sized(
+        pdf,
+        _pdf_text((main_title or "").strip()),
+        inner,
+        MAP_CHAT_PDF.HERO.TITLE.PT,
+        True,
+    )
+
+
 def _word_wrap_lines_sized(
     pdf: FPDF,
     text: str,
@@ -281,15 +293,15 @@ def _draw_hero_text_block(
     pdf.ln(MAP_CHAT_PDF.HERO.LN_AFTER.KICKERS_MM)
     pdf.set_font("Helvetica", "B", MAP_CHAT_PDF.HERO.TITLE.PT)
     pdf.set_text_color(*COLOR.WHITE)
-    title_txt = _pdf_text((main_title or "").strip())
-    pdf.multi_cell(
-        epw,
-        MAP_CHAT_PDF.HERO.TITLE.CELL_H_MM,
-        title_txt,
-        align="C",
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
+    for ln in _hero_title_visual_lines(pdf, main_title):
+        pdf.multi_cell(
+            epw,
+            MAP_CHAT_PDF.HERO.TITLE.CELL_H_MM,
+            ln,
+            align="C",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
     pdf.ln(MAP_CHAT_PDF.HERO.LN_AFTER.TITLE_MM)
     pdf.set_font("Helvetica", "", MAP_CHAT_PDF.HERO.SUBTITLE.PT)
     pdf.set_text_color(*COLOR.HERO_SUBTITLE)
@@ -491,6 +503,79 @@ def _kpi_counts(feature_rows: list[dict], total: int) -> tuple[int, int, int, st
     else:
         st_label = "Completed"
     return total, wmb, s319, st_label
+
+
+_SMC_PROJECT_LAYER_IDS = frozenset({
+    "representative_points",
+    "points",
+    "lines",
+    "areas",
+})
+
+
+def _smc_project_pdf_context(geo_summary: dict) -> bool:
+    lid = geo_summary.get("layer_id")
+    if isinstance(lid, str) and lid.strip() in _SMC_PROJECT_LAYER_IDS:
+        return True
+    rows = geo_summary.get("feature_rows") or []
+    if not rows:
+        return False
+    r0 = rows[0]
+    if not isinstance(r0, dict):
+        return False
+    kl = {str(k).lower() for k in r0.keys()}
+    return "projecttype" in kl
+
+
+def _kpi_specs_from_tool_cards(cards: list) -> list[tuple[str, list[str]]] | None:
+    if not isinstance(cards, list) or len(cards) != 4:
+        return None
+    specs: list[tuple[str, list[str]]] = []
+    for c in cards:
+        if not isinstance(c, dict):
+            return None
+        val = str(c.get("value") if c.get("value") is not None else "—")
+        lines_raw = c.get("lines")
+        if isinstance(lines_raw, list) and lines_raw:
+            lines = [
+                str(x).strip()[:96]
+                for x in lines_raw
+                if str(x).strip()
+            ][:2]
+        else:
+            lines = ["—"]
+        if not lines:
+            lines = ["—"]
+        specs.append((val, lines))
+    return specs if len(specs) == 4 else None
+
+
+def _resolve_executive_kpi_specs(
+    geo_summary: dict,
+    report_pdf_kpis: dict | None,
+) -> list[tuple[str, list[str]]]:
+    rows = geo_summary.get("feature_rows") or []
+    total = int(geo_summary.get("total") or 0) or len(rows)
+    if _smc_project_pdf_context(geo_summary):
+        tw, wmb, s319, st_lbl = _kpi_counts(rows, total)
+        return [
+            (str(tw), ["Total projects", "identified"]),
+            (str(wmb), ["WMB projects"]),
+            (str(s319), ["Section 319", "projects"]),
+            (_pdf_text(st_lbl.strip() or "Status"), ["All projects", "status"]),
+        ]
+    raw = report_pdf_kpis if isinstance(report_pdf_kpis, dict) else None
+    parsed = _kpi_specs_from_tool_cards(raw.get("cards") if raw else None)
+    if parsed:
+        _v0, lines0 = parsed[0]
+        return [(str(total), lines0)] + parsed[1:]
+    lp = str(geo_summary.get("label_plural") or "features").strip() or "features"
+    return [
+        (str(total), [f"Total {lp}"]),
+        ("—", ["See charts", "below"]),
+        ("—", ["See charts", "below"]),
+        ("—", ["See panel", "for detail"]),
+    ]
 
 
 def _sum_investment(feature_rows: list[dict]) -> float | None:
@@ -788,17 +873,13 @@ class _PDF(FPDF):
         _draw_hero_text_block(self, main_title, session_utc, hero_copy=hero_copy)
         self.set_xy(self.l_margin, y0 + h_box + 4)
 
-    def kpi_four(self, total: int, wmb: int, s319: int, status_lbl: str) -> None:
+    def kpi_four(self, specs: list[tuple[str, list[str]]]) -> None:
         self.ln(2)
         gap = 2.0
         w = (self.epw - 3 * gap) / 4
         inner = w - 4
-        specs = [
-            (str(total), ["Total projects", "identified"]),
-            (str(wmb), ["WMB projects"]),
-            (str(s319), ["Section 319", "projects"]),
-            (_pdf_text(status_lbl.strip() or "Status"), ["All projects", "status"]),
-        ]
+        if len(specs) != 4:
+            return
         x0 = self.get_x()
         y0 = self.get_y()
         max_val_block = 0.0
@@ -808,7 +889,9 @@ class _PDF(FPDF):
                 max_val_block,
                 _kpi_value_block_height_mm(self, inner, val),
             )
-            lab_txt = "\n".join(ln.upper() for ln in lines)
+            lab_txt = "\n".join(
+                ln.upper() for ln in lines if (ln or "").strip()
+            ) or "—"
             max_lab_h = max(max_lab_h, _kpi_label_height_mm(self, inner, lab_txt))
         h_val_zone = max_val_block
         y_label_row = (
@@ -853,7 +936,9 @@ class _PDF(FPDF):
         for i, (_, lines) in enumerate(specs):
             x = x0 + i * (w + gap)
             vx = x + 2
-            lab_txt = "\n".join(ln.upper() for ln in lines)
+            lab_txt = "\n".join(
+                ln.upper() for ln in lines if (ln or "").strip()
+            ) or "—"
             self.set_xy(vx, y_label_row)
             self.set_font("Helvetica", "", MAP_CHAT_PDF.KPI.LABEL_PT)
             self.set_text_color(*COLOR.LIGHT_BLUE)
@@ -1420,6 +1505,7 @@ def _build_executive_geo_pdf(
     geo_summary: dict,
     schema_snapshot: dict | None,
     report_pdf_metadata: dict | None = None,
+    report_pdf_kpis: dict | None = None,
 ) -> bytes:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     user_prompt = _last_user_message_text(messages)
@@ -1440,8 +1526,11 @@ def _build_executive_geo_pdf(
     charts_data = geo_summary.get("charts_data") or []
 
     pdf.hero_navy(hero_title, stamp, hero_copy=_make_dynamic_hero_copy(ctx, sub))
-    tw, wmb, s319, st_lbl = _kpi_counts(feature_rows, total)
-    pdf.kpi_four(tw, wmb, s319, st_lbl)
+    kpi_specs = _resolve_executive_kpi_specs(
+        geo_summary,
+        report_pdf_kpis if isinstance(report_pdf_kpis, dict) else None,
+    )
+    pdf.kpi_four(kpi_specs)
 
     exec_sum, _sugg_from_msg = _last_assistant_narrative(messages)
     if not exec_sum:
@@ -1465,8 +1554,9 @@ def _build_executive_geo_pdf(
         for row in feature_rows
     ]
     if display_rows:
+        lp_inv = str(geo_summary.get("label_plural") or "features").strip() or "features"
         inv_intro = (
-            f"The following {total} project(s) were identified within {boundary}. "
+            f"The following {total} {lp_inv} were identified within {boundary}. "
             f"{MAP_CHAT_PDF.PROJECT_TABLE.INTRO_WRAP_HINT}"
         )
         pdf.full_results_table_landscape(
@@ -1476,8 +1566,10 @@ def _build_executive_geo_pdf(
         )
 
     pdf.add_page(orientation="P")
-    invest = _sum_investment(feature_rows)
-    pdf.portfolio_cards(wmb, s319, total, invest)
+    if _smc_project_pdf_context(geo_summary):
+        tw_p, wmb_p, s319_p, _st = _kpi_counts(feature_rows, total)
+        invest = _sum_investment(feature_rows)
+        pdf.portfolio_cards(wmb_p, s319_p, tw_p, invest)
 
     ne = geo_summary.get("narrative_enrichment")
     thematic = _strip_md(str(ne or "").strip())
@@ -1934,6 +2026,7 @@ def build_map_chat_pdf_bytes(
     data_source: str | None = None,
     supplemental_project_attributes: list[tuple[str, str]] | None = None,
     report_pdf_metadata: dict | None = None,
+    report_pdf_kpis: dict | None = None,
 ) -> bytes:
     geo_fmt = data_source == "geo_lake_county"
     rows = geo_summary.get("feature_rows") if isinstance(geo_summary, dict) else None
@@ -1953,6 +2046,7 @@ def build_map_chat_pdf_bytes(
             geo_summary,
             schema_snapshot,
             report_pdf_metadata=report_pdf_metadata,
+            report_pdf_kpis=report_pdf_kpis,
         )
     return _build_legacy_pdf(
         messages,
@@ -1973,6 +2067,7 @@ def build_single_response_pdf_bytes(
     data_source: str | None = None,
     supplemental_project_attributes: list[tuple[str, str]] | None = None,
     report_pdf_metadata: dict | None = None,
+    report_pdf_kpis: dict | None = None,
 ) -> bytes:
     pair: list[dict[str, str]] = []
     if user_content and user_content.strip():
@@ -1985,4 +2080,5 @@ def build_single_response_pdf_bytes(
         data_source=data_source,
         supplemental_project_attributes=supplemental_project_attributes,
         report_pdf_metadata=report_pdf_metadata,
+        report_pdf_kpis=report_pdf_kpis,
     )

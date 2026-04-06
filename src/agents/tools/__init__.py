@@ -1,4 +1,5 @@
 from .generate_insights import generate_insights
+from .generate_report_pdf_kpis import generate_report_pdf_kpis
 from .generate_report_pdf_metadata import generate_report_pdf_metadata
 from .geo_build_result_summary import geo_build_result_summary
 from .geo_discover_layer_schema import geo_discover_layer_schema
@@ -20,6 +21,7 @@ from .search_lake_county_project_descriptions import (
 
 __all__ = [
     "generate_insights",
+    "generate_report_pdf_kpis",
     "generate_report_pdf_metadata",
     "geo_build_result_summary",
     "geo_discover_layer_schema",
