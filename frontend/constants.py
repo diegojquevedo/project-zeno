@@ -66,6 +66,10 @@ GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS = frozenset(
     {"geo_query_geo_projects", "geo_build_result_summary"},
 )
 
+GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS = frozenset(
+    {"generate_report_pdf_metadata"},
+)
+
 GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER = (
     "See the summary, listing, and charts in this panel for this reply."
 )

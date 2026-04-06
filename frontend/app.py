@@ -58,6 +58,7 @@ from constants import (
     GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_LAKE_COUNTY_LONG,
     GEO_CHAT_PLACEHOLDER_SHORT,
+    GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS,
     GEO_MAIN_COL_CHAT_MIN_HEIGHT_PX,
     GEO_MAP_CHAT_MAP_COLUMN_WEIGHTS,
     GEO_MAP_CHAT_MAP_COLUMNS_GAP,
@@ -1811,9 +1812,15 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                             pr.get("district_boundary") or pr.get("county_board_district_boundary")
                                         )
                                 for msg in update.get("messages") or []:
-                                    if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
-                                        last_tool_content[0] = msg["kwargs"]["content"]
-                                        last_tool_name[0] = msg["kwargs"].get("name")
+                                    if msg.get("kwargs", {}).get("type") != "tool":
+                                        continue
+                                    if not msg.get("kwargs", {}).get("content"):
+                                        continue
+                                    _tn = msg["kwargs"].get("name")
+                                    if _tn in GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS:
+                                        continue
+                                    last_tool_content[0] = msg["kwargs"]["content"]
+                                    last_tool_name[0] = _tn
                                 elapsed = time.perf_counter() - start_time
                                 if SHOW_RESPONSE_TIMER:
                                     timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")

@@ -20,6 +20,7 @@ from constants import (
     CHART_WIDTH,
     GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS,
     GEO_CHAT_SCHEMA_CONTAINER_KEY,
+    GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS,
     LAKE_COUNTY_ZOOM,
     LC_BOUNDARY_STYLE,
     SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT,
@@ -1111,6 +1112,8 @@ def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_bu
                     st.markdown("**Spatial intersection result**")
                     st.success(content)
             elif tool_name in GEO_CHAT_DEFER_TOOL_MESSAGE_TOOLS and content:
+                pass
+            elif tool_name in GEO_CHAT_SUPPRESS_TOOL_STREAM_TOOLS and content:
                 pass
             elif tool_name == "geo_get_project_geometry" and content:
                 pass
