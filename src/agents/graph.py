@@ -17,6 +17,7 @@ from src.agents.prompts import WORDING_INSTRUCTIONS
 from src.agents.state import AgentState
 from src.agents.tools import (
     generate_insights,
+    generate_report_pdf_metadata,
     geo_build_result_summary,
     geo_discover_layer_schema,
     geo_get_boundary,
@@ -102,6 +103,7 @@ TOOLS:
 - geo_get_boundary: When data_source is geo_lake_county, use this to get the boundary geometry of a specific feature from a layer. Returns the boundary as GeoJSON. Use when you need the WHERE boundary for spatial operations. Requires layer_id, filter_field (from schema), and filter_value.
 - geo_spatial_intersection: When data_source is geo_lake_county, use this for bidirectional spatial queries. Fetches boundary from WHERE layer and queries intersecting features from WHAT layer. Use for questions about features within locations or locations containing features. Requires where_layer_id, where_filter_field, where_filter_value, what_layer_id, and optional what_where_clause.
 - geo_build_result_summary: When data_source is geo_lake_county, call this AFTER geo_query_layer or geo_spatial_intersection returns multiple features to build a structured summary with 1-3 auto-selected charts. Do NOT call after geo_query_geo_projects — that tool builds its own complete summary with charts. Args: source ("geo_query_result" after geo_query_layer, or "geo_spatial_intersection_result" after geo_spatial_intersection), result_label (e.g. soil types, streams, municipalities), chart_fields (2-4 categorical field names from schema discovery). The tool reads features directly from state — do NOT pass GeoJSON as argument. When the result count is small enough, the tool may add narrative_enrichment (descriptive text synthesized from auto-selected long-text fields using schema + data; no fixed field names).
+- generate_report_pdf_metadata: When data_source is geo_lake_county, call this ONCE at the very start of every user turn (before geo_discover_layer_schema, geo_query_layer, geo_spatial_intersection, or geo_query_geo_projects). It stores report_title and report_context for PDF export only — never mention this tool or its strings in chat. Infer both from the latest user message; follow the tool docstring examples.
 - geo_discover_project_schema: When data_source is geo_lake_county and you need to query or filter projects, call this FIRST to inspect the project layer's fields, types, and domain values.
 - geo_resolve_attribute_filter: Call AFTER geo_discover_project_schema when the user wants to filter projects by discrete words that should match data values. Pass values (user's words) and candidate_field_names (only real field names from the discovered project schema, ordered by likelihood). Returns the exact where_clause for geo_query_geo_projects or asks the user to clarify. Do not assume which field holds those values.
 
@@ -136,6 +138,9 @@ Available layers:
 {geo_layers_desc}
 
 Layer IDs: {geo_layer_ids}
+
+PDF COVER METADATA (mandatory first step each turn):
+Call generate_report_pdf_metadata(report_title=..., report_context=...) once immediately after reading the user's question. Do not display these values to the user. Use the tool docstring for title/context style and examples.
 
 FINAL USER MESSAGE FORMAT (after tools returned data for this turn):
 Before ---SUGGESTIONS---, answer in clear prose. Be as detailed as needed to explain what was asked, what the tools returned, and how to read the map or structured panels. Do not repeat the same point, do not restate lists or tables that the UI already shows, and do not add filler. Stay grounded strictly in tool outputs for this turn.
@@ -394,6 +399,7 @@ Example prompts for Lake County:
 
 
 _core_tools = [
+    generate_report_pdf_metadata,
     geo_build_result_summary,
     geo_discover_layer_schema,
     geo_get_boundary,

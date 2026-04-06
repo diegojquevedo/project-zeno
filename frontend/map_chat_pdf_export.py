@@ -413,20 +413,64 @@ def _legacy_default_hero_title(
     return "Lake County spatial intelligence"
 
 
-def _legacy_generic_hero_copy(user_prompt: str) -> Any:
-    subtitle = (user_prompt or "").replace("\n", " ").strip()
+def _fallback_report_pdf_metadata(user_prompt: str) -> dict[str, str]:
+    up = re.sub(r"\s+", " ", (user_prompt or "").replace("\n", " ")).strip()
+    if not up:
+        return {
+            "title": "Lake County Spatial Intelligence",
+            "context": "Spatial Intelligence",
+        }
+    context = "Spatial Intelligence"
+    if re.search(r"(?i)\bprojects?\s+by\b", up):
+        context = "Projects by Author"
+    elif re.search(r"(?i)\bprojects?\s+on\s+soil", up):
+        context = "Soil Intersection Analysis"
+    elif re.search(r"(?i)\bprojects?\s+in\b", up):
+        context = "Location-Filtered Projects"
+    elif re.search(r"(?i)\bprojects?\s+on\b", up):
+        context = "Projects by Criteria"
+    elif re.search(r"(?i)\babout\b", up) and "project" in up.lower():
+        context = "Project Information"
+    elif re.search(r"(?i)\bsoil\b", up):
+        context = "Soil Analysis"
+    elif re.search(r"(?i)flood", up):
+        context = "Flood Hazard Analysis"
+    elif re.search(r"(?i)stream|hydro", up):
+        context = "Hydrospatial Analysis"
+    title = up if len(up) <= 90 else (up[:80] + "…")
+    return {"title": title[:110], "context": context[:72]}
+
+
+def _normalize_report_pdf_metadata(
+    raw: dict | None,
+    user_prompt: str,
+) -> tuple[str, str, str]:
+    subtitle = re.sub(r"\s+", " ", (user_prompt or "").replace("\n", " ")).strip()
     if not subtitle:
         subtitle = "Geo Lake County analysis"
     subtitle = subtitle[:120]
+    if isinstance(raw, dict):
+        t = str(raw.get("title") or "").strip()
+        c = str(raw.get("context") or "").strip()
+        if t and c:
+            return t[:110], c[:72], subtitle
+    fb = _fallback_report_pdf_metadata(user_prompt)
+    return fb["title"][:110], fb["context"][:72], subtitle
+
+
+def _make_dynamic_hero_copy(context_label: str, subtitle: str) -> Any:
+    ctx = (context_label or "Spatial Intelligence").strip()
+    sub = (subtitle or "").strip()[:120] or "Geo Lake County analysis"
+    line1 = f"GEO AI - {ctx.upper()} INTELLIGENCE"
     return type(
-        "LegacyGenericHeroCopy",
+        "DynamicHeroCopy",
         (),
         {
-            "HERO_KICKER": "GEO AI - INTELLIGENCE",
+            "HERO_KICKER": line1,
             "HERO_SUBKICKER": "REPORT",
-            "HERO_SUBTITLE": subtitle,
+            "HERO_SUBTITLE": sub,
         },
-    )
+    )()
 
 
 def _kpi_counts(feature_rows: list[dict], total: int) -> tuple[int, int, int, str]:
@@ -1375,10 +1419,19 @@ def _build_executive_geo_pdf(
     messages: list[Any],
     geo_summary: dict,
     schema_snapshot: dict | None,
+    report_pdf_metadata: dict | None = None,
 ) -> bytes:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    pdf = _PDF(executive=True)
-    pdf.footer_left = _pdf_text(f"{_hero_main_title(geo_summary)} · Lake County")
+    user_prompt = _last_user_message_text(messages)
+    raw_meta = report_pdf_metadata if isinstance(report_pdf_metadata, dict) else None
+    t, ctx, sub = _normalize_report_pdf_metadata(raw_meta, user_prompt)
+    if raw_meta and str(raw_meta.get("title") or "").strip():
+        hero_title = t
+    else:
+        hero_title = _hero_main_title(geo_summary)
+    banner_lead = f"GEO AI | {ctx.upper()} ANALYSIS"
+    pdf = _PDF(executive=True, banner_lead=banner_lead)
+    pdf.footer_left = _pdf_text(f"{hero_title} · Lake County")
     pdf.session_line = stamp
 
     feature_rows = geo_summary.get("feature_rows") or []
@@ -1386,7 +1439,7 @@ def _build_executive_geo_pdf(
     filters = geo_summary.get("filters") or {}
     charts_data = geo_summary.get("charts_data") or []
 
-    pdf.hero_navy(_hero_main_title(geo_summary), stamp)
+    pdf.hero_navy(hero_title, stamp, hero_copy=_make_dynamic_hero_copy(ctx, sub))
     tw, wmb, s319, st_lbl = _kpi_counts(feature_rows, total)
     pdf.kpi_four(tw, wmb, s319, st_lbl)
 
@@ -1727,7 +1780,6 @@ def _write_message(
     content: str,
     geo_fmt: bool,
     *,
-    omit_role_labels: bool = False,
     individual_project_pdf: bool = False,
     supplemental_attr_rows: list[tuple[str, str]] | None = None,
     include_followups: bool = True,
@@ -1735,12 +1787,7 @@ def _write_message(
     raw = (content or "").strip()
     if not raw:
         return
-    if not omit_role_labels:
-        label = "You" if role == "user" else "Assistant"
-        pdf.section_spaced(label)
-    elif role == "user":
-        pdf.ln(2)
-        pdf.body(_strip_md(raw))
+    if role == "user":
         return
     if role == "assistant" and geo_fmt:
         if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
@@ -1781,6 +1828,7 @@ def _build_legacy_pdf(
     schema_snapshot: dict | None,
     data_source: str | None,
     supplemental_project_attributes: list[tuple[str, str]] | None = None,
+    report_pdf_metadata: dict | None = None,
 ) -> bytes:
     geo_fmt = data_source == "geo_lake_county"
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -1788,26 +1836,38 @@ def _build_legacy_pdf(
         messages,
         supplemental_project_attributes,
     )
+    _uq = _last_user_message_text(messages)
+    raw_meta = report_pdf_metadata if isinstance(report_pdf_metadata, dict) else None
     if use_individual_hero:
         proj_title = _extract_individual_project_name(
             messages,
             supplemental_project_attributes,
         )
+        if raw_meta and str(raw_meta.get("title") or "").strip():
+            t_i, ctx_i, sub_i = _normalize_report_pdf_metadata(raw_meta, _uq)
+            main_title = t_i
+        else:
+            _, ctx_i, sub_i = _normalize_report_pdf_metadata(None, _uq)
+            main_title = proj_title
+        banner_i = f"GEO AI | {ctx_i.upper()} ANALYSIS"
         pdf = _PDF(
             executive=True,
-            banner_lead=MAP_CHAT_PDF.EXEC.INDIVIDUAL.BANNER_LEAD,
+            banner_lead=banner_i,
             banner_tail=MAP_CHAT_PDF.EXEC.BANNER.TAIL,
         )
-        pdf.footer_left = _pdf_text(f"{proj_title} · Lake County")
+        pdf.footer_left = _pdf_text(f"{main_title} · Lake County")
         pdf.session_line = stamp
-        pdf.hero_navy(proj_title, stamp, hero_copy=MAP_CHAT_PDF.EXEC.INDIVIDUAL)
+        pdf.hero_navy(main_title, stamp, hero_copy=_make_dynamic_hero_copy(ctx_i, sub_i))
     else:
-        pdf = _PDF(executive=True)
-        _mt = _legacy_default_hero_title(messages, geo_summary)
-        _uq = _last_user_message_text(messages)
+        t_g, ctx_g, sub_g = _normalize_report_pdf_metadata(raw_meta, _uq)
+        _mt = t_g if (raw_meta and str(raw_meta.get("title") or "").strip()) else (
+            _legacy_default_hero_title(messages, geo_summary)
+        )
+        banner_g = f"GEO AI | {ctx_g.upper()} ANALYSIS"
+        pdf = _PDF(executive=True, banner_lead=banner_g)
         pdf.footer_left = _pdf_text(f"{_mt} · Lake County")
         pdf.session_line = stamp
-        pdf.hero_navy(_mt, stamp, hero_copy=_legacy_generic_hero_copy(_uq))
+        pdf.hero_navy(_mt, stamp, hero_copy=_make_dynamic_hero_copy(ctx_g, sub_g))
 
     last_assistant_i: int | None = None
     for i in range(len(messages) - 1, -1, -1):
@@ -1836,7 +1896,6 @@ def _build_legacy_pdf(
             str(role),
             str(m.get("content") or ""),
             geo_fmt,
-            omit_role_labels=True if not use_individual_hero else use_individual_hero,
             individual_project_pdf=use_individual_hero,
             supplemental_attr_rows=sup,
             include_followups=False if not use_individual_hero else True,
@@ -1874,6 +1933,7 @@ def build_map_chat_pdf_bytes(
     schema_snapshot: dict | None = None,
     data_source: str | None = None,
     supplemental_project_attributes: list[tuple[str, str]] | None = None,
+    report_pdf_metadata: dict | None = None,
 ) -> bytes:
     geo_fmt = data_source == "geo_lake_county"
     rows = geo_summary.get("feature_rows") if isinstance(geo_summary, dict) else None
@@ -1888,13 +1948,19 @@ def build_map_chat_pdf_bytes(
         and len(rows) > 0
         and not _single_project_lookup
     ):
-        return _build_executive_geo_pdf(messages, geo_summary, schema_snapshot)
+        return _build_executive_geo_pdf(
+            messages,
+            geo_summary,
+            schema_snapshot,
+            report_pdf_metadata=report_pdf_metadata,
+        )
     return _build_legacy_pdf(
         messages,
         geo_summary,
         schema_snapshot,
         data_source,
         supplemental_project_attributes=supplemental_project_attributes,
+        report_pdf_metadata=report_pdf_metadata,
     )
 
 
@@ -1906,6 +1972,7 @@ def build_single_response_pdf_bytes(
     schema_snapshot: dict | None = None,
     data_source: str | None = None,
     supplemental_project_attributes: list[tuple[str, str]] | None = None,
+    report_pdf_metadata: dict | None = None,
 ) -> bytes:
     pair: list[dict[str, str]] = []
     if user_content and user_content.strip():
@@ -1917,4 +1984,5 @@ def build_single_response_pdf_bytes(
         schema_snapshot=schema_snapshot,
         data_source=data_source,
         supplemental_project_attributes=supplemental_project_attributes,
+        report_pdf_metadata=report_pdf_metadata,
     )

@@ -163,6 +163,7 @@ async def stream_chat(
         state_updates["geo_project_geometry"] = None
         state_updates["charts_data"] = []
         state_updates["map_actions"] = MAP_ACTIONS_TURN_RESET
+        state_updates["report_pdf_metadata"] = None
 
     try:
         stream = zeno_async.astream(
@@ -210,6 +211,7 @@ async def stream_chat(
                     "geo_result_summary": vals.get("geo_result_summary"),
                     "map_actions": vals.get("map_actions"),
                     "charts_data": vals.get("charts_data"),
+                    "report_pdf_metadata": vals.get("report_pdf_metadata"),
                 }
                 yield pack(
                     {
