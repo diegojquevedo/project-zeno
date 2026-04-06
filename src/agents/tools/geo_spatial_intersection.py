@@ -17,6 +17,7 @@ from src.api.lake_county_constants import (
     HTTP_TIMEOUT_QUERY,
 )
 from src.infrastructure.external.arcgis_client import ArcGISClient
+from src.shared.arcgis_layer_symbology import fetch_point_icons_for_class_field
 from src.shared.logging_config import get_logger
 from src.shared.map_constants import MAX_COLOR_CATEGORIES, MIN_COLOR_CATEGORIES
 from src.shared.map_utils import (
@@ -551,11 +552,25 @@ async def geo_spatial_intersection(
                 and unique_count <= MAX_COLOR_CATEGORIES):
                 color_palette = generate_color_palette(unique_count)
 
+        point_icons = None
+        point_icon_field = None
+        if color_by_field and what_layer.get("geometry_type") == "point" and what_url:
+            point_icons = await fetch_point_icons_for_class_field(
+                client,
+                what_url.rstrip("/"),
+                color_by_field,
+                HTTP_TIMEOUT_QUERY,
+            )
+            if point_icons:
+                point_icon_field = color_by_field
+
         action = create_feature_layer_action(
             geojson=what_data,
             label=f"{what_name} in {boundary_label}",
             color_by_field=color_by_field,
-            color_palette=color_palette
+            color_palette=color_palette,
+            point_icons_by_field_value=point_icons,
+            point_icon_field=point_icon_field,
         )
 
         map_actions.append(action)

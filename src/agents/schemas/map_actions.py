@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class ZoomToAction(TypedDict):
@@ -20,6 +20,8 @@ class AddFeatureLayerAction(TypedDict):
     colorByField: str | None
     colorPalette: list[str] | None
     style: dict | None
+    pointIconsByFieldValue: NotRequired[dict[str, dict[str, object]] | None]
+    pointIconField: NotRequired[str | None]
 
 
 MapAction = ZoomToAction | AddBoundaryLayerAction | AddFeatureLayerAction

@@ -86,6 +86,7 @@ GEO_LAKE_COUNTY_LAYERS = [
         "dataset_name": "Pollutant Sampling Sites",
         "role": "what",
         "geometry_type": "point",
+        "value_field": "STATUS",
         "description": "Pollutant sampling sites with PCB, mercury, and water quality test results in Lake County",
     },
     {

@@ -38,7 +38,10 @@ def create_zoom_to_action(geometry: dict) -> dict:
 
 
 def create_set_basemap_action(basemap_id: str) -> dict:
-    from src.shared.geo_basemap import GEO_BASEMAP_DEFAULT_ID, validate_basemap_id
+    from src.shared.geo_basemap import (
+        GEO_BASEMAP_DEFAULT_ID,
+        validate_basemap_id,
+    )
 
     raw = (basemap_id or "").strip()
     bid = validate_basemap_id(raw) if raw else GEO_BASEMAP_DEFAULT_ID
@@ -73,10 +76,12 @@ def create_feature_layer_action(
     color_palette: list[str] | None = None,
     default_color: str = FEATURE_STYLE["color"],
     weight: int = FEATURE_STYLE["weight"],
-    fill_opacity: float = FEATURE_STYLE["fill_opacity"]
+    fill_opacity: float = FEATURE_STYLE["fill_opacity"],
+    point_icons_by_field_value: dict[str, dict[str, object]] | None = None,
+    point_icon_field: str | None = None,
 ) -> dict:
     """Create an addFeatureLayer map action."""
-    return {
+    out: dict = {
         "type": "addFeatureLayer",
         "geojson": geojson,
         "label": label,
@@ -89,6 +94,11 @@ def create_feature_layer_action(
             "fillColor": default_color
         }
     }
+    if point_icons_by_field_value:
+        out["pointIconsByFieldValue"] = point_icons_by_field_value
+    if point_icon_field:
+        out["pointIconField"] = point_icon_field
+    return out
 
 
 def calculate_bounds_from_geojson(geojson: dict) -> tuple[float, float, float, float] | None:

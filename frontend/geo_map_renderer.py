@@ -1,3 +1,5 @@
+import html
+
 import custom  # noqa: F401 — registers all custom renderers
 import folium
 import streamlit as st
@@ -354,6 +356,124 @@ def _folium_map_with_basemap(
     return m
 
 
+def _fc_is_all_points(geojson_data: dict) -> bool:
+    feats = geojson_data.get("features") or []
+    if not feats:
+        return False
+    for f in feats:
+        if not isinstance(f, dict):
+            return False
+        g = f.get("geometry")
+        if not isinstance(g, dict) or g.get("type") != "Point":
+            return False
+    return True
+
+
+def _tooltip_html_from_props(props: dict, max_keys: int = 12) -> str:
+    if not props:
+        return ""
+    rows: list[str] = []
+    for k in list(props.keys())[:max_keys]:
+        v = props.get(k)
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if not sv:
+            continue
+        rows.append(
+            "<tr><td style='padding:2px 6px;font-weight:bold;white-space:nowrap'>"
+            f"{html.escape(str(k))}</td>"
+            f"<td style='padding:2px 6px'>{html.escape(sv)}</td></tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        "<table style='font-size:11px;border-collapse:collapse'>"
+        f"{''.join(rows)}</table>"
+    )
+
+
+def _lookup_point_icon_entry(
+    point_icons: dict | None,
+    icon_field: str | None,
+    props: dict,
+) -> dict | None:
+    if not isinstance(point_icons, dict) or not icon_field:
+        return None
+    key = str(props.get(icon_field, "")).strip()
+    ent = point_icons.get(key)
+    if isinstance(ent, dict):
+        return ent
+    ent_def = point_icons.get("_default")
+    return ent_def if isinstance(ent_def, dict) else None
+
+
+def _add_point_layer_markers(
+    m: folium.Map,
+    geojson_data: dict,
+    label: str,
+    style: dict,
+    color_by_field: str | None,
+    value_to_color: dict[str, str] | None,
+        point_icons: dict | None,
+        point_icon_field: str | None,
+) -> None:
+    fg = folium.FeatureGroup(name=label)
+    icon_lookup = point_icon_field or color_by_field
+    default_color = style.get("fillColor") or style.get("color") or "#FF6B6B"
+    raw_fo = style.get("fillOpacity")
+    fill_opacity = float(raw_fo) if raw_fo is not None else 0.75
+    fill_opacity = min(1.0, max(0.05, fill_opacity))
+    for feat in geojson_data.get("features", []):
+        if not isinstance(feat, dict):
+            continue
+        geom = feat.get("geometry")
+        raw_p = feat.get("properties")
+        props = raw_p if isinstance(raw_p, dict) else {}
+        if not isinstance(geom, dict) or geom.get("type") != "Point":
+            continue
+        coords = geom.get("coordinates") or []
+        if len(coords) < 2:
+            continue
+        lon, lat = float(coords[0]), float(coords[1])
+        tip = _tooltip_html_from_props(props)
+        icon_entry = _lookup_point_icon_entry(point_icons, icon_lookup, props)
+        if icon_entry:
+            uri = icon_entry.get("dataUri")
+            if isinstance(uri, str) and uri.startswith("data:image/"):
+                w = int(icon_entry.get("width") or 13)
+                h = int(icon_entry.get("height") or 21)
+                ax = max(1.0, w * 0.5)
+                ay = float(h)
+                folium.Marker(
+                    location=[lat, lon],
+                    icon=folium.CustomIcon(
+                        icon_image=uri,
+                        icon_size=(w, h),
+                        icon_anchor=(ax, ay),
+                    ),
+                    tooltip=folium.Tooltip(tip) if tip else None,
+                ).add_to(fg)
+                continue
+        if color_by_field and value_to_color is not None:
+            val = str(props.get(color_by_field, ""))
+            color = value_to_color.get(val, default_color)
+        else:
+            color = default_color
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=6,
+            color=color,
+            weight=2,
+            fill=True,
+            fill_color=color,
+            fill_opacity=fill_opacity,
+            opacity=0.9,
+            tooltip=folium.Tooltip(tip) if tip else None,
+        ).add_to(fg)
+    fg.add_to(m)
+
+
 def render_geo_map(map_actions, width: int | str | None = 700, height=400):
     if not map_actions:
         return None
@@ -405,9 +525,34 @@ def render_geo_map(map_actions, width: int | str | None = 700, height=400):
             color_by_field = action.get("colorByField")
             color_palette = action.get("colorPalette") or []
             style = action.get("style", {})
+            point_icons = action.get("pointIconsByFieldValue")
+            pif = action.get("pointIconField")
+            point_icon_field = pif if isinstance(pif, str) and pif.strip() else None
 
             if geojson_data:
-                if color_by_field and color_palette:
+                if _fc_is_all_points(geojson_data):
+                    value_to_color = None
+                    if color_by_field and color_palette:
+                        unique_values = sorted({
+                            str(f.get("properties", {}).get(color_by_field))
+                            for f in geojson_data.get("features", [])
+                            if f.get("properties", {}).get(color_by_field) is not None
+                        })
+                        value_to_color = {
+                            val: color_palette[i % len(color_palette)]
+                            for i, val in enumerate(unique_values)
+                        }
+                    _add_point_layer_markers(
+                        m,
+                        geojson_data,
+                        label,
+                        style,
+                        color_by_field,
+                        value_to_color,
+                        point_icons if isinstance(point_icons, dict) else None,
+                        point_icon_field,
+                    )
+                elif color_by_field and color_palette:
                     unique_values = sorted({
                         str(f.get("properties", {}).get(color_by_field))
                         for f in geojson_data.get("features", [])

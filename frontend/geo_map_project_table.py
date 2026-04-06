@@ -1,8 +1,10 @@
 import html
 
 import streamlit as st
-
-from geo_feature_display import geo_feature_row_display_id, geo_feature_row_display_label
+from geo_feature_display import (
+    geo_feature_row_display_id,
+    geo_feature_row_display_label,
+)
 
 from constants import (
     GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT,
@@ -631,7 +633,13 @@ def prepend_focus_zoom_if_any(
 
 
 def _get_row_name(row: dict) -> str:
-    return geo_feature_row_display_label(row)
+    label = geo_feature_row_display_label(row)
+    if label != "\u2014":
+        return label
+    rid = geo_feature_row_display_id(row)
+    if rid != "\u2014":
+        return str(rid).strip()
+    return "\u2014"
 
 
 def _cell_name_text(full_name: str) -> str:

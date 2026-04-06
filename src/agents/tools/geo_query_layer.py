@@ -9,6 +9,7 @@ from langgraph.types import Command
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
 from src.api.lake_county_constants import HTTP_TIMEOUT_QUERY
 from src.infrastructure.external.arcgis_client import ArcGISClient
+from src.shared.arcgis_layer_symbology import fetch_point_icons_for_class_field
 from src.shared.logging_config import get_logger
 from src.shared.map_constants import MAX_COLOR_CATEGORIES, MIN_COLOR_CATEGORIES
 from src.shared.map_utils import (
@@ -171,18 +172,28 @@ async def geo_query_layer(
     map_actions = []
     if feature_count > 0:
         value_field = layer.get("value_field")
-        color_by_field = (
-            value_field if value_field and where != "1=1" else None
-        )
+        color_by_field = None
         color_palette = None
-
-        if color_by_field:
-            unique_values = extract_unique_values(data, color_by_field)
+        if value_field:
+            unique_values = extract_unique_values(data, value_field)
             if (
-                len(unique_values) >= MIN_COLOR_CATEGORIES
-                and len(unique_values) <= MAX_COLOR_CATEGORIES
+                MIN_COLOR_CATEGORIES <= len(unique_values) <= MAX_COLOR_CATEGORIES
             ):
+                color_by_field = value_field
                 color_palette = generate_color_palette(len(unique_values))
+
+        point_icons = None
+        point_icon_field = None
+        vf = layer.get("value_field")
+        if vf and layer.get("geometry_type") == "point":
+            point_icons = await fetch_point_icons_for_class_field(
+                client,
+                url,
+                str(vf),
+                HTTP_TIMEOUT_QUERY,
+            )
+            if point_icons:
+                point_icon_field = str(vf)
 
         map_actions.append(create_zoom_to_action(data))
         map_actions.append(
@@ -191,6 +202,8 @@ async def geo_query_layer(
                 label=f"{layer_name} ({feature_count} features)",
                 color_by_field=color_by_field,
                 color_palette=color_palette,
+                point_icons_by_field_value=point_icons,
+                point_icon_field=point_icon_field,
             )
         )
 

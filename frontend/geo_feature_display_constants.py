@@ -1,6 +1,12 @@
 GEO_ROW_LABEL_KEYS: tuple[str, ...] = (
     "Name",
     "name",
+    "Sample_ID",
+    "sample_id",
+    "SAMPLE_ID",
+    "Site_ID",
+    "site_id",
+    "SITE_ID",
     "PROJECT_NAME",
     "Project_Name",
     "Title",
