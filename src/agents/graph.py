@@ -229,6 +229,19 @@ Step 3: geo_spatial_intersection(
           what_color_field=[best_categorical_field_from_location_schema]
         )
 
+Example 5: "Projects on soil type [CODE]" (environmental polygon → SMC projects)
+Step 1: geo_discover_layer_schema("soils") (confirm SOILCODE or equivalent) and geo_discover_project_schema for optional what_color_field
+Step 2: geo_spatial_intersection(
+          where_layer_id="soils",
+          where_filter_field="SOILCODE",
+          where_filter_value="[CODE]",
+          what_layer_id="representative_points",
+          what_where_clause="1=1",
+          what_color_field=[best categorical from project schema, often projecttype, or ""]
+        )
+Catalog id for SMC project representative points (FeatureServer/30) is always representative_points.
+Do not use ArcGIS service names (e.g. SMCAllProjectPoints) as what_layer_id.
+
 CONVERSATIONAL REFINEMENT — CUMULATIVE FILTERS:
 When the user says "of those", "from those", "filter those", "which of those", etc., they are refining
 the previous result. You MUST carry all previous filters forward and add the new condition.

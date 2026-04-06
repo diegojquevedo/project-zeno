@@ -1,3 +1,9 @@
+from src.api.custom.geo_lake_county_projects_config import (
+    GEO_PROJECT_AREAS_URL,
+    GEO_PROJECT_LINES_URL,
+    GEO_PROJECT_POINTS_URL,
+    GEO_PROJECT_REPRESENTATIVE_POINTS_URL,
+)
 from src.shared.lake_county_constants import (
     GEO_LAKE_COUNTY_PROJECT_ID,
     LAKE_COUNTY_AOI,
@@ -17,6 +23,19 @@ from src.shared.lake_county_constants import (
     LC_US_CONGRESSIONAL_DISTRICTS_URL,
     LC_WATERSHEDS_URL,
 )
+
+_GEO_LAYER_ID_ALIASES: dict[str, str] = {
+    "smcallprojectpoints": "representative_points",
+    "smc_all_project_points": "representative_points",
+    "allprojectpoints": "representative_points",
+    "lakecountysmcprojects": "representative_points",
+    "smcprojects": "representative_points",
+    "smcallprojectlines": "lines",
+    "smcallprojectareas": "areas",
+    "smcallprojectgeometrypoints": "points",
+    "geo_project_representation_points": "representative_points",
+    "project_rep_points": "representative_points",
+}
 
 GEO_LAKE_COUNTY_LAYERS = [
     {
@@ -139,6 +158,46 @@ GEO_LAKE_COUNTY_LAYERS = [
         "geometry_type": "polygon",
         "description": "US Congressional districts in Lake County",
     },
+    {
+        "layer_id": "representative_points",
+        "arcgis_url": GEO_PROJECT_REPRESENTATIVE_POINTS_URL,
+        "layer_type": "FeatureServer",
+        "data_layer": "SMC All Project representative points",
+        "dataset_name": "Lake County SMC Projects (representative points)",
+        "role": "projects",
+        "geometry_type": "point",
+        "description": "Lake County stormwater SMC projects: full attributes at representative points (FeatureServer/30). Use layer_id representative_points when geo_spatial_intersection WHAT layer is projects.",
+    },
+    {
+        "layer_id": "points",
+        "arcgis_url": GEO_PROJECT_POINTS_URL,
+        "layer_type": "FeatureServer",
+        "data_layer": "SMC All Project points",
+        "dataset_name": "Lake County SMC Projects (points)",
+        "role": "projects",
+        "geometry_type": "point",
+        "description": "Project point geometries (FeatureServer/27), join key project_id",
+    },
+    {
+        "layer_id": "lines",
+        "arcgis_url": GEO_PROJECT_LINES_URL,
+        "layer_type": "FeatureServer",
+        "data_layer": "SMC All Project lines",
+        "dataset_name": "Lake County SMC Projects (lines)",
+        "role": "projects",
+        "geometry_type": "polyline",
+        "description": "Project line geometries (FeatureServer/23), join key project_id",
+    },
+    {
+        "layer_id": "areas",
+        "arcgis_url": GEO_PROJECT_AREAS_URL,
+        "layer_type": "FeatureServer",
+        "data_layer": "SMC All Project areas",
+        "dataset_name": "Lake County SMC Projects (areas)",
+        "role": "projects",
+        "geometry_type": "polygon",
+        "description": "Project area polygons (FeatureServer/29), join key project_id",
+    },
 ]
 
 GEO_LAKE_COUNTY_DEFAULT_LAYER = GEO_LAKE_COUNTY_LAYERS[0]
@@ -154,8 +213,18 @@ def get_geo_lake_county_layers() -> list[dict]:
     return list(GEO_LAKE_COUNTY_LAYERS)
 
 
+def normalize_geo_lake_county_layer_id(layer_id: str) -> str:
+    if not layer_id or not str(layer_id).strip():
+        return ""
+    raw = str(layer_id).strip()
+    return _GEO_LAYER_ID_ALIASES.get(raw.lower()) or raw
+
+
 def get_geo_lake_county_layer_by_id(layer_id: str) -> dict | None:
-    return GEO_LAKE_COUNTY_LAYERS_BY_ID.get(layer_id)
+    key = normalize_geo_lake_county_layer_id(layer_id)
+    if not key:
+        return None
+    return GEO_LAKE_COUNTY_LAYERS_BY_ID.get(key)
 
 
 def get_geo_lake_county_layers_by_role(role: str) -> list[dict]:
@@ -168,6 +237,10 @@ def get_geo_lake_county_where_layers() -> list[dict]:
 
 def get_geo_lake_county_what_layers() -> list[dict]:
     return get_geo_lake_county_layers_by_role("what")
+
+
+def get_geo_lake_county_project_layers() -> list[dict]:
+    return get_geo_lake_county_layers_by_role("projects")
 
 
 __all__ = [
@@ -183,6 +256,8 @@ __all__ = [
     "get_geo_lake_county_layer_by_id",
     "get_geo_lake_county_layers",
     "get_geo_lake_county_layers_by_role",
+    "get_geo_lake_county_project_layers",
     "get_geo_lake_county_what_layers",
     "get_geo_lake_county_where_layers",
+    "normalize_geo_lake_county_layer_id",
 ]

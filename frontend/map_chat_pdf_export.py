@@ -390,6 +390,45 @@ def _hero_main_title(geo_summary: dict) -> str:
     return "Lake County projects"
 
 
+def _legacy_default_hero_title(
+    messages: list[Any],
+    geo_summary: dict | None,
+) -> str:
+    if isinstance(geo_summary, dict):
+        t = _hero_main_title(geo_summary)
+        if t and t != "Lake County projects":
+            return t[:90]
+        rows = geo_summary.get("feature_rows")
+        if isinstance(rows, list) and len(rows) == 1:
+            r0 = rows[0]
+            if isinstance(r0, dict):
+                for key in ("name", "projectname", "Name", "PROJECTNAME"):
+                    v = r0.get(key)
+                    if v and str(v).strip():
+                        return str(v).strip()[:90]
+    u = _last_user_message_text(messages)
+    if u:
+        one = u.replace("\n", " ").strip()
+        return f"{one[:80]}…" if len(one) > 80 else one
+    return "Lake County spatial intelligence"
+
+
+def _legacy_generic_hero_copy(user_prompt: str) -> Any:
+    subtitle = (user_prompt or "").replace("\n", " ").strip()
+    if not subtitle:
+        subtitle = "Geo Lake County analysis"
+    subtitle = subtitle[:120]
+    return type(
+        "LegacyGenericHeroCopy",
+        (),
+        {
+            "HERO_KICKER": "GEO AI - INTELLIGENCE",
+            "HERO_SUBKICKER": "REPORT",
+            "HERO_SUBTITLE": subtitle,
+        },
+    )
+
+
 def _kpi_counts(feature_rows: list[dict], total: int) -> tuple[int, int, int, str]:
     wmb = 0
     s319 = 0
@@ -427,20 +466,57 @@ def _sum_investment(feature_rows: list[dict]) -> float | None:
     return s if n else None
 
 
-def _schema_key_values(geo_summary: dict, schema_snapshot: dict | None) -> list[tuple[str, str]]:
-    filters = geo_summary.get("filters") or {}
-    rows = [
-        ("Layer", "Drainage Districts"),
-        ("Geometry type", "esriGeometryPolygon"),
-    ]
-    if filters.get("jurisdiction"):
-        rows.append(("Jurisdiction", str(filters["jurisdiction"])))
-    name_f = filters.get("boundary") or filters.get("jurisdiction") or ""
-    if name_f:
-        rows.append(("Filter field", f'NAME = "{name_f.split(chr(8211))[0].strip()}"' if name_f else ""))
-    br = filters.get("boundary")
-    if br:
-        rows.append(("Boundary result", str(br)))
+def _parse_layer_geometry_from_intro(intro: str) -> tuple[str, str, str]:
+    layer, geom = "", ""
+    kept: list[str] = []
+    for raw_ln in (intro or "").splitlines():
+        ln = raw_ln.strip()
+        if not ln:
+            kept.append("")
+            continue
+        ln_ne = re.sub(r"^#+\s*", "", ln).strip()
+        sm = re.match(r"(?i)^(schema|layer)\s*:\s*(.+)$", ln_ne)
+        if sm:
+            layer = sm.group(2).strip()
+            continue
+        gm = re.match(r"(?i)^geometry\s*type\s*:\s*(.+)$", ln_ne)
+        if gm:
+            geom = gm.group(1).strip()
+            continue
+        kept.append(raw_ln.rstrip())
+    rest = "\n".join(kept).strip()
+    return layer, geom, rest
+
+
+def _merged_schema_metadata_kv(
+    geo_summary: dict | None,
+    schema_snapshot: dict | None,
+) -> list[tuple[str, str]]:
+    intro = ""
+    if isinstance(schema_snapshot, dict):
+        intro = _strip_md((schema_snapshot.get("intro") or "").strip())
+    layer, geom, _rest = _parse_layer_geometry_from_intro(intro)
+    rows: list[tuple[str, str]] = []
+    if layer:
+        rows.append(("Layer", layer[:500]))
+    if geom:
+        rows.append(("Geometry type", geom[:500]))
+    if isinstance(geo_summary, dict):
+        filters = geo_summary.get("filters") or {}
+        if filters.get("jurisdiction"):
+            j = str(filters["jurisdiction"]).strip()
+            if j:
+                rows.append(("Jurisdiction", j[:500]))
+        name_f = filters.get("boundary") or filters.get("jurisdiction") or ""
+        if name_f:
+            nf = str(name_f).split("\u2013")[0].strip()
+            if nf:
+                rows.append(("Filter field", f'NAME = "{nf}"'[:500]))
+        br = filters.get("boundary")
+        if br:
+            bv = str(br).strip()
+            if bv:
+                rows.append(("Boundary result", bv[:500]))
     return [(a, b) for a, b in rows if b]
 
 
@@ -481,7 +557,7 @@ def _schema_field_rows(schema_snapshot: dict | None) -> list[tuple[str, str, str
     if isinstance(schema_snapshot, dict):
         raw = (schema_snapshot.get("fields") or "").strip()
     if not raw:
-        raw = "OBJECTID · CODE · NAME · Shape_Leng · projecttype · jurisdiction"
+        return []
     parsed = _parse_schema_field_entries(raw)
     if parsed:
         return parsed[:60]
@@ -966,7 +1042,18 @@ class _PDF(FPDF):
     def section_subtitle_accent(self, text: str) -> None:
         self.ln(1)
         self._set(10, bold=True, color=COLOR.ACCENT)
-        self.multi_cell(0, 5.5, _pdf_text(text), new_x="LMARGIN", new_y="NEXT")
+        self.multi_cell(
+            0,
+            5.5,
+            _pdf_text(_spaced_caps_line(text)),
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        self.set_draw_color(*COLOR.ACCENT)
+        self.set_line_width(0.3)
+        x0 = self.get_x()
+        self.line(x0, self.get_y(), x0 + self.epw, self.get_y())
+        self.set_line_width(0.2)
         self.ln(2)
 
     def individual_project_results_attributes(
@@ -1061,19 +1148,25 @@ class _PDF(FPDF):
         self.ln(1)
 
     def h2(self, text: str) -> None:
-        self.ln(3)
-        self._set(13, bold=True, color=COLOR.BLACK)
-        self.multi_cell(0, 7, _pdf_text(text), new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(*COLOR.DIVIDER)
-        x0 = self.get_x()
-        self.line(x0, self.get_y(), x0 + self.epw, self.get_y())
-        self.ln(2)
+        self.section_spaced(text)
 
     def h3(self, text: str) -> None:
         self.ln(2)
         self._set(11, bold=True, color=COLOR.ACCENT)
-        self.multi_cell(0, 6, _pdf_text(text), new_x="LMARGIN", new_y="NEXT")
-        self.ln(1)
+        self.multi_cell(
+            0,
+            6,
+            _pdf_text(_spaced_caps_line(text)),
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        self.ln(2)
+        self.set_draw_color(*COLOR.ACCENT)
+        self.set_line_width(0.3)
+        x0 = self.get_x()
+        self.line(x0, self.get_y(), x0 + self.epw, self.get_y())
+        self.set_line_width(0.2)
+        self.ln(2)
 
     def divider(self) -> None:
         self.ln(3)
@@ -1305,7 +1398,7 @@ def _build_executive_geo_pdf(
         pdf.body(exec_sum)
 
     pdf.section_spaced(MAP_CHAT_PDF.SECTION.DATA_SOURCE_SCHEMA)
-    pdf.kv_pairs(_schema_key_values(geo_summary, schema_snapshot))
+    pdf.kv_pairs(_merged_schema_metadata_kv(geo_summary, schema_snapshot))
 
     ks_rows = _schema_field_rows(schema_snapshot)
     pdf._set(9, bold=True, color=COLOR.NAVY)
@@ -1490,18 +1583,28 @@ def _write_geo_summary_legacy(pdf: _PDF, geo_summary: dict):
                     pdf.caption(insight)
 
 
-def _write_schema(pdf: _PDF, snap: dict):
-    intro = _strip_md((snap.get("intro") or "").strip())
-    fields = _strip_md((snap.get("fields") or "").strip())
-    if not intro and not fields:
+def _write_schema(pdf: _PDF, snap: dict, geo_summary: dict | None = None) -> None:
+    intro_raw = (snap.get("intro") or "").strip()
+    fields_raw = (snap.get("fields") or "").strip()
+    if not intro_raw and not fields_raw:
         return
-    pdf.divider()
-    pdf.h2(MAP_CHAT_PDF.SECTION.SCHEMA)
-    if intro:
-        pdf.body(intro)
-    if fields:
-        pdf.h3(MAP_CHAT_PDF.SECTION.FIELDS)
-        pdf.body(fields)
+    intro = _strip_md(intro_raw)
+    pdf.section_spaced(MAP_CHAT_PDF.SECTION.DATA_SOURCE_SCHEMA)
+    kv = _merged_schema_metadata_kv(
+        geo_summary if isinstance(geo_summary, dict) else None,
+        snap,
+    )
+    if kv:
+        pdf.kv_pairs(kv)
+    _layer, _geom, rest_intro = _parse_layer_geometry_from_intro(intro)
+    if rest_intro.strip():
+        pdf.body(rest_intro.strip())
+    ks_rows = _schema_field_rows(snap)
+    if ks_rows:
+        pdf._set(9, bold=True, color=COLOR.NAVY)
+        pdf.multi_cell(0, 5, MAP_CHAT_PDF.EXEC.KEY_SCHEMA_LABEL, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+        pdf.schema_fields_table(ks_rows)
 
 
 def _last_user_message_text(messages: list[Any]) -> str:
@@ -1627,13 +1730,14 @@ def _write_message(
     omit_role_labels: bool = False,
     individual_project_pdf: bool = False,
     supplemental_attr_rows: list[tuple[str, str]] | None = None,
+    include_followups: bool = True,
 ) -> None:
     raw = (content or "").strip()
     if not raw:
         return
     if not omit_role_labels:
         label = "You" if role == "user" else "Assistant"
-        pdf.h2(label)
+        pdf.section_spaced(label)
     elif role == "user":
         pdf.ln(2)
         pdf.body(_strip_md(raw))
@@ -1662,7 +1766,7 @@ def _write_message(
                 pdf.field_value_zebra_rows(attr_rows)
         if attr_tail.strip():
             pdf.caption(_strip_md(attr_tail.strip()))
-        if sugg_part:
+        if sugg_part and include_followups:
             lines = [ln.strip().lstrip("-* ") for ln in sugg_part.splitlines() if ln.strip()]
             pdf.numbered_followups(lines, section_title=MAP_CHAT_PDF.SECTION.FOLLOWUP)
         if not summary_part.strip() and not sugg_part:
@@ -1698,10 +1802,12 @@ def _build_legacy_pdf(
         pdf.session_line = stamp
         pdf.hero_navy(proj_title, stamp, hero_copy=MAP_CHAT_PDF.EXEC.INDIVIDUAL)
     else:
-        pdf = _PDF(executive=False)
-        pdf.h1(MAP_CHAT_PDF.DOCUMENT.TITLE)
-        pdf.caption(stamp)
-        pdf.divider()
+        pdf = _PDF(executive=True)
+        _mt = _legacy_default_hero_title(messages, geo_summary)
+        _uq = _last_user_message_text(messages)
+        pdf.footer_left = _pdf_text(f"{_mt} · Lake County")
+        pdf.session_line = stamp
+        pdf.hero_navy(_mt, stamp, hero_copy=_legacy_generic_hero_copy(_uq))
 
     last_assistant_i: int | None = None
     for i in range(len(messages) - 1, -1, -1):
@@ -1730,9 +1836,10 @@ def _build_legacy_pdf(
             str(role),
             str(m.get("content") or ""),
             geo_fmt,
-            omit_role_labels=use_individual_hero,
+            omit_role_labels=True if not use_individual_hero else use_individual_hero,
             individual_project_pdf=use_individual_hero,
             supplemental_attr_rows=sup,
+            include_followups=False if not use_individual_hero else True,
         )
 
     _suppress_appendix = use_individual_hero or (
@@ -1741,11 +1848,22 @@ def _build_legacy_pdf(
         and geo_summary.get(GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY) is True
     )
     if isinstance(schema_snapshot, dict) and not _suppress_appendix:
-        _write_schema(pdf, schema_snapshot)
+        _write_schema(
+            pdf,
+            schema_snapshot,
+            geo_summary if isinstance(geo_summary, dict) else None,
+        )
 
     if geo_fmt and isinstance(geo_summary, dict) and not _suppress_appendix:
         _write_geo_summary_legacy(pdf, geo_summary)
 
+    if not use_individual_hero:
+        _, sugg = _last_assistant_narrative(messages)
+        lines = [ln.strip().lstrip("-* ") for ln in sugg.splitlines() if ln.strip()]
+        if lines:
+            pdf.numbered_followups(lines, section_title=MAP_CHAT_PDF.SECTION.FOLLOWUP)
+
+    pdf.disclaimer()
     return bytes(pdf.output())
 
 

@@ -8,7 +8,10 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from shapely.geometry import shape
 
-from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
+from src.api.geo_lake_county_config import (
+    get_geo_lake_county_layer_by_id,
+    normalize_geo_lake_county_layer_id,
+)
 from src.api.lake_county_constants import (
     HTTP_TIMEOUT_DOMAINS,
     HTTP_TIMEOUT_QUERY,
@@ -151,38 +154,68 @@ async def _fetch_boundary(
     filter_value: str,
 ) -> tuple[dict | None, str | None]:
     exact_clause = f"{filter_field}='{filter_value}'"
-    params = {
+    probe_params: dict = {
         "where": exact_clause,
         "outFields": "*",
         "returnGeometry": "true",
         "f": "geojson",
+        "outSR": "4326",
         "resultRecordCount": 1,
     }
 
     try:
-        data = await client.get(query_url, params, HTTP_TIMEOUT_DOMAINS)
+        probe = await client.get(query_url, probe_params, HTTP_TIMEOUT_DOMAINS)
     except Exception as e:
         return None, str(e)
 
-    if data.get("error") or not data.get("features"):
+    where_clause = exact_clause if not probe.get("error") and probe.get("features") else None
+    if where_clause is None:
         for fallback_clause in _build_fallback_clauses(filter_field, filter_value):
-            params["where"] = fallback_clause
-            params["resultRecordCount"] = 1
+            probe_params["where"] = fallback_clause
             try:
-                data = await client.get(query_url, params, HTTP_TIMEOUT_DOMAINS)
+                probe = await client.get(query_url, probe_params, HTTP_TIMEOUT_DOMAINS)
             except Exception as e:
                 return None, str(e)
-            if not data.get("error") and data.get("features"):
+            if not probe.get("error") and probe.get("features"):
+                where_clause = fallback_clause
                 break
 
-    if data.get("error"):
-        return None, data["error"].get("message", "Unknown ArcGIS error")
+    if probe.get("error") and where_clause is None:
+        return None, probe["error"].get("message", "Unknown ArcGIS error")
 
-    features = data.get("features", [])
-    if not features:
+    if where_clause is None:
         return None, None
 
-    return data, None
+    all_features: list[dict] = []
+    for page in range(_MAX_PAGES):
+        offset = page * _PAGE_SIZE
+        page_params = {
+            "where": where_clause,
+            "outFields": "*",
+            "returnGeometry": "true",
+            "f": "geojson",
+            "outSR": "4326",
+            "resultRecordCount": _PAGE_SIZE,
+            "resultOffset": offset,
+        }
+        try:
+            data = await client.get(query_url, page_params, HTTP_TIMEOUT_DOMAINS)
+        except Exception as e:
+            return None, str(e)
+        if data.get("error"):
+            return None, data["error"].get("message", "Unknown ArcGIS error")
+        page_features = data.get("features", [])
+        all_features.extend(page_features)
+        if not data.get("exceededTransferLimit", False):
+            break
+        if len(page_features) < _PAGE_SIZE:
+            break
+
+    if not all_features:
+        return None, None
+
+    merged: dict = {"type": "FeatureCollection", "features": all_features}
+    return merged, None
 
 
 def _union_geometry_from_fc(geojson_fc: dict) -> dict | None:
@@ -241,7 +274,8 @@ async def geo_spatial_intersection(
             Leave empty when using "geo_project_geometry" sentinel.
         where_filter_value: Value for WHERE filter (e.g. location name, code).
             When using "geo_project_geometry", pass the project name as a label.
-        what_layer_id: Layer id to query features from (e.g. "features", "types")
+        what_layer_id: Catalog layer id to query (e.g. "soils", "hydro_lines", "representative_points"
+            for Lake County projects). Use representative_points for SMC project points — not ArcGIS service names.
         what_where_clause: Optional WHERE clause for WHAT layer (e.g. "TYPE='ABC'" or "CATEGORY='X'")
         what_color_field: Field from WHAT layer schema to use for color-coding features. Leave empty for no color-coding. Discovered from schema — use a categorical field with meaningful distinct values.
         spatial_rel: Spatial relationship (default: esriSpatialRelIntersects)
@@ -251,7 +285,15 @@ async def geo_spatial_intersection(
     tid = tool_call_id or ""
     state = state or {}
 
-    using_project_geometry = where_layer_id == _PROJECT_GEOMETRY_SENTINEL
+    logger.info(
+        "DEBUG_SPATIAL_INTERSECTION: invoke",
+        where_layer_id=where_layer_id,
+        what_layer_id=what_layer_id,
+    )
+
+    using_project_geometry = (
+        str(where_layer_id).strip() == _PROJECT_GEOMETRY_SENTINEL
+    )
 
     if using_project_geometry:
         geo_project_geometry: dict | None = state.get("geo_project_geometry")
@@ -291,8 +333,20 @@ async def geo_spatial_intersection(
         boundary_label = project_name_label
         where_name = "Project"
     else:
+        where_norm = normalize_geo_lake_county_layer_id(where_layer_id)
+        if where_norm != str(where_layer_id).strip():
+            logger.info(
+                "DEBUG_SPATIAL_INTERSECTION: where_layer_id_normalized",
+                raw=where_layer_id,
+                normalized=where_norm,
+            )
         where_layer = get_geo_lake_county_layer_by_id(where_layer_id)
         if not where_layer:
+            logger.warning(
+                "DEBUG_SPATIAL_INTERSECTION: where_layer_missing",
+                where_layer_id=where_layer_id,
+                normalized=where_norm,
+            )
             return Command(
                 update={
                     "messages": [
@@ -355,8 +409,10 @@ async def geo_spatial_intersection(
             )
 
         boundary_features = boundary_data.get("features", [])
-        boundary_geometry = boundary_features[0].get("geometry")
-        boundary_properties = boundary_features[0].get("properties", {})
+        boundary_geometry = _union_geometry_from_fc(boundary_data)
+        boundary_properties = (
+            boundary_features[0].get("properties", {}) if boundary_features else {}
+        )
 
         if not boundary_geometry:
             return Command(
@@ -373,8 +429,20 @@ async def geo_spatial_intersection(
         where_name = where_layer.get("description", where_layer_id)
         boundary_label = boundary_properties.get(where_filter_field, where_filter_value)
 
+    what_norm = normalize_geo_lake_county_layer_id(what_layer_id)
+    if what_norm != str(what_layer_id).strip():
+        logger.info(
+            "DEBUG_SPATIAL_INTERSECTION: what_layer_id_normalized",
+            raw=what_layer_id,
+            normalized=what_norm,
+        )
     what_layer = get_geo_lake_county_layer_by_id(what_layer_id)
     if not what_layer:
+        logger.warning(
+            "DEBUG_SPATIAL_INTERSECTION: what_layer_missing",
+            what_layer_id=what_layer_id,
+            normalized=what_norm,
+        )
         return Command(
             update={
                 "messages": [
@@ -492,11 +560,18 @@ async def geo_spatial_intersection(
 
         map_actions.append(action)
 
+    where_result_id = (
+        str(where_layer_id).strip()
+        if using_project_geometry
+        else normalize_geo_lake_county_layer_id(where_layer_id)
+    )
+    what_result_id = normalize_geo_lake_county_layer_id(what_layer_id)
+
     return Command(
         update={
             "geo_spatial_intersection_result": {
-                "where_layer_id": where_layer_id,
-                "what_layer_id": what_layer_id,
+                "where_layer_id": where_result_id,
+                "what_layer_id": what_result_id,
                 "boundary_geojson": boundary_data,
                 "boundary_geometry": boundary_geometry,
                 "boundary_label": boundary_label,

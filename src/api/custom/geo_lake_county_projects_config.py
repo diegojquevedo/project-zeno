@@ -135,6 +135,19 @@ When the user wants geo features (soils, streams, flood zones, etc.) within a na
    )
 Do NOT use geo_query_geo_projects for these flows.
 
+PROJECTS THAT INTERSECT A SOIL / STREAM / ENVIRONMENTAL POLYGON (e.g. "projects on soil type 530D3"):
+1. geo_discover_layer_schema(layer_id="soils") (or the relevant WHAT layer) to confirm filter field names (e.g. SOILCODE).
+2. geo_spatial_intersection(
+     where_layer_id="soils",
+     where_filter_field="SOILCODE",
+     where_filter_value="<code>",
+     what_layer_id="representative_points",
+     what_where_clause="1=1",
+     what_color_field="<optional from project schema>"
+   )
+The catalog id for SMC project points (FeatureServer/30) is exactly representative_points.
+Never pass ArcGIS service names such as SMCAllProjectPoints or SMCAllProjectLayers as layer_id — they are not in the catalog.
+
 IMPORTANT:
 - Any user-supplied label that should match stored categorical values on the project layer: resolver first; never pick the column name from memory or from older docs.
 - geo_resolve_attribute_filter fetches distinct values only for the candidate columns you pass; it returns the where_clause or asks for clarification.
