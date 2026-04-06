@@ -1006,6 +1006,30 @@ def _render_geo_schema_intro(intro: str) -> None:
         st.markdown(rest)
 
 
+def render_geo_schema_export_block(
+    schema_snapshot: dict,
+    *,
+    container_key: str,
+    source: str,
+) -> None:
+    if not isinstance(schema_snapshot, dict):
+        return
+    intro = (schema_snapshot.get("intro") or "").strip()
+    fields = (schema_snapshot.get("fields") or "").strip()
+    if not intro and not fields:
+        return
+    with st.container(key=container_key):
+        st.markdown("### Schema discovery")
+        if intro and fields:
+            _render_geo_schema_intro(intro)
+            with st.expander("Fields", expanded=False):
+                st.markdown(fields)
+        elif fields:
+            st.markdown(fields)
+        elif intro:
+            _render_geo_schema_intro(intro)
+
+
 def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_buffer=None):
     update = json.loads(stream["update"])
 
@@ -1056,23 +1080,24 @@ def render_stream(stream, skip_maps=False, defer_stream_charts=False, ai_text_bu
                 if st.session_state.get(SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN):
                     continue
                 st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = True
-                with st.container(key=GEO_CHAT_SCHEMA_CONTAINER_KEY):
-                    st.markdown("### Schema discovery")
-                    _parts = content.split("\n## Fields\n", 1)
-                    if len(_parts) == 2:
-                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
-                            "intro": (_parts[0] or "").strip(),
-                            "fields": (_parts[1] or "").strip(),
-                        }
-                        _render_geo_schema_intro(_parts[0])
-                        with st.expander("Fields", expanded=False):
-                            st.markdown(_parts[1])
-                    else:
-                        st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
-                            "intro": "",
-                            "fields": (content or "").strip() if isinstance(content, str) else "",
-                        }
-                        st.markdown(content)
+                _parts = content.split("\n## Fields\n", 1)
+                if len(_parts) == 2:
+                    st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
+                        "intro": (_parts[0] or "").strip(),
+                        "fields": (_parts[1] or "").strip(),
+                    }
+                else:
+                    st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = {
+                        "intro": "",
+                        "fields": (content or "").strip() if isinstance(content, str) else "",
+                    }
+                _snap = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
+                if isinstance(_snap, dict):
+                    render_geo_schema_export_block(
+                        _snap,
+                        container_key=GEO_CHAT_SCHEMA_CONTAINER_KEY,
+                        source="stream",
+                    )
             elif tool_name == "geo_query_layer" and content:
                 with st.container():
                     st.markdown("**Layer query result**")

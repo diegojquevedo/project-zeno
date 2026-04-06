@@ -43,6 +43,7 @@ LC_BOUNDARY_STYLE = {
 SESSION_KEY_TOKEN = "token"
 SESSION_KEY_MAP_CHAT_SESSION_ID = "map_chat_session_id"
 SESSION_KEY_MAP_CHAT_MESSAGES = "map_chat_messages"
+SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS = "map_chat_export_snapshots"
 SESSION_KEY_MAP_AOI_DATA = "map_aoi_data"
 SESSION_KEY_MAP_DATASET_DATA = "map_dataset_data"
 SESSION_KEY_MAP_PROJECT_DATA = "map_project_data"
@@ -72,6 +73,7 @@ GEO_NARRATIVE_SUGGESTIONS_DELIM = "---SUGGESTIONS---"
 
 SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN = "geo_stream_schema_shown"
 SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT = "geo_schema_export_snapshot"
+GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY = "ui_omit_results_detail"
 GEO_CHAT_SCHEMA_CONTAINER_KEY = "geo_chat_schema_discovery"
 
 GEO_CHAT_PLACEHOLDER_GEO_LAKE_COUNTY_LONG = (

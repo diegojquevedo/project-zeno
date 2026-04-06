@@ -1,5 +1,6 @@
 import custom  # noqa: F401 — registers all custom renderers
 import folium
+import streamlit as st
 from branca.element import MacroElement
 from custom_renderer_registry import get_renderer
 from jinja2 import Template
@@ -9,6 +10,8 @@ from constants import (
     FOLIUM_ZOOMFIT_MAX_ZOOM,
     FOLIUM_ZOOMFIT_PADDING_PX,
     FOLIUM_ZOOMFIT_POINT_BUFFER_DEG,
+    SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
+    SESSION_KEY_GEO_RESULT_SUMMARY,
 )
 from src.shared.geo_basemap import (
     GEO_BASEMAP_DEFAULT_ID,
@@ -221,11 +224,31 @@ def _sw_ne_bounds_from_zoom_geometry(raw: dict) -> list[list[float]] | None:
         return None
 
 
+def _pick_zoom_to_action(map_actions: list) -> dict | None:
+    focus_i = st.session_state.get(SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW)
+    gs = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+    rows = gs.get("feature_rows") if isinstance(gs, dict) else None
+    if (
+        focus_i is not None
+        and isinstance(focus_i, int)
+        and isinstance(rows, list)
+        and 0 <= focus_i < len(rows)
+    ):
+        for action in map_actions:
+            if action.get("type") == "zoomTo":
+                return action
+        return None
+    for idx in range(len(map_actions) - 1, -1, -1):
+        if map_actions[idx].get("type") == "zoomTo":
+            return map_actions[idx]
+    return None
+
+
 def _compute_center_and_zoom(map_actions: list) -> tuple[list[float], int]:
     center = [42.34, -88.0]
     zoom_start = 10
 
-    zoom_action = next((a for a in map_actions if a.get("type") == "zoomTo"), None)
+    zoom_action = _pick_zoom_to_action(map_actions)
     if zoom_action and zoom_action.get("geometry"):
         try:
             raw = zoom_action["geometry"]
@@ -341,7 +364,7 @@ def render_geo_map(map_actions, width: int | str | None = 700, height=400):
     basemap_id = _basemap_id_from_actions(map_actions)
     m = _folium_map_with_basemap(center, zoom_start, basemap_id, map_width, height)
 
-    zoom_action = next((a for a in map_actions if a.get("type") == "zoomTo"), None)
+    zoom_action = _pick_zoom_to_action(map_actions)
     if zoom_action and zoom_action.get("geometry"):
         sw_ne = _sw_ne_bounds_from_zoom_geometry(zoom_action["geometry"])
         if sw_ne:

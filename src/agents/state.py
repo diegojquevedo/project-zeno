@@ -6,6 +6,9 @@ from typing_extensions import TypedDict
 
 from src.agents.schemas import CodeActPart
 
+_ZENO_MAP_ACTIONS_TURN_RESET_TYPE = "__zeno_map_actions_turn_reset__"
+MAP_ACTIONS_TURN_RESET: list[dict[str, str]] = [{"type": _ZENO_MAP_ACTIONS_TURN_RESET_TYPE}]
+
 
 def add_aois(left: list[dict[str, Any]] | Any, right: list[dict[str, Any]] | Any) -> list[dict[str, Any]]:
     """Merges two AOIs and returns the merged AOI (legacy; prefer replace_aoi_options)."""
@@ -17,11 +20,18 @@ def add_aois(left: list[dict[str, Any]] | Any, right: list[dict[str, Any]] | Any
 
 
 def add_map_actions(left: list[dict[str, Any]] | Any, right: list[dict[str, Any]] | Any) -> list[dict[str, Any]]:
-    """Append new map actions to existing ones."""
+    """Append new map actions to existing ones; drop checkpoint list when a new chat turn starts."""
     if not isinstance(left, list):
         left = [] if left is None else [left]
     if not isinstance(right, list):
         right = [] if right is None else [right]
+    if (
+        right
+        and len(right) == 1
+        and isinstance(right[0], dict)
+        and right[0].get("type") == _ZENO_MAP_ACTIONS_TURN_RESET_TYPE
+    ):
+        return []
     return left + right
 
 

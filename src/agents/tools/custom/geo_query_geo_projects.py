@@ -27,6 +27,7 @@ from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_TYPE_FIELD,
 )
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
+from src.services.lake_county_service import fetch_drainage_district_boundary
 from src.api.lake_county_constants import (
     ARCGIS_RESULT_RECORD_COUNT_BATCH,
     ARCGIS_SRID,
@@ -186,6 +187,15 @@ async def _fetch_layer_boundary(
                 break
 
     if data.get("error") or not data.get("features"):
+        if layer_id == "drainage_districts" and filter_value and str(filter_value).strip():
+            svc = await fetch_drainage_district_boundary(str(filter_value).strip())
+            gj = svc.get("geojson") if isinstance(svc, dict) else None
+            if (
+                isinstance(gj, dict)
+                and not gj.get("error")
+                and gj.get("features")
+            ):
+                return gj
         return None
     return data
 

@@ -8,6 +8,7 @@ from langchain_core.load import dumps
 from langchain_core.messages import HumanMessage
 
 from src.agents.graph import fetch_zeno, fetch_zeno_anonymous
+from src.agents.state import MAP_ACTIONS_TURN_RESET
 from src.shared.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -155,6 +156,13 @@ async def stream_chat(
 
     state_updates["messages"] = messages
     state_updates["user_persona"] = user_persona
+
+    _data_source = state_updates.get("data_source")
+    if not ui_action_only and query and _data_source == "geo_lake_county":
+        state_updates["geo_result_summary"] = None
+        state_updates["geo_project_geometry"] = None
+        state_updates["charts_data"] = []
+        state_updates["map_actions"] = MAP_ACTIONS_TURN_RESET
 
     try:
         stream = zeno_async.astream(

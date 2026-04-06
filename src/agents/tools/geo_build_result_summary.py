@@ -120,6 +120,11 @@ def _extract_feature_rows(geojson: dict) -> list[dict]:
         props = feat.get("properties", {}) if isinstance(feat, dict) else {}
         cleaned = {k: v for k, v in props.items() if k not in _SKIP_FIELDS and v is not None and str(v).strip()}
         if cleaned:
+            oid = props.get("OBJECTID")
+            if oid is None:
+                oid = props.get("objectid")
+            if oid is not None and str(oid).strip():
+                cleaned["OBJECTID"] = oid
             rows.append(cleaned)
     return rows
 

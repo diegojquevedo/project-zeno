@@ -6,6 +6,7 @@ from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
 
 from src.agents.custom_tools_registry import register_tool
+from src.agents.tools.custom.geo_query_geo_projects import _json_safe_scalar
 from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_DEFAULT_COLOR,
     GEO_PROJECT_GEOM_TYPE_TO_LAYER,
@@ -22,6 +23,7 @@ from src.api.lake_county_constants import (
 )
 from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.shared.logging_config import get_logger
+from src.core.constants import GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY
 from src.shared.map_utils import create_zoom_to_action
 
 logger = get_logger(__name__)
@@ -216,9 +218,42 @@ async def geo_get_project_geometry(
         "If the user only wanted project info, summarize the attributes above."
     )
 
+    _skip_row = frozenset({
+        "OBJECTID",
+        "GlobalID",
+        "Shape__Area",
+        "Shape__Length",
+        "_color",
+        GEO_PROJECT_GEOMETRY_FIELD,
+    })
+    row_m: dict = {}
+    for rk, rv in props.items():
+        if rk in _skip_row:
+            continue
+        if rv is None:
+            continue
+        if isinstance(rv, str) and not rv.strip():
+            continue
+        row_m[rk] = _json_safe_scalar(rv)
+    if not row_m:
+        _pid = props.get(GEO_PROJECT_ID_FIELD)
+        if _pid is not None:
+            row_m[GEO_PROJECT_ID_FIELD] = _json_safe_scalar(_pid)
+    feature_rows_summary = [row_m] if row_m else []
+    geo_result_summary = {
+        "total": 1,
+        "label": "project",
+        "label_plural": "projects",
+        "feature_rows": feature_rows_summary,
+        "charts_data": [],
+        "filters": {},
+        GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY: True,
+    }
+
     return Command(
         update={
             "geo_project_geometry": geo_project_geometry,
+            "geo_result_summary": geo_result_summary,
             "map_actions": map_actions,
             "messages": [ToolMessage(content=content, tool_call_id=tid)],
         },

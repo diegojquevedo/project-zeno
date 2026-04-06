@@ -6,12 +6,17 @@ from typing import Any
 
 import vl_convert as vlc
 from fpdf import FPDF
+from geo_feature_display import (
+    geo_feature_row_display_id,
+    geo_feature_row_display_label,
+)
 
 from constants import (
     CHART_NOMINAL_COLOR_SCHEME,
     COLOR,
     GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
+    GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY,
     MAP_CHAT_PDF,
 )
 
@@ -1373,63 +1378,84 @@ def _build_executive_geo_pdf(
 
 
 def _write_geo_summary_legacy(pdf: _PDF, geo_summary: dict):
-    pdf.divider()
-    pdf.h2(MAP_CHAT_PDF.SECTION.RESULTS_DETAIL)
-
     total = geo_summary.get("total", 0)
     label = geo_summary.get("label_plural", "results")
     filters = geo_summary.get("filters", {}) or {}
     charts_data = geo_summary.get("charts_data") or []
     feature_rows = geo_summary.get("feature_rows", [])
-
-    pdf.body(f"Found {total} {label}")
-    if total > 0 and len(feature_rows) < total:
-        pdf.caption(f"Showing {len(feature_rows)} of {total}; the map includes all {total}.")
-
-    filter_parts: list[str] = []
-    if filters.get("category") and filters["category"] != "projects":
-        filter_parts.append(f"Category: {filters['category']}")
-    if filters.get("jurisdiction"):
-        filter_parts.append(f"In: {filters['jurisdiction']}")
-    if filters.get("boundary"):
-        filter_parts.append(f"Boundary: {filters['boundary']}")
-    if filters.get("status"):
-        filter_parts.append(f"Status: {filters['status']}")
-    if filter_parts:
-        pdf.caption(" · ".join(filter_parts))
-
-    ne = geo_summary.get("narrative_enrichment")
-    if ne and str(ne).strip():
-        pdf.h3(MAP_CHAT_PDF.SECTION.RICH_CONTEXT)
-        pdf.body(_strip_md(str(ne).strip()))
+    _omit_detail = (
+        geo_summary.get(GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY) is True
+    )
 
     display_rows = [
         {k: _format_cell(k, v) for k, v in row.items() if k not in _SKIP}
         for row in feature_rows
     ]
 
-    if total == 1 and feature_rows:
-        pdf.h3(MAP_CHAT_PDF.SECTION.RECORD_DETAIL)
-        row = feature_rows[0]
-        dr = {k: _format_cell(k, v) for k, v in row.items() if k not in _SKIP}
-        priority = ("Name", "projecttype", "jurisdiction", "watershed", "subwatershed", "project_id")
-        for key in priority:
-            if dr.get(key) is not None:
-                pdf.body(f"{key.replace('_', ' ').title()}: {dr[key]}")
-        for k, v in dr.items():
-            if k not in priority and v is not None:
-                pdf.caption(f"{k}: {v}")
+    if not _omit_detail:
+        pdf.divider()
+        pdf.h2(MAP_CHAT_PDF.SECTION.RESULTS_DETAIL)
 
-    elif total > 1 and feature_rows:
-        pdf.h3(MAP_CHAT_PDF.SECTION.PROJECT_LIST)
-        items: list[str] = []
-        for row in feature_rows[:20]:
-            name = str(row.get("Name") or row.get("project_id") or "Unnamed")
-            ptype = row.get("projecttype")
-            items.append(f"{name} ({ptype})" if ptype else name)
-        if total > 20:
-            items.append(f"... and {total - 20} more")
-        pdf.bullet_list(items)
+        pdf.body(f"Found {total} {label}")
+        if total > 0 and len(feature_rows) < total:
+            pdf.caption(f"Showing {len(feature_rows)} of {total}; the map includes all {total}.")
+
+        filter_parts: list[str] = []
+        if filters.get("category") and filters["category"] != "projects":
+            filter_parts.append(f"Category: {filters['category']}")
+        if filters.get("jurisdiction"):
+            filter_parts.append(f"In: {filters['jurisdiction']}")
+        if filters.get("boundary"):
+            filter_parts.append(f"Boundary: {filters['boundary']}")
+        if filters.get("status"):
+            filter_parts.append(f"Status: {filters['status']}")
+        if filter_parts:
+            pdf.caption(" · ".join(filter_parts))
+
+        ne = geo_summary.get("narrative_enrichment")
+        if ne and str(ne).strip():
+            pdf.h3(MAP_CHAT_PDF.SECTION.RICH_CONTEXT)
+            pdf.body(_strip_md(str(ne).strip()))
+
+        if total == 1 and feature_rows:
+            pdf.h3(MAP_CHAT_PDF.SECTION.RECORD_DETAIL)
+            row = feature_rows[0]
+            dr = {k: _format_cell(k, v) for k, v in row.items() if k not in _SKIP}
+            priority = (
+                "Name",
+                "projecttype",
+                "jurisdiction",
+                "watershed",
+                "subwatershed",
+                "project_id",
+                "SOILCODE",
+                "SOIL_CODE",
+                "MUKEY",
+                "musym",
+                "MUSYM",
+                "MAPUNIT_NAME",
+                "Mapunit_Name",
+            )
+            for key in priority:
+                if dr.get(key) is not None:
+                    pdf.body(f"{key.replace('_', ' ').title()}: {dr[key]}")
+            for k, v in dr.items():
+                if k not in priority and v is not None:
+                    pdf.caption(f"{k}: {v}")
+
+        elif total > 1 and feature_rows:
+            pdf.h3(str(label).strip().title())
+            items: list[str] = []
+            for row in feature_rows[:20]:
+                disp = geo_feature_row_display_label(row)
+                if disp == "\u2014":
+                    rid = geo_feature_row_display_id(row)
+                    disp = str(rid) if rid != "\u2014" else "Unnamed"
+                ptype = row.get("projecttype")
+                items.append(f"{disp} ({ptype})" if ptype else disp)
+            if total > 20:
+                items.append(f"... and {total - 20} more")
+            pdf.bullet_list(items)
 
     had_landscape_table = False
     if display_rows and total > 0:
@@ -1709,10 +1735,15 @@ def _build_legacy_pdf(
             supplemental_attr_rows=sup,
         )
 
-    if isinstance(schema_snapshot, dict):
+    _suppress_appendix = use_individual_hero or (
+        geo_fmt
+        and isinstance(geo_summary, dict)
+        and geo_summary.get(GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY) is True
+    )
+    if isinstance(schema_snapshot, dict) and not _suppress_appendix:
         _write_schema(pdf, schema_snapshot)
 
-    if geo_fmt and isinstance(geo_summary, dict):
+    if geo_fmt and isinstance(geo_summary, dict) and not _suppress_appendix:
         _write_geo_summary_legacy(pdf, geo_summary)
 
     return bytes(pdf.output())
@@ -1728,12 +1759,44 @@ def build_map_chat_pdf_bytes(
 ) -> bytes:
     geo_fmt = data_source == "geo_lake_county"
     rows = geo_summary.get("feature_rows") if isinstance(geo_summary, dict) else None
-    if geo_fmt and isinstance(geo_summary, dict) and isinstance(rows, list) and len(rows) > 0:
+    _single_project_lookup = (
+        isinstance(geo_summary, dict)
+        and geo_summary.get(GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY) is True
+    )
+    if (
+        geo_fmt
+        and isinstance(geo_summary, dict)
+        and isinstance(rows, list)
+        and len(rows) > 0
+        and not _single_project_lookup
+    ):
         return _build_executive_geo_pdf(messages, geo_summary, schema_snapshot)
     return _build_legacy_pdf(
         messages,
         geo_summary,
         schema_snapshot,
         data_source,
+        supplemental_project_attributes=supplemental_project_attributes,
+    )
+
+
+def build_single_response_pdf_bytes(
+    user_content: str,
+    assistant_content: str,
+    *,
+    geo_summary: dict | None = None,
+    schema_snapshot: dict | None = None,
+    data_source: str | None = None,
+    supplemental_project_attributes: list[tuple[str, str]] | None = None,
+) -> bytes:
+    pair: list[dict[str, str]] = []
+    if user_content and user_content.strip():
+        pair.append({"role": "user", "content": user_content})
+    pair.append({"role": "assistant", "content": assistant_content})
+    return build_map_chat_pdf_bytes(
+        pair,
+        geo_summary=geo_summary,
+        schema_snapshot=schema_snapshot,
+        data_source=data_source,
         supplemental_project_attributes=supplemental_project_attributes,
     )

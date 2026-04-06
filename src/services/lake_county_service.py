@@ -587,6 +587,20 @@ async def _fetch_district_boundary_esri(
     return None
 
 
+def _drainage_token_matches_identifier_word(word: str, name_code_text: str) -> bool:
+    w = (word or "").lower()
+    h = (name_code_text or "").lower()
+    if not w:
+        return True
+    if w in h:
+        return True
+    if w == "no" and "number" in h:
+        return True
+    if w == "number" and "no" in h:
+        return True
+    return False
+
+
 async def _fetch_drainage_all_and_filter_by_name(identifier: str) -> dict | None:
     """Fetch all drainage districts (where=1=1) and filter in Python by identifier. Use when server-side WHERE returns 0."""
     query_url = f"{LC_DRAINAGE_DISTRICTS_URL}/query"
@@ -618,14 +632,14 @@ async def _fetch_drainage_all_and_filter_by_name(identifier: str) -> dict | None
         name = (props.get("NAME") or "").lower()
         code = (props.get("CODE") or "").lower()
         text = f"{name} {code}"
-        if all(w in text for w in words):
+        if all(_drainage_token_matches_identifier_word(w, text) for w in words):
             matched.append(f)
     if not matched:
-        # Fallback: first feature whose NAME or CODE contains the first word
         first_word = words[0]
         for f in features:
             props = f.get("properties") or {}
-            if first_word in ((props.get("NAME") or "") + (props.get("CODE") or "")).lower():
+            hay = ((props.get("NAME") or "") + " " + (props.get("CODE") or "")).lower()
+            if _drainage_token_matches_identifier_word(first_word, hay):
                 matched.append(f)
                 break
     if not matched:
@@ -658,11 +672,18 @@ async def fetch_drainage_district_boundary(identifier: str) -> dict | None:
                     where_used = where_code
                     break
     if (not data or not data.get("features")) and identifier:
-        # Last resort: relaxed NAME e.g. "Union No 1" -> UPPER(NAME) LIKE '%Union%' AND UPPER(NAME) LIKE '%1%'
         words = re.findall(r"[A-Za-z]+|\d+", str(identifier))
         if len(words) >= 2:
-            safe_words = [str(w).replace("'", "''") for w in words[:4]]
-            conditions = [f"UPPER(NAME) LIKE UPPER('%{w}%')" for w in safe_words]
+            conditions: list[str] = []
+            for w in words[:4]:
+                sw = str(w).replace("'", "''")
+                uw = sw.upper()
+                if uw == "NO":
+                    conditions.append(
+                        "(UPPER(NAME) LIKE UPPER('%NO%') OR UPPER(NAME) LIKE UPPER('%NUMBER%'))"
+                    )
+                else:
+                    conditions.append(f"UPPER(NAME) LIKE UPPER('%{sw}%')")
             where_relaxed = " AND ".join(conditions)
             data = await _fetch_district_boundary_by_where(
                 LC_DRAINAGE_DISTRICTS_URL, where_relaxed, "NAME,CODE"

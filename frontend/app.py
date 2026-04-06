@@ -1,3 +1,5 @@
+import copy
+import hashlib
 import json
 import os
 import re
@@ -9,6 +11,10 @@ from datetime import datetime, timezone
 import streamlit as st
 import streamlit.components.v1 as components
 from custom_renderer_registry import get_primary_action_types
+from geo_feature_display import (
+    geo_feature_row_display_id,
+    geo_feature_row_display_label,
+)
 from geo_map_project_table import (
     prepend_focus_zoom_if_any,
     render_geo_map_bottom_table,
@@ -22,12 +28,13 @@ from main_header import render_main_header
 from map_chat_pdf_export import (
     _split_project_attributes_from_text,
     _strip_md,
-    build_map_chat_pdf_bytes,
+    build_single_response_pdf_bytes,
 )
 from streamlit_folium import st_folium
 from utils import (
     API_BASE_URL,
     _fetch_lake_county_boundary_cached,
+    _render_geo_schema_intro,
     render_charts,
     render_dataset_map,
     render_stream,
@@ -64,6 +71,7 @@ from constants import (
     GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT,
     GEO_MAP_STREAMLIT_KEY_IFRAME_HOST,
     GEO_NARRATIVE_SUGGESTIONS_DELIM,
+    GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY,
     MAP_CHAT_PDF,
     SESSION_KEY_DATA_SOURCE,
     SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT,
@@ -75,6 +83,7 @@ from constants import (
     SESSION_KEY_MAP_ACTIONS,
     SESSION_KEY_MAP_AOI_DATA,
     SESSION_KEY_MAP_CHARTS_DATA,
+    SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS,
     SESSION_KEY_MAP_CHAT_MESSAGES,
     SESSION_KEY_MAP_CHAT_PENDING_INPUT,
     SESSION_KEY_MAP_CHAT_SESSION_ID,
@@ -98,7 +107,182 @@ from src.shared.lake_county_constants import (
 
 SHOW_RESPONSE_TIMER = True
 
+_STREAM_GEO_SNAPSHOT_UNSET = object()
+
 LAKE_COUNTY_DEFAULT_LAYER = LAKE_COUNTY_LAYERS[1]
+
+
+def _find_preceding_user_content(messages: list, idx: int) -> str:
+    for j in range(idx - 1, -1, -1):
+        m = messages[j]
+        if isinstance(m, dict) and m.get("role") == "user":
+            return str(m.get("content") or "").strip()
+    return ""
+
+
+def _normalize_supplemental_rows(
+    raw: list | tuple | None,
+) -> list[tuple[str, str]] | None:
+    if not raw:
+        return None
+    out: list[tuple[str, str]] = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append((str(item[0]), str(item[1])))
+    return out if out else None
+
+
+def _geo_summary_warrants_structured_ui(gs: dict | None) -> bool:
+    if not isinstance(gs, dict):
+        return False
+    charts_data = gs.get("charts_data")
+    if isinstance(charts_data, list) and len(charts_data) > 0:
+        return True
+    ne = gs.get("narrative_enrichment")
+    if ne is not None and str(ne).strip():
+        return True
+    total_raw = gs.get("total", 0)
+    try:
+        total_n = int(total_raw)
+    except (TypeError, ValueError):
+        total_n = 0
+    feature_rows = gs.get("feature_rows") or []
+    if total_n > 0:
+        return True
+    if isinstance(feature_rows, list) and len(feature_rows) > 0:
+        return True
+    return False
+
+
+def _geo_summary_omit_chat_results_detail(gs: dict | None) -> bool:
+    return (
+        isinstance(gs, dict)
+        and gs.get(GEO_RESULT_SUMMARY_UI_OMIT_RESULTS_DETAIL_KEY) is True
+    )
+
+
+def _capture_export_snapshot() -> dict:
+    gs = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+    sch = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
+    sup = _supplemental_project_attr_rows()
+    return {
+        "geo_summary": copy.deepcopy(gs) if isinstance(gs, dict) else None,
+        "schema_snapshot": copy.deepcopy(sch) if isinstance(sch, dict) else None,
+        "supplemental_project_attributes": list(sup) if sup else None,
+    }
+
+
+def _export_snapshot_at(export_by_idx: dict, idx: int) -> dict | None:
+    v = export_by_idx.get(idx)
+    if isinstance(v, dict):
+        return v
+    v = export_by_idx.get(str(idx))
+    return v if isinstance(v, dict) else None
+
+
+def _export_snapshot_aligned_with_stream_geo(
+    stream_geo_explicit: object,
+) -> dict:
+    snap = _capture_export_snapshot()
+    if stream_geo_explicit is _STREAM_GEO_SNAPSHOT_UNSET:
+        snap["geo_summary"] = None
+        snap["supplemental_project_attributes"] = None
+    elif isinstance(stream_geo_explicit, dict):
+        snap["geo_summary"] = copy.deepcopy(stream_geo_explicit)
+    else:
+        snap["geo_summary"] = None
+        snap["supplemental_project_attributes"] = None
+    return snap
+
+
+def _store_export_snapshot_for_message_index(
+    message_index: int,
+    *,
+    stream_geo_explicit: object = _STREAM_GEO_SNAPSHOT_UNSET,
+) -> None:
+    if SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS not in st.session_state:
+        st.session_state[SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS] = {}
+    snap = _export_snapshot_aligned_with_stream_geo(stream_geo_explicit)
+    _nk = int(message_index)
+    st.session_state[SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS][_nk] = snap
+
+
+def _render_geo_schema_from_export_snapshot(
+    export_snapshot: dict | None,
+    message_index: int,
+    *,
+    is_streaming: bool = False,
+) -> None:
+    if not isinstance(export_snapshot, dict):
+        return
+    sch = export_snapshot.get("schema_snapshot")
+    if not isinstance(sch, dict):
+        return
+    intro = (sch.get("intro") or "").strip()
+    fields = (sch.get("fields") or "").strip()
+    if not intro and not fields:
+        return
+    if is_streaming:
+        return
+    st.markdown("### Schema discovery")
+    if intro and fields:
+        _render_geo_schema_intro(intro)
+        with st.expander("Fields", expanded=False):
+            st.markdown(fields)
+    elif fields:
+        st.markdown(fields)
+    elif intro:
+        _render_geo_schema_intro(intro)
+
+
+def _render_response_pdf_button(
+    assistant_content: str,
+    btn_key: str,
+    user_content: str = "",
+    export_snapshot: dict | None = None,
+    *,
+    message_index: int | None = None,
+) -> None:
+    if not assistant_content or not assistant_content.strip():
+        return
+    _ds = st.session_state.get(SESSION_KEY_DATA_SOURCE)
+    _gs = None
+    _sch = None
+    _sup = None
+    if isinstance(export_snapshot, dict):
+        _gs = export_snapshot.get("geo_summary")
+        _sch = export_snapshot.get("schema_snapshot")
+        _sup = _normalize_supplemental_rows(
+            export_snapshot.get("supplemental_project_attributes"),
+        )
+    pdf_bytes = build_single_response_pdf_bytes(
+        user_content,
+        assistant_content,
+        geo_summary=_gs if isinstance(_gs, dict) else None,
+        schema_snapshot=_sch if isinstance(_sch, dict) else None,
+        data_source=_ds if isinstance(_ds, str) else None,
+        supplemental_project_attributes=_sup,
+    )
+    _sig = hashlib.md5(f"{user_content}\n{assistant_content}".encode()).hexdigest()[:14]
+    _pdf_d = hashlib.sha256(pdf_bytes).hexdigest()[:16]
+    _slot = f"idx{message_index}" if message_index is not None else "stream"
+    _dl_key = (
+        f"map_chat_pdf_{_slot}_{_sig}"
+        if message_index is not None
+        else f"map_chat_pdf_{_slot}_{btn_key}_{_sig}"
+    )
+    _aui, _aai = len(user_content), len(assistant_content)
+    _grows = len(_gs.get("feature_rows") or []) if isinstance(_gs, dict) else 0
+
+    st.download_button(
+        label="",
+        data=pdf_bytes,
+        file_name=f"{MAP_CHAT_PDF.EXPORT.FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
+        mime="application/pdf",
+        key=_dl_key,
+        help="Export as PDF",
+        icon=":material/picture_as_pdf:",
+    )
 
 
 def _format_geo_suggestions_for_display(text: str) -> str:
@@ -183,43 +367,47 @@ def _render_geo_assistant_narrative_blocks(
         st.markdown("### Summary")
         st.markdown(summary_body)
 
-    if show_structured and geo_summary and isinstance(geo_summary, dict):
-        _render_geo_result_summary(geo_summary)
+    if show_structured:
+        if geo_summary and isinstance(geo_summary, dict):
+            _render_geo_result_summary(geo_summary)
     if suggestions_part:
         st.markdown("### Follow-up suggestions")
         st.markdown(_format_geo_suggestions_for_display(suggestions_part))
 
 
 def _render_geo_result_summary(geo_summary: dict) -> None:
-    st.markdown("### Results detail")
+    if not _geo_summary_warrants_structured_ui(geo_summary):
+        return
     total = geo_summary.get("total", 0)
     label = geo_summary.get("label_plural", "results")
     filters = geo_summary.get("filters", {})
     charts_data = geo_summary.get("charts_data", [])
     feature_rows = geo_summary.get("feature_rows", [])
+    _omit_detail = _geo_summary_omit_chat_results_detail(geo_summary)
+    if not _omit_detail:
+        st.markdown(f"### {MAP_CHAT_PDF.SECTION.RESULTS_DETAIL}")
+        st.markdown(f"**Found {total} {label}**")
+        if total > 0 and len(feature_rows) < total:
+            st.caption(
+                f"Showing {len(feature_rows)} of {total} in this panel; the map includes all {total}."
+            )
 
-    st.markdown(f"**Found {total} {label}**")
-    if total > 0 and len(feature_rows) < total:
-        st.caption(
-            f"Showing {len(feature_rows)} of {total} in this panel; the map includes all {total}."
-        )
+        filter_parts = []
+        if filters.get("category") and filters["category"] != "projects":
+            filter_parts.append(f"category: {filters['category']}")
+        if filters.get("jurisdiction"):
+            filter_parts.append(f"in {filters['jurisdiction']}")
+        if filters.get("boundary"):
+            filter_parts.append(f"in {filters['boundary']}")
+        if filters.get("status"):
+            filter_parts.append(f"status: {filters['status']}")
+        if filter_parts:
+            st.caption(" · ".join(filter_parts))
 
-    filter_parts = []
-    if filters.get("category") and filters["category"] != "projects":
-        filter_parts.append(f"category: {filters['category']}")
-    if filters.get("jurisdiction"):
-        filter_parts.append(f"in {filters['jurisdiction']}")
-    if filters.get("boundary"):
-        filter_parts.append(f"in {filters['boundary']}")
-    if filters.get("status"):
-        filter_parts.append(f"status: {filters['status']}")
-    if filter_parts:
-        st.caption(" · ".join(filter_parts))
-
-    ne = geo_summary.get("narrative_enrichment")
-    if ne and str(ne).strip():
-        st.markdown("**Rich context**")
-        st.markdown(str(ne).strip())
+        ne = geo_summary.get("narrative_enrichment")
+        if ne and str(ne).strip():
+            st.markdown("**Rich context**")
+            st.markdown(str(ne).strip())
 
     _skip = {"OBJECTID", "GlobalID", "Shape__Area", "Shape__Length"}
     _date_columns = {"StartYear", "EndYear"}
@@ -234,35 +422,53 @@ def _render_geo_result_summary(geo_summary: dict) -> None:
         except (ValueError, TypeError, OSError):
             return val
 
-    if total == 1 and feature_rows:
-        st.markdown("**Record detail**")
-        row = feature_rows[0]
-        display_row = {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
-        priority_keys = ("Name", "projecttype", "jurisdiction", "watershed", "subwatershed", "project_id")
-        for key in priority_keys:
-            if key in display_row and display_row[key] is not None:
-                label_key = key.replace("_", " ").title()
-                st.markdown(f"**{label_key}:** {display_row[key]}")
-        remaining = {k: v for k, v in display_row.items() if k not in priority_keys and v is not None}
-        if remaining:
-            for k, v in remaining.items():
-                st.caption(f"{k}: {v}")
-    elif total > 1 and feature_rows:
-        st.markdown("**Project list**")
-        list_lines: list[str] = []
-        for row in feature_rows[:20]:
-            name = row.get("Name") or row.get("project_id") or "Unnamed"
-            ptype = row.get("projecttype")
-            if ptype:
-                list_lines.append(f"- **{name}** ({ptype})")
-            else:
-                list_lines.append(f"- **{name}**")
-        if total > 20:
-            list_lines.append(f"- *… and {total - 20} more*")
-        st.markdown("\n".join(list_lines))
+    if not _omit_detail:
+        if total == 1 and feature_rows:
+            st.markdown("**Record detail**")
+            row = feature_rows[0]
+            display_row = {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
+            priority_keys = (
+                "Name",
+                "projecttype",
+                "jurisdiction",
+                "watershed",
+                "subwatershed",
+                "project_id",
+                "SOILCODE",
+                "SOIL_CODE",
+                "MUKEY",
+                "musym",
+                "MUSYM",
+                "MAPUNIT_NAME",
+                "Mapunit_Name",
+            )
+            for key in priority_keys:
+                if key in display_row and display_row[key] is not None:
+                    label_key = key.replace("_", " ").title()
+                    st.markdown(f"**{label_key}:** {display_row[key]}")
+            remaining = {k: v for k, v in display_row.items() if k not in priority_keys and v is not None}
+            if remaining:
+                for k, v in remaining.items():
+                    st.caption(f"{k}: {v}")
+        elif total > 1 and feature_rows:
+            st.markdown(f"**{label}**")
+            list_lines: list[str] = []
+            for row in feature_rows[:20]:
+                disp = geo_feature_row_display_label(row)
+                if disp == "\u2014":
+                    rid = geo_feature_row_display_id(row)
+                    disp = str(rid) if rid != "\u2014" else "Unnamed"
+                ptype = row.get("projecttype")
+                if ptype:
+                    list_lines.append(f"- **{disp}** ({ptype})")
+                else:
+                    list_lines.append(f"- **{disp}**")
+            if total > 20:
+                list_lines.append(f"- *… and {total - 20} more*")
+            st.markdown("\n".join(list_lines))
 
     if feature_rows and total > 0:
-        st.markdown("### Full results table")
+        st.markdown(f"### {MAP_CHAT_PDF.SECTION.FULL_TABLE}")
         with st.expander(f"Open table ({total} {label})", expanded=(total == 1 or total <= 20)):
             display_rows = [
                 {k: _format_cell(k, v) for k, v in row.items() if k not in _skip}
@@ -277,6 +483,8 @@ if SESSION_KEY_MAP_CHAT_SESSION_ID not in st.session_state:
     st.session_state[SESSION_KEY_MAP_CHAT_SESSION_ID] = str(uuid.uuid4())
 if SESSION_KEY_MAP_CHAT_MESSAGES not in st.session_state:
     st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES] = []
+if SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS not in st.session_state:
+    st.session_state[SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS] = {}
 if SESSION_KEY_DATA_SOURCE not in st.session_state:
     st.session_state[SESSION_KEY_DATA_SOURCE] = "geo_lake_county"
 if SESSION_KEY_MAP_AOI_DATA not in st.session_state:
@@ -534,17 +742,6 @@ _APP_CHAT_LEFT_STRETCH_CSS = """
         padding: 0 !important;
         align-self: stretch !important;
     }
-    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
-    [class*="geo-chat-map-split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"],
-    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
-    [class*="geo_chat_map_split"] [class*="st-key-geo_main_col_chat"][data-testid="stVerticalBlock"] > div:only-child > [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
-        flex: 0 0 auto !important;
-        flex-shrink: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        align-self: stretch !important;
-    }
     [class*="st-key-geo_chat_header"][data-testid="stVerticalBlock"],
     [class*="st-key-geo_chat_header"] [data-testid="stVerticalBlock"] {
         gap: 0.3rem !important;
@@ -595,14 +792,6 @@ _APP_CHAT_LEFT_STRETCH_CSS = """
         flex-shrink: 0 !important;
         min-height: 0 !important;
         margin: 0 0 __GEO_CHAT_INPUT_MARGIN_BOTTOM_PX__px 0 !important;
-        padding: 0 !important;
-    }
-    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map_chat_export_pdf"],
-    [class*="st-key-geo_main_col_chat"] [data-testid="stElementContainer"][class*="st-key-map-chat-export-pdf"] {
-        flex: 0 0 auto !important;
-        flex-shrink: 0 !important;
-        min-height: 0 !important;
-        margin: 0 !important;
         padding: 0 !important;
     }
 """.replace(
@@ -1134,6 +1323,44 @@ st.markdown(
         height: auto !important;
         max-height: none !important;
     }}
+    [data-testid="stChatMessage"] [data-testid="stElementContainer"][class*="st-key-resp_pdf"] {{
+        width: auto !important;
+        max-width: fit-content !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        flex: 0 0 auto !important;
+        min-height: 0 !important;
+    }}
+    [data-testid="stChatMessage"] [class*="st-key-resp_pdf"] [data-testid="stBaseButton-secondary"] {{
+        width: auto !important;
+        display: inline-flex !important;
+    }}
+    [data-testid="stChatMessage"] [class*="st-key-resp_pdf"] [data-testid="stBaseButton-secondary"] > button {{
+        width: 36px !important;
+        min-width: 36px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+        padding: 6px !important;
+        border-radius: 50% !important;
+        border: 1px solid rgba(49, 51, 63, 0.15) !important;
+        background: transparent !important;
+        color: rgba(49, 51, 63, 0.65) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        transition: background 0.15s ease, border-color 0.15s ease !important;
+        gap: 0 !important;
+    }}
+    [data-testid="stChatMessage"] [class*="st-key-resp_pdf"] [data-testid="stBaseButton-secondary"] > button:hover {{
+        background: rgba(49, 51, 63, 0.08) !important;
+        border-color: rgba(49, 51, 63, 0.3) !important;
+        color: rgba(49, 51, 63, 0.9) !important;
+    }}
+    [data-testid="stChatMessage"] [class*="st-key-resp_pdf"] [data-testid="stBaseButton-secondary"] > button p {{
+        display: none !important;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -1167,10 +1394,12 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                 ds_value = DATA_SOURCES[data_source]
                 if ds_value != st.session_state[SESSION_KEY_DATA_SOURCE]:
                     st.session_state[SESSION_KEY_DATA_SOURCE] = ds_value
+                    st.session_state[SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS] = {}
                     if ds_value == "lake_county":
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = LAKE_COUNTY_DEFAULT_LAYER
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
                         st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
+                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
                     elif ds_value == "geo_lake_county":
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = GEO_LAKE_COUNTY_DEFAULT_LAYER
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = LAKE_COUNTY_AOI
@@ -1182,6 +1411,9 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                         st.session_state[SESSION_KEY_MAP_ACTIONS] = []
                         st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
+                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                        st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
+                        st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
                     else:
                         st.session_state[SESSION_KEY_MAP_DATASET_DATA] = FOREST_CARBON_REMOVALS_DATASET
                         st.session_state[SESSION_KEY_MAP_AOI_DATA] = None
@@ -1192,6 +1424,7 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                         st.session_state[SESSION_KEY_MAP_JURISDICTION_BOUNDARY] = None
                         st.session_state[SESSION_KEY_MAP_COUNTY_BOARD_DISTRICT_BOUNDARY] = None
                         st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
+                        st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
 
                 if st.session_state[SESSION_KEY_DATA_SOURCE] == "lake_county":
                     st.caption("Search projects by name or filter by status, jurisdiction, or project type.")
@@ -1199,6 +1432,16 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
             pending_input = st.session_state.pop(SESSION_KEY_MAP_CHAT_PENDING_INPUT, None)
             if pending_input:
                 st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append({"role": "user", "content": pending_input})
+                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                    _prev_ma = st.session_state.get(SESSION_KEY_MAP_ACTIONS) or []
+                    st.session_state[SESSION_KEY_MAP_ACTIONS] = [
+                        a for a in _prev_ma if a.get("type") == "setBasemap"
+                    ]
+                    st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                    st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
+                    st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
+                    st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
 
             messages = st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]
             _is_geo_lc = st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county"
@@ -1210,18 +1453,80 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
             ):
                 rest_msgs = messages[:-1] if len(messages) > 1 else []
                 last_msg = messages[-1] if messages else None
-                for message in rest_msgs:
-                    with st.chat_message(message["role"]):
-                        st.markdown(message.get("content") or "")
+                _pdf_counter = 0
+                _export_by_idx = st.session_state.get(SESSION_KEY_MAP_CHAT_EXPORT_SNAPSHOTS) or {}
 
-                if last_msg:
-                    with st.chat_message(last_msg["role"]):
-                        if last_msg["role"] == "assistant" and _is_geo_lc:
-                            raw = (last_msg.get("content") or "").strip()
-                            geo_snap = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                for _mi, message in enumerate(rest_msgs):
+                    with st.chat_message(message["role"]):
+                        _exp_i = _export_snapshot_at(_export_by_idx, _mi)
+                        if message.get("role") == "assistant" and _is_geo_lc:
+                            _render_geo_schema_from_export_snapshot(_exp_i, _mi, is_streaming=bool(pending_input))
+                            raw = (message.get("content") or "").strip()
+                            geo_i = _exp_i.get("geo_summary") if isinstance(_exp_i, dict) else None
+                            sup_i = _normalize_supplemental_rows(
+                                _exp_i.get("supplemental_project_attributes")
+                                if isinstance(_exp_i, dict)
+                                else None,
+                            )
                             if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
                                 st.caption(raw)
-                                if geo_snap and isinstance(geo_snap, dict):
+                                if _geo_summary_warrants_structured_ui(
+                                    geo_i if isinstance(geo_i, dict) else None,
+                                ) and isinstance(geo_i, dict):
+                                    _render_geo_result_summary(geo_i)
+                            elif raw:
+                                sp, sug = _split_geo_narrative_for_display(raw)
+                                _w = _geo_summary_warrants_structured_ui(
+                                    geo_i if isinstance(geo_i, dict) else None,
+                                )
+                                _render_geo_assistant_narrative_blocks(
+                                    sp,
+                                    sug,
+                                    geo_i if isinstance(geo_i, dict) else None,
+                                    show_structured=_w,
+                                    supplemental_attr_rows=sup_i,
+                                )
+                            else:
+                                st.markdown(message.get("content") or "")
+                        else:
+                            st.markdown(message.get("content") or "")
+                        if message.get("role") == "assistant":
+                            _usr = _find_preceding_user_content(messages, _mi)
+                            _render_response_pdf_button(
+                                message.get("content") or "",
+                                f"resp_pdf_{_pdf_counter}",
+                                user_content=_usr,
+                                export_snapshot=_exp_i if isinstance(_exp_i, dict) else None,
+                                message_index=_mi,
+                            )
+                            _pdf_counter += 1
+
+                if last_msg:
+                    _last_idx = len(messages) - 1
+                    with st.chat_message(last_msg["role"]):
+                        if last_msg["role"] == "assistant" and _is_geo_lc:
+                            _exp_last = _export_snapshot_at(_export_by_idx, _last_idx)
+                            _render_geo_schema_from_export_snapshot(_exp_last, _last_idx, is_streaming=bool(pending_input))
+                            raw = (last_msg.get("content") or "").strip()
+                            geo_snap = (
+                                _exp_last.get("geo_summary")
+                                if isinstance(_exp_last, dict)
+                                else None
+                            )
+                            if geo_snap is None and _exp_last is None:
+                                geo_live = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                                geo_snap = geo_live if isinstance(geo_live, dict) else None
+                            sup_last = _normalize_supplemental_rows(
+                                _exp_last.get("supplemental_project_attributes")
+                                if isinstance(_exp_last, dict)
+                                else None,
+                            )
+                            if sup_last is None and not isinstance(_exp_last, dict):
+                                sup_last = _supplemental_project_attr_rows()
+                            _w_last = _geo_summary_warrants_structured_ui(geo_snap)
+                            if raw == GEO_CHAT_DEFERRED_ASSISTANT_PLACEHOLDER:
+                                st.caption(raw)
+                                if _w_last and isinstance(geo_snap, dict):
                                     _render_geo_result_summary(geo_snap)
                             else:
                                 sp, sug = _split_geo_narrative_for_display(raw)
@@ -1229,9 +1534,34 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                     sp,
                                     sug,
                                     geo_snap,
-                                    show_structured=True,
-                                    supplemental_attr_rows=_supplemental_project_attr_rows(),
+                                    show_structured=_w_last,
+                                    supplemental_attr_rows=sup_last,
                                 )
+                            _usr = _find_preceding_user_content(messages, _last_idx)
+                            _snap_pdf = (
+                                _exp_last
+                                if isinstance(_exp_last, dict)
+                                else _capture_export_snapshot()
+                            )
+                            _render_response_pdf_button(
+                                last_msg.get("content") or "",
+                                f"resp_pdf_{_pdf_counter}",
+                                user_content=_usr,
+                                export_snapshot=_snap_pdf,
+                                message_index=_last_idx,
+                            )
+                            _pdf_counter += 1
+                        elif last_msg["role"] == "assistant":
+                            st.markdown(last_msg.get("content") or "")
+                            _usr = _find_preceding_user_content(messages, _last_idx)
+                            _render_response_pdf_button(
+                                last_msg.get("content") or "",
+                                f"resp_pdf_{_pdf_counter}",
+                                user_content=_usr,
+                                export_snapshot=None,
+                                message_index=_last_idx,
+                            )
+                            _pdf_counter += 1
                         else:
                             st.markdown(last_msg.get("content") or "")
 
@@ -1282,11 +1612,21 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                     ui_context = {k: v for k, v in ui_context.items() if v is not None}
 
                     geo_ai_buffer: list[str] = []
+                    stream_geo_explicit_for_turn: list[object] = [_STREAM_GEO_SNAPSHOT_UNSET]
+                    last_geo_project_geometry_text: list[str | None] = [None]
                     with st.chat_message("assistant"):
                         if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                             st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
                             st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = None
                             st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
+                            st.session_state[SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT] = None
+                            last_geo_project_geometry_text[0] = None
+                            _prev_ma_stream = st.session_state.get(SESSION_KEY_MAP_ACTIONS) or []
+                            _bid_stream = active_basemap_id_from_map_actions(_prev_ma_stream)
+                            st.session_state[SESSION_KEY_MAP_ACTIONS] = [
+                                {"type": "setBasemap", "basemap_id": _bid_stream}
+                            ]
                         st.session_state[SESSION_KEY_GEO_STREAM_SCHEMA_SHOWN] = False
                         timer_placeholder = st.empty()
                         progress_placeholder = st.empty()
@@ -1308,11 +1648,26 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                 if stream.get("node") == "ui_state":
                                     update = json.loads(stream["update"])
                                     if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
-                                        gs = update.get("geo_result_summary")
-                                        if gs is not None:
-                                            st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
-                                            if isinstance(gs, dict) and gs.get("charts_data"):
-                                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs["charts_data"]
+                                        if "geo_result_summary" in update:
+                                            stream_geo_explicit_for_turn[0] = update[
+                                                "geo_result_summary"
+                                            ]
+                                            gs = update["geo_result_summary"]
+                                            if gs is None:
+                                                st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                                                st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                                st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
+                                            else:
+                                                st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
+                                                if isinstance(gs, dict) and gs.get("charts_data"):
+                                                    st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = gs[
+                                                        "charts_data"
+                                                    ]
+                                                _lgeom_us = last_geo_project_geometry_text[0]
+                                                if isinstance(_lgeom_us, str) and _lgeom_us.strip():
+                                                    st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = (
+                                                        _lgeom_us
+                                                    )
                                         ma = update.get("map_actions")
                                         if ma:
                                             prev_ma = st.session_state.get(SESSION_KEY_MAP_ACTIONS)
@@ -1329,6 +1684,14 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                     text=f"Generating... ({stream_count} updates)",
                                 )
                                 update = json.loads(stream["update"])
+                                if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                    for _gmsg in update.get("messages") or []:
+                                        if (
+                                            _gmsg.get("kwargs", {}).get("type") == "tool"
+                                            and _gmsg.get("kwargs", {}).get("content")
+                                            and _gmsg.get("kwargs", {}).get("name") == "geo_get_project_geometry"
+                                        ):
+                                            last_geo_project_geometry_text[0] = _gmsg["kwargs"]["content"]
                                 if "aoi" in update:
                                     st.session_state[SESSION_KEY_MAP_AOI_DATA] = update["aoi"]
                                 if "dataset" in update:
@@ -1350,11 +1713,21 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                             incoming or []
                                         )
                                 if "geo_result_summary" in update:
+                                    stream_geo_explicit_for_turn[0] = update["geo_result_summary"]
                                     gs = update["geo_result_summary"]
                                     if gs is None:
                                         st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = None
+                                        if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                            st.session_state[SESSION_KEY_MAP_CHARTS_DATA] = None
+                                            st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = None
                                     else:
                                         st.session_state[SESSION_KEY_GEO_RESULT_SUMMARY] = gs
+                                        if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
+                                            _lgeom_gr = last_geo_project_geometry_text[0]
+                                            if isinstance(_lgeom_gr, str) and _lgeom_gr.strip():
+                                                st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = (
+                                                    _lgeom_gr
+                                                )
                                         if (
                                             isinstance(gs, dict)
                                             and gs.get("charts_data")
@@ -1409,14 +1782,6 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                     if msg.get("kwargs", {}).get("type") == "tool" and msg.get("kwargs", {}).get("content"):
                                         last_tool_content[0] = msg["kwargs"]["content"]
                                         last_tool_name[0] = msg["kwargs"].get("name")
-                                        if (
-                                            msg["kwargs"].get("name") == "geo_get_project_geometry"
-                                            and st.session_state.get(SESSION_KEY_DATA_SOURCE)
-                                            == "geo_lake_county"
-                                        ):
-                                            st.session_state[SESSION_KEY_GEO_LAST_PROJECT_TOOL_TEXT] = (
-                                                msg["kwargs"]["content"]
-                                            )
                                 elapsed = time.perf_counter() - start_time
                                 if SHOW_RESPONSE_TIMER:
                                     timer_placeholder.caption(f"Elapsed: {elapsed:.1f}s")
@@ -1463,50 +1828,65 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                                 st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES].append(
                                     {"role": "assistant", "content": assistant_body}
                                 )
+                                if (
+                                    st.session_state.get(SESSION_KEY_DATA_SOURCE)
+                                    == "geo_lake_county"
+                                ):
+                                    _ai_idx = (
+                                        len(st.session_state[SESSION_KEY_MAP_CHAT_MESSAGES]) - 1
+                                    )
+                                    _store_export_snapshot_for_message_index(
+                                        _ai_idx,
+                                        stream_geo_explicit=stream_geo_explicit_for_turn[0],
+                                    )
                         progress_placeholder.empty()
                         total_time = time.perf_counter() - start_time
                         if SHOW_RESPONSE_TIMER:
                             timer_placeholder.caption(f"Total response time: {total_time:.1f}s")
-                        geo_summary = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
+                        _ev_geo = stream_geo_explicit_for_turn[0]
+                        if _ev_geo is _STREAM_GEO_SNAPSHOT_UNSET:
+                            geo_summary = None
+                        elif isinstance(_ev_geo, dict):
+                            geo_summary = _ev_geo
+                        else:
+                            geo_summary = None
+                        _w_stream = _geo_summary_warrants_structured_ui(
+                            geo_summary if isinstance(geo_summary, dict) else None,
+                        )
                         if st.session_state.get(SESSION_KEY_DATA_SOURCE) == "geo_lake_county":
                             combined_live = "\n\n".join(geo_ai_buffer).strip()
                             if combined_live:
                                 sp, sug = _split_geo_narrative_for_display(combined_live)
+                                _gex_sup = stream_geo_explicit_for_turn[0]
+                                _stream_sup = (
+                                    _supplemental_project_attr_rows()
+                                    if (
+                                        _gex_sup is not _STREAM_GEO_SNAPSHOT_UNSET
+                                        and _gex_sup is not None
+                                    )
+                                    else None
+                                )
                                 _render_geo_assistant_narrative_blocks(
                                     sp,
                                     sug,
                                     geo_summary,
-                                    show_structured=True,
-                                    supplemental_attr_rows=_supplemental_project_attr_rows(),
+                                    show_structured=_w_stream,
+                                    supplemental_attr_rows=_stream_sup,
                                 )
-                            elif geo_summary and isinstance(geo_summary, dict):
+                            elif _w_stream and isinstance(geo_summary, dict):
                                 _render_geo_result_summary(geo_summary)
-                        elif geo_summary and isinstance(geo_summary, dict):
+                        elif _w_stream and isinstance(geo_summary, dict):
                             _render_geo_result_summary(geo_summary)
-
-            _export_msgs = st.session_state.get(SESSION_KEY_MAP_CHAT_MESSAGES, [])
-            if isinstance(_export_msgs, list) and any(
-                isinstance(m, dict) and m.get("role") in ("user", "assistant") for m in _export_msgs
-            ):
-                _gs = st.session_state.get(SESSION_KEY_GEO_RESULT_SUMMARY)
-                _sch = st.session_state.get(SESSION_KEY_GEO_SCHEMA_EXPORT_SNAPSHOT)
-                _ds_pdf = st.session_state.get(SESSION_KEY_DATA_SOURCE)
-                _pdf_sup = _supplemental_project_attr_rows()
-                _pdf_bytes = build_map_chat_pdf_bytes(
-                    _export_msgs,
-                    geo_summary=_gs if isinstance(_gs, dict) else None,
-                    schema_snapshot=_sch if isinstance(_sch, dict) else None,
-                    data_source=_ds_pdf if isinstance(_ds_pdf, str) else None,
-                    supplemental_project_attributes=_pdf_sup,
-                )
-                st.download_button(
-                    MAP_CHAT_PDF.EXPORT.LABEL,
-                    data=_pdf_bytes,
-                    file_name=f"{MAP_CHAT_PDF.EXPORT.FILENAME_PREFIX}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}UTC.pdf",
-                    mime="application/pdf",
-                    key="map_chat_export_pdf",
-                    use_container_width=True,
-                )
+                        _stream_body = "\n\n".join(geo_ai_buffer).strip()
+                        if _stream_body:
+                            _render_response_pdf_button(
+                                _stream_body,
+                                "resp_pdf_stream",
+                                user_content=pending_input if pending_input else "",
+                                export_snapshot=_export_snapshot_aligned_with_stream_geo(
+                                    stream_geo_explicit_for_turn[0]
+                                ),
+                            )
 
             if SESSION_KEY_MAP_CHAT_PENDING_INPUT not in st.session_state:
                 st.session_state[SESSION_KEY_MAP_CHAT_PENDING_INPUT] = None
@@ -1573,12 +1953,15 @@ with st.container(key=GEO_MAP_STREAMLIT_KEY_CHAT_MAP_SPLIT):
                             height=geo_map_height,
                         )
                         if geo_map:
+                            _actions_hash = hashlib.md5(
+                                json.dumps(augmented_actions, sort_keys=True, default=str).encode()
+                            ).hexdigest()[:12]
                             st_folium(
                                 geo_map,
                                 use_container_width=True,
                                 height=geo_map_height + 10,
                                 returned_objects=["last_clicked"],
-                                key="geo_lake_county_folium_map",
+                                key=f"geo_lc_map_{_actions_hash}",
                             )
                     else:
                         render_dataset_map(

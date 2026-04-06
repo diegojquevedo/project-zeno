@@ -2,6 +2,8 @@ import html
 
 import streamlit as st
 
+from geo_feature_display import geo_feature_row_display_id, geo_feature_row_display_label
+
 from constants import (
     GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT,
     GEO_MAP_TABLE_DIVIDER_DARK,
@@ -629,14 +631,7 @@ def prepend_focus_zoom_if_any(
 
 
 def _get_row_name(row: dict) -> str:
-    for nk in ("Name", "name", "PROJECT_NAME", "Project_Name", "Title", "title"):
-        nv = row.get(nk)
-        if nv is not None and str(nv).strip():
-            return str(nv)
-    pid = row.get("project_id")
-    if pid is not None:
-        return str(pid)
-    return "\u2014"
+    return geo_feature_row_display_label(row)
 
 
 def _cell_name_text(full_name: str) -> str:
@@ -692,11 +687,7 @@ def render_geo_map_bottom_table() -> None:
 
             with st.container(key="geo_tbl_rows", border=False):
                 for i, row in enumerate(rows):
-                    pid = row.get("project_id")
-                    raw_oid = row.get("OBJECTID")
-                    if raw_oid is None:
-                        raw_oid = row.get("objectid")
-                    display_id = pid if pid is not None else (raw_oid if raw_oid is not None else "\u2014")
+                    display_id = geo_feature_row_display_id(row)
                     name = _get_row_name(row)
                     has_geom = _geometry_for_feature_row(row, by_pid, by_oid) is not None
 
