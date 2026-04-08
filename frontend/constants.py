@@ -107,22 +107,77 @@ MAP_CHAT_INPUT_FOOTER_MIN_HEIGHT = "32px"
 MAP_CHAT_INPUT_FOOTER_PADDING = "4px 8px 4px 8px"
 MAP_CHAT_INPUT_FONT_SIZE = "1rem"
 MAP_CHAT_INPUT_LINE_HEIGHT = "1.5"
-MAP_CHAT_GEMINI_LIGHT_SURFACE = "#ffffff"
-MAP_CHAT_GEMINI_LIGHT_BORDER = "#dadce0"
-MAP_CHAT_GEMINI_LIGHT_SHADOW = (
-    "0 1px 2px rgba(60, 64, 67, 0.1), 0 4px 18px rgba(60, 64, 67, 0.08)"
+GEO_HTML_THEME_DARK_CLASS = "geo-theme-dark"
+MAP_CHAT_SHELL_BG_LIGHT = "#ffffff"
+MAP_CHAT_SHELL_BORDER_LIGHT = "#dadce0"
+MAP_CHAT_SHELL_SHADOW_LIGHT = (
+    "0 1px 2px rgba(60, 64, 67, 0.1), 0 1px 3px rgba(60, 64, 67, 0.08)"
 )
-MAP_CHAT_GEMINI_LIGHT_SEND_FILL = "#e8f0fe"
-MAP_CHAT_GEMINI_LIGHT_SEND_ICON = "#202124"
-MAP_CHAT_GEMINI_DARK_SURFACE = "#1e1f20"
-MAP_CHAT_GEMINI_DARK_BORDER = "rgba(255, 255, 255, 0.14)"
-MAP_CHAT_GEMINI_DARK_SHADOW = (
-    "0 2px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05)"
-)
-MAP_CHAT_GEMINI_DARK_SEND_FILL = "rgba(255, 255, 255, 0.1)"
-MAP_CHAT_GEMINI_DARK_SEND_ICON = "#e8eaed"
-MAP_CHAT_GEMINI_LIGHT_COMPOSER_TEXT = MAP_CHAT_GEMINI_LIGHT_SEND_ICON
-MAP_CHAT_GEMINI_DARK_COMPOSER_TEXT = MAP_CHAT_GEMINI_DARK_SEND_ICON
+MAP_CHAT_SHELL_BG_DARK = "#1e1f20"
+MAP_CHAT_SHELL_BORDER_DARK = "rgba(255, 255, 255, 0.14)"
+MAP_CHAT_SHELL_SHADOW_DARK = "none"
+MAP_CHAT_COMPOSER_TEXT_LIGHT = "#202124"
+MAP_CHAT_PLACEHOLDER_LIGHT = "#5f6368"
+MAP_CHAT_COMPOSER_TEXT_DARK = "#ffffff"
+MAP_CHAT_PLACEHOLDER_DARK = "#9aa0a6"
+MAP_CHAT_SEND_FILL_LIGHT = "#e8f0fe"
+MAP_CHAT_SEND_FILL_HOVER_LIGHT = "#d2e3fc"
+MAP_CHAT_SEND_ICON_LIGHT = "#202124"
+MAP_CHAT_SEND_FILL_DARK = "#5f6368"
+MAP_CHAT_SEND_FILL_HOVER_DARK = "#70757a"
+MAP_CHAT_SEND_ICON_DARK = "#ffffff"
+MAP_CHAT_FOCUS_RING_LIGHT = "#1a73e8"
+MAP_CHAT_FOCUS_RING_DARK = "#8ab4f8"
+GEO_MAP_TBL_TOGGLE_BG_LIGHT = "#eceff1"
+GEO_MAP_TBL_TOGGLE_BORDER_LIGHT = "#cfd8dc"
+GEO_MAP_TBL_TOGGLE_FG_LIGHT = "#111827"
+GEO_MAP_TBL_TOGGLE_HOVER_LIGHT = "#dfe6e9"
+GEO_MAP_TBL_TOGGLE_BG_DARK = "#1e1f20"
+GEO_MAP_TBL_TOGGLE_BORDER_DARK = "rgba(255, 255, 255, 0.14)"
+GEO_MAP_TBL_TOGGLE_FG_DARK = "#ffffff"
+GEO_MAP_TBL_TOGGLE_HOVER_DARK = "#2d3136"
+GEO_MAP_TBL_HDR_BG_LIGHT = "#e8ecf0"
+GEO_MAP_TBL_HDR_RULE_LIGHT = "#cfd8dc"
+GEO_MAP_TBL_HDR_FG_LIGHT = "#374151"
+GEO_MAP_TBL_HDR_BG_DARK = "#202428"
+GEO_MAP_TBL_HDR_RULE_DARK = "rgba(255, 255, 255, 0.12)"
+GEO_MAP_TBL_HDR_FG_DARK = "#ffffff"
+GEO_MAP_TBL_ID_FG_LIGHT = "#4b5563"
+GEO_MAP_TBL_NAME_FG_LIGHT = "#111827"
+GEO_MAP_TBL_ID_FG_DARK = "#e8eaed"
+GEO_MAP_TBL_NAME_FG_DARK = "#ffffff"
+GEO_MAP_TBL_FLYOUT_BG_LIGHT = "#ffffff"
+GEO_MAP_TBL_FLYOUT_BORDER_LIGHT = "#cfd8dc"
+GEO_MAP_TBL_FLYOUT_SHADOW_LIGHT = "0 -8px 28px rgba(0, 0, 0, 0.14)"
+GEO_MAP_TBL_FLYOUT_BG_DARK = "#13161b"
+GEO_MAP_TBL_FLYOUT_BORDER_DARK = "rgba(255, 255, 255, 0.14)"
+GEO_MAP_TBL_FLYOUT_SHADOW_DARK = "0 -8px 28px rgba(0, 0, 0, 0.45)"
+GEO_MAP_TBL_ROW_RULE_LIGHT = "#e5e7eb"
+GEO_MAP_TBL_ROW_RULE_DARK = "rgba(255, 255, 255, 0.1)"
+GEO_MAP_TBL_SCROLL_THUMB_LIGHT = "rgba(0, 0, 0, 0.3)"
+GEO_MAP_TBL_SCROLL_THUMB_DARK = "rgba(255, 255, 255, 0.28)"
+GEO_MAP_TBL_ALT_FLY_BG_LIGHT = "#f4f6f8"
+GEO_MAP_TBL_ALT_FLY_BORDER_LIGHT = "#cfd8dc"
+GEO_MAP_TBL_ALT_FLY_SHADOW_LIGHT = "0 -10px 32px rgba(0, 0, 0, 0.12)"
+GEO_MAP_TBL_ALT_FLY_BG_DARK = "#13161b"
+GEO_MAP_TBL_ALT_FLY_BORDER_DARK = "rgba(255, 255, 255, 0.14)"
+GEO_MAP_TBL_ALT_FLY_SHADOW_DARK = "0 -10px 32px rgba(0, 0, 0, 0.5)"
+GEO_MAP_TBL_DISABLED_BG_LIGHT = "#e5e7eb"
+GEO_MAP_TBL_DISABLED_FG_LIGHT = "#9ca3af"
+GEO_MAP_TBL_DISABLED_BG_DARK = "rgba(255, 255, 255, 0.1)"
+GEO_MAP_TBL_DISABLED_FG_DARK = "rgba(255, 255, 255, 0.38)"
+
+
+def _geo_dark_sel(*selector_fragments: str) -> str:
+    return ",\n    ".join(
+        f"html.{GEO_HTML_THEME_DARK_CLASS} {s.strip()}"
+        for s in selector_fragments
+        if s.strip()
+    )
+
+
+def _geo_sel_list(*selector_fragments: str) -> str:
+    return ",\n    ".join(s.strip() for s in selector_fragments if s.strip())
 
 
 class MAP_CHAT_PDF:
@@ -342,28 +397,6 @@ GEO_MAP_TABLE_HEADER_PADDING_Y_PX = 2
 GEO_MAP_TABLE_HEADER_PADDING_X_PX = 7
 GEO_MAP_TABLE_HEADER_GAP_PX = 6
 GEO_MAP_TABLE_ROW_LINE_HEIGHT = 1.25
-GEO_MAP_TABLE_FG_MUTED_LIGHT = "rgba(49,51,63,0.55)"
-GEO_MAP_TABLE_FG_MUTED_DARK = "rgba(232,234,237,0.72)"
-GEO_MAP_TABLE_FG_BODY_LIGHT = "rgba(49,51,63,0.92)"
-GEO_MAP_TABLE_FG_BODY_DARK = "rgba(248,249,250,0.95)"
-GEO_MAP_TABLE_TOGGLE_FG_LIGHT = "rgba(49,51,63,0.75)"
-GEO_MAP_TABLE_TOGGLE_FG_DARK = "rgba(232,234,237,0.88)"
-GEO_MAP_TABLE_TOGGLE_BG_LIGHT = "rgba(49,51,63,0.04)"
-GEO_MAP_TABLE_TOGGLE_BG_DARK = "rgba(255,255,255,0.06)"
-GEO_MAP_TABLE_TOGGLE_BORDER_LIGHT = "rgba(49,51,63,0.18)"
-GEO_MAP_TABLE_TOGGLE_BORDER_DARK = "rgba(255,255,255,0.14)"
-GEO_MAP_TABLE_TOGGLE_HOVER_BG_LIGHT = "rgba(49,51,63,0.09)"
-GEO_MAP_TABLE_TOGGLE_HOVER_BG_DARK = "rgba(255,255,255,0.1)"
-GEO_MAP_TABLE_DIVIDER_LIGHT = "rgba(49,51,63,0.08)"
-GEO_MAP_TABLE_DIVIDER_DARK = "rgba(255,255,255,0.1)"
-GEO_MAP_TABLE_HEAD_BG_LIGHT = "rgba(49,51,63,0.06)"
-GEO_MAP_TABLE_HEAD_BG_DARK = "rgba(255,255,255,0.06)"
-GEO_MAP_TABLE_HEAD_RULE_LIGHT = "rgba(49,51,63,0.12)"
-GEO_MAP_TABLE_HEAD_RULE_DARK = "rgba(255,255,255,0.12)"
-GEO_MAP_TABLE_GOTO_DISABLED_BG_LIGHT = "rgba(49,51,63,0.15)"
-GEO_MAP_TABLE_GOTO_DISABLED_BG_DARK = "rgba(255,255,255,0.08)"
-GEO_MAP_TABLE_GOTO_DISABLED_FG_LIGHT = "rgba(49,51,63,0.4)"
-GEO_MAP_TABLE_GOTO_DISABLED_FG_DARK = "rgba(232,234,237,0.35)"
 GEO_MAP_TABLE_NAME_CELL_STYLE = (
     "margin:0;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
     f"max-width:100%;line-height:{GEO_MAP_TABLE_ROW_LINE_HEIGHT};"
@@ -832,36 +865,72 @@ def build_map_chat_input_css() -> str:
     ta_pad = MAP_CHAT_INPUT_TEXTAREA_PADDING
     fs = MAP_CHAT_INPUT_FONT_SIZE
     lh = MAP_CHAT_INPUT_LINE_HEIGHT
-    gls = MAP_CHAT_GEMINI_LIGHT_SURFACE
-    glb = MAP_CHAT_GEMINI_LIGHT_BORDER
-    gld = MAP_CHAT_GEMINI_LIGHT_SHADOW
-    gds = MAP_CHAT_GEMINI_DARK_SURFACE
-    gdb = MAP_CHAT_GEMINI_DARK_BORDER
-    gdd = MAP_CHAT_GEMINI_DARK_SHADOW
-    glsf = MAP_CHAT_GEMINI_LIGHT_SEND_FILL
-    glsi = MAP_CHAT_GEMINI_LIGHT_SEND_ICON
-    gdsf = MAP_CHAT_GEMINI_DARK_SEND_FILL
-    gdsi = MAP_CHAT_GEMINI_DARK_SEND_ICON
-    glct = MAP_CHAT_GEMINI_LIGHT_COMPOSER_TEXT
-    gdct = MAP_CHAT_GEMINI_DARK_COMPOSER_TEXT
     shell_pad = MAP_CHAT_INPUT_SHELL_INNER_PADDING
     foot_min = MAP_CHAT_INPUT_FOOTER_MIN_HEIGHT
     foot_pad = MAP_CHAT_INPUT_FOOTER_PADDING
-    shell = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] > div, '
-        '[data-testid="stAppViewContainer"] div.stChatInput[data-testid="stChatInput"] > div, '
-        '.stChatFloatingInputContainer [data-testid="stChatInput"] > div, '
-        '[data-testid="stChatInput"] > div'
+    sh_bl = MAP_CHAT_SHELL_BG_LIGHT
+    sh_br = MAP_CHAT_SHELL_BORDER_LIGHT
+    sh_sd = MAP_CHAT_SHELL_SHADOW_LIGHT
+    sh_bd = MAP_CHAT_SHELL_BG_DARK
+    sh_drv = MAP_CHAT_SHELL_BORDER_DARK
+    sh_sdd = MAP_CHAT_SHELL_SHADOW_DARK
+    ct_l = MAP_CHAT_COMPOSER_TEXT_LIGHT
+    ph_col_l = MAP_CHAT_PLACEHOLDER_LIGHT
+    ct_d = MAP_CHAT_COMPOSER_TEXT_DARK
+    ph_col_d = MAP_CHAT_PLACEHOLDER_DARK
+    sf_l = MAP_CHAT_SEND_FILL_LIGHT
+    sfh_l = MAP_CHAT_SEND_FILL_HOVER_LIGHT
+    si_l = MAP_CHAT_SEND_ICON_LIGHT
+    sf_d = MAP_CHAT_SEND_FILL_DARK
+    sfh_d = MAP_CHAT_SEND_FILL_HOVER_DARK
+    si_d = MAP_CHAT_SEND_ICON_DARK
+    fr_l = MAP_CHAT_FOCUS_RING_LIGHT
+    fr_d = MAP_CHAT_FOCUS_RING_DARK
+    sh_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] > div',
+        '[data-testid="stAppViewContainer"] div.stChatInput[data-testid="stChatInput"] > div',
+        '.stChatFloatingInputContainer [data-testid="stChatInput"] > div',
+        '[data-testid="stChatInput"] > div',
     )
-    shell_fw = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"]:focus-within > div, '
-        '.stChatFloatingInputContainer [data-testid="stChatInput"]:focus-within > div, '
-        '[data-testid="stChatInput"]:focus-within > div'
+    shell = _geo_sel_list(*sh_in)
+    shell_d = _geo_dark_sel(*sh_in)
+    sh_fw_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"]:focus-within > div',
+        '.stChatFloatingInputContainer [data-testid="stChatInput"]:focus-within > div',
+        '[data-testid="stChatInput"]:focus-within > div',
     )
-    ta_sel = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea, '
-        '[data-testid="stChatInputTextArea"]'
+    shell_fw = _geo_sel_list(*sh_fw_in)
+    shell_fw_d = _geo_dark_sel(*sh_fw_in)
+    ta_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea',
+        '[data-testid="stChatInputTextArea"]',
     )
+    ta_sel = _geo_sel_list(*ta_in)
+    ta_d = _geo_dark_sel(*ta_in)
+    ph_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea::placeholder',
+        '[data-testid="stChatInputTextArea"]::placeholder',
+    )
+    ph_sel = _geo_sel_list(*ph_in)
+    ph_dark_sel = _geo_dark_sel(*ph_in)
+    btn_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button',
+        '[data-testid="stChatInputSubmitButton"]',
+    )
+    btn_sel = _geo_sel_list(*btn_in)
+    btn_d = _geo_dark_sel(*btn_in)
+    btn_hov_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button:hover',
+        '[data-testid="stChatInputSubmitButton"]:hover',
+    )
+    btn_hover_sel = _geo_sel_list(*btn_hov_in)
+    btn_hov_d = _geo_dark_sel(*btn_hov_in)
+    btn_foc_in = (
+        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button:focus-visible',
+        '[data-testid="stChatInputSubmitButton"]:focus-visible',
+    )
+    btn_focus_sel = _geo_sel_list(*btn_foc_in)
+    btn_foc_d = _geo_dark_sel(*btn_foc_in)
     root_sel = (
         '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] [data-baseweb="textarea"], '
         '[data-testid="stChatInput"] [data-baseweb="textarea"]'
@@ -890,18 +959,6 @@ def build_map_chat_input_css() -> str:
         '> div > div:has([data-testid="stChatInputFileUploadButton"]), '
         '[data-testid="stChatInput"] > div > div:has([data-testid="stChatInputFileUploadButton"])'
     )
-    btn_sel = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button, '
-        '[data-testid="stChatInputSubmitButton"]'
-    )
-    btn_hover_sel = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button:hover, '
-        '[data-testid="stChatInputSubmitButton"]:hover'
-    )
-    btn_focus_sel = (
-        '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] button:focus-visible, '
-        '[data-testid="stChatInputSubmitButton"]:focus-visible'
-    )
     wrap_clear = (
         '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] [data-baseweb="textarea"], '
         '[data-testid="stAppViewContainer"] [data-testid="stChatInput"] '
@@ -916,24 +973,29 @@ def build_map_chat_input_css() -> str:
         '[data-testid="stChatInput"]'
     )
     return f"""
-    [data-testid="stChatInputContainer"], .stChatFloatingInputContainer {{
+    [data-testid="stChatInputContainer"],
+    .stChatFloatingInputContainer,
+    [data-testid="stChatInputContainer"] > div,
+    .stChatFloatingInputContainer > div {{
         margin-bottom: 5.5rem !important;
         border: none !important;
         box-shadow: none !important;
         background: transparent !important;
+        background-color: transparent !important;
         padding: 0 !important;
     }}
     {outer_chat} {{
         border: none !important;
         box-shadow: none !important;
         background: transparent !important;
+        background-color: transparent !important;
         height: auto !important;
     }}
     {shell} {{
-        background-color: {gls} !important;
-        border: 1px solid {glb} !important;
+        background-color: {sh_bl} !important;
+        border: 1px solid {sh_br} !important;
         border-radius: {r} !important;
-        box-shadow: {gld} !important;
+        box-shadow: {sh_sd} !important;
         min-height: {outer_min} !important;
         height: auto !important;
         max-height: none !important;
@@ -946,32 +1008,30 @@ def build_map_chat_input_css() -> str:
         overflow: hidden !important;
         transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {shell} {{
-            background-color: {gds} !important;
-            border: 1px solid {gdb} !important;
-            box-shadow: {gdd} !important;
-        }}
-    }}
-    @supports (background-color: light-dark(white, black)) {{
-        {shell} {{
-            background-color: light-dark({gls}, {gds}) !important;
-            border-color: light-dark({glb}, {gdb}) !important;
-        }}
+    {shell_d} {{
+        background-color: {sh_bd} !important;
+        border: 1px solid {sh_drv} !important;
+        border-radius: {r} !important;
+        box-shadow: {sh_sdd} !important;
+        min-height: {outer_min} !important;
+        height: auto !important;
+        max-height: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        align-content: stretch !important;
+        padding: {shell_pad} !important;
+        gap: 0 !important;
+        overflow: hidden !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
     }}
     {shell_fw} {{
-        border-color: var(--st-primary-color, #1a73e8) !important;
-        box-shadow:
-            0 0 0 1px var(--st-primary-color, #1a73e8),
-            0 2px 16px rgba(26, 115, 232, 0.22) !important;
+        border-color: {fr_l} !important;
+        box-shadow: 0 0 0 1px {fr_l} !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {shell_fw} {{
-            border-color: var(--st-primary-color, #8ab4f8) !important;
-            box-shadow:
-                0 0 0 1px var(--st-primary-color, #8ab4f8),
-                0 2px 18px rgba(138, 180, 248, 0.28) !important;
-        }}
+    {shell_fw_d} {{
+        border-color: {fr_d} !important;
+        box-shadow: 0 0 0 1px {fr_d} !important;
     }}
     {flex_ta} {{
         flex: 0 1 auto !important;
@@ -1011,8 +1071,8 @@ def build_map_chat_input_css() -> str:
         box-shadow: none !important;
         background: transparent !important;
         background-color: transparent !important;
-        color: {glct} !important;
-        caret-color: {glct} !important;
+        color: {ct_l} !important;
+        caret-color: {ct_l} !important;
         font-size: {fs} !important;
         line-height: {lh} !important;
         padding: {ta_pad} !important;
@@ -1026,35 +1086,34 @@ def build_map_chat_input_css() -> str:
         resize: none !important;
         border-radius: 0 !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {ta_sel},
-        {wrap_clear} {{
-            color: {gdct} !important;
-        }}
-        {ta_sel} {{
-            caret-color: {gdct} !important;
-        }}
+    {ta_d} {{
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        color: {ct_d} !important;
+        caret-color: {ct_d} !important;
+        font-size: {fs} !important;
+        line-height: {lh} !important;
+        padding: {ta_pad} !important;
+        min-height: {ta_min} !important;
+        max-height: {ta_max_fb} !important;
+        max-height: {ta_max} !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        resize: none !important;
+        border-radius: 0 !important;
     }}
-    @supports (color: light-dark(white, black)) {{
-        {ta_sel},
-        {wrap_clear} {{
-            color: light-dark({glct}, {gdct}) !important;
-        }}
-        {ta_sel} {{
-            caret-color: light-dark({glct}, {gdct}) !important;
-        }}
+    {ph_sel} {{
+        color: {ph_col_l} !important;
+        opacity: 1 !important;
     }}
-    [data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea::placeholder,
-    [data-testid="stChatInputTextArea"]::placeholder {{
-        color: var(--st-text-color, #5f6368) !important;
-        opacity: 0.85 !important;
-    }}
-    @media (prefers-color-scheme: dark) {{
-        [data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea::placeholder,
-        [data-testid="stChatInputTextArea"]::placeholder {{
-            color: var(--st-text-color, #9aa0a6) !important;
-            opacity: 0.9 !important;
-        }}
+    {ph_dark_sel} {{
+        color: {ph_col_d} !important;
+        opacity: 1 !important;
     }}
     [data-testid="stAppViewContainer"] [data-testid="stChatInput"]:focus-within textarea::placeholder,
     [data-testid="stAppViewContainer"] [data-testid="stChatInput"] textarea:focus::placeholder,
@@ -1099,7 +1158,7 @@ def build_map_chat_input_css() -> str:
         box-sizing: border-box !important;
     }}
     {btn_sel} {{
-        color: {glsi} !important;
+        color: {si_l} !important;
         align-self: center !important;
         width: 2.5rem !important;
         height: 2.5rem !important;
@@ -1108,38 +1167,35 @@ def build_map_chat_input_css() -> str:
         border-radius: 50% !important;
         margin: 0 !important;
         flex-shrink: 0 !important;
-        background-color: {glsf} !important;
+        background-color: {sf_l} !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {btn_sel} {{
-            color: {gdsi} !important;
-            background-color: {gdsf} !important;
-        }}
-    }}
-    @supports (color: light-dark(white, black)) {{
-        {btn_sel} {{
-            color: light-dark({glsi}, {gdsi}) !important;
-            background-color: light-dark({glsf}, {gdsf}) !important;
-        }}
+    {btn_d} {{
+        color: {si_d} !important;
+        align-self: center !important;
+        width: 2.5rem !important;
+        height: 2.5rem !important;
+        min-width: 2.5rem !important;
+        min-height: 2.5rem !important;
+        border-radius: 50% !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+        background-color: {sf_d} !important;
     }}
     {btn_hover_sel} {{
-        color: var(--st-primary-color, #1967d2) !important;
-        background-color: rgba(26, 115, 232, 0.18) !important;
+        color: {si_l} !important;
+        background-color: {sfh_l} !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {btn_hover_sel} {{
-            color: var(--st-primary-color, #8ab4f8) !important;
-            background-color: rgba(138, 180, 248, 0.22) !important;
-        }}
+    {btn_hov_d} {{
+        color: {si_d} !important;
+        background-color: {sfh_d} !important;
     }}
     {btn_focus_sel} {{
-        outline: 2px solid var(--st-primary-color, #1a73e8) !important;
+        outline: 2px solid {fr_l} !important;
         outline-offset: 2px !important;
     }}
-    @media (prefers-color-scheme: dark) {{
-        {btn_focus_sel} {{
-            outline-color: var(--st-primary-color, #8ab4f8) !important;
-        }}
+    {btn_foc_d} {{
+        outline: 2px solid {fr_d} !important;
+        outline-offset: 2px !important;
     }}
     """
 
