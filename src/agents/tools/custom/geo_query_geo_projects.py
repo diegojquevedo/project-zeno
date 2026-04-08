@@ -27,7 +27,6 @@ from src.api.custom.geo_lake_county_projects_config import (
     GEO_PROJECT_TYPE_FIELD,
 )
 from src.api.geo_lake_county_config import get_geo_lake_county_layer_by_id
-from src.services.lake_county_service import fetch_drainage_district_boundary
 from src.api.lake_county_constants import (
     ARCGIS_RESULT_RECORD_COUNT_BATCH,
     ARCGIS_SRID,
@@ -36,6 +35,7 @@ from src.api.lake_county_constants import (
 )
 from src.infrastructure.external.arcgis_client import ArcGISClient
 from src.services.inflow_user_service import lookup_user_id_by_name
+from src.services.lake_county_service import fetch_drainage_district_boundary
 from src.shared.geo_basemap import GEO_BASEMAP_MODEL_INSTRUCTIONS
 from src.shared.lake_county_constants import LC_MUNICIPALITIES_URL
 from src.shared.logging_config import get_logger

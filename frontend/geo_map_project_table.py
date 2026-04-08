@@ -16,11 +16,12 @@ from constants import (
     GEO_MAP_TABLE_GOTO_BUTTON_FONT_SIZE_PX,
     GEO_MAP_TABLE_GOTO_BUTTON_HEIGHT_PX,
     GEO_MAP_TABLE_GOTO_BUTTON_HOVER,
+    GEO_MAP_TABLE_GOTO_BUTTON_MIN_WIDTH,
     GEO_MAP_TABLE_GOTO_BUTTON_PAD_X_PX,
-    GEO_MAP_TABLE_GOTO_BUTTON_SHRINK_PCT,
     GEO_MAP_TABLE_HEADER_GAP_PX,
     GEO_MAP_TABLE_HEADER_PADDING_X_PX,
     GEO_MAP_TABLE_HEADER_PADDING_Y_PX,
+    GEO_MAP_TABLE_ID_CELL_PADDING_LEFT_PX,
     GEO_MAP_TABLE_NAME_CELL_STYLE,
     GEO_MAP_TABLE_NAME_DOM_MAX_CHARS,
     GEO_MAP_TABLE_NAME_FONT_SIZE_REM,
@@ -84,7 +85,7 @@ def geo_map_project_table_css_rules() -> str:
     goto_h = GEO_MAP_TABLE_GOTO_BUTTON_HEIGHT_PX
     goto_px = GEO_MAP_TABLE_GOTO_BUTTON_PAD_X_PX
     goto_fs = GEO_MAP_TABLE_GOTO_BUTTON_FONT_SIZE_PX
-    goto_shrink_pct = GEO_MAP_TABLE_GOTO_BUTTON_SHRINK_PCT
+    goto_mw = GEO_MAP_TABLE_GOTO_BUTTON_MIN_WIDTH
     rpy = GEO_MAP_TABLE_ROW_PADDING_Y_PX
     rlh = GEO_MAP_TABLE_ROW_LINE_HEIGHT
     hpy = GEO_MAP_TABLE_HEADER_PADDING_Y_PX
@@ -92,6 +93,7 @@ def geo_map_project_table_css_rules() -> str:
     hg = GEO_MAP_TABLE_HEADER_GAP_PX
     rpx_left = GEO_MAP_TABLE_ROW_PADDING_LEFT_PX
     rpx_right = GEO_MAP_TABLE_ROW_PADDING_RIGHT_PX
+    id_pl = GEO_MAP_TABLE_ID_CELL_PADDING_LEFT_PX
     name_fs = GEO_MAP_TABLE_NAME_FONT_SIZE_REM
     fly_mh = GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS
     fly_z = GEO_MAP_TABLE_FLYOUT_Z_INDEX
@@ -264,6 +266,11 @@ def geo_map_project_table_css_rules() -> str:
     border-bottom: 1px solid {GEO_MAP_TBL_HDR_RULE_DARK} !important;
     color: {GEO_MAP_TBL_HDR_FG_DARK} !important;
 }}
+{dbg_u} .geo-map-tbl-header > span:first-child,
+{dbg_k} .geo-map-tbl-header > span:first-child {{
+    padding-left: {id_pl}px !important;
+    box-sizing: border-box !important;
+}}
 {tbl_cell_id} {{
     color: {GEO_MAP_TBL_ID_FG_LIGHT} !important;
 }}
@@ -360,6 +367,7 @@ def geo_map_project_table_css_rules() -> str:
     display: flex !important;
     align-items: center !important;
     justify-content: flex-start !important;
+    padding-left: {id_pl}px !important;
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stMarkdownContainer"] {{
     margin: 0 !important;
@@ -385,25 +393,41 @@ def geo_map_project_table_css_rules() -> str:
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {{
     flex: 0 0 auto !important;
+    flex-grow: 0 !important;
+    flex-shrink: 0 !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     display: flex !important;
     align-items: center !important;
+    justify-content: flex-end !important;
     padding: 0 !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+}}
+[class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child > div {{
+    width: fit-content !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
 }}
 [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"],
 [class*="st-key-geo_tbl_rows"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child [data-testid="stElementContainer"] {{
     margin: 0 !important;
     padding: 0 !important;
     min-height: 0 !important;
-    width: 100% !important;
+    width: fit-content !important;
+    max-width: 100% !important;
 }}
 [class*="st-key-geo_map_goto_"] .stButton,
 [class*="st-key-geo_map_goto_"] [data-testid="stElementContainer"] .stButton {{
-    width: calc(100% - {goto_shrink_pct}%) !important;
-    max-width: calc(100% - {goto_shrink_pct}%) !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    min-width: {goto_mw} !important;
     height: {goto_h}px !important;
     max-height: {goto_h}px !important;
     min-height: 0 !important;
-    margin-left: auto !important;
+    margin-left: 0 !important;
     margin-right: 0 !important;
     box-sizing: border-box !important;
     display: flex !important;
