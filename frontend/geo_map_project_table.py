@@ -7,7 +7,9 @@ from geo_feature_display import (
 )
 
 from constants import (
+    GEO_MAP_STREAMLIT_KEY_BOTTOM_PANEL_ROOT,
     GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT,
+    GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE,
     GEO_MAP_TABLE_DIVIDER_DARK,
     GEO_MAP_TABLE_DIVIDER_LIGHT,
     GEO_MAP_TABLE_FG_BODY_DARK,
@@ -41,14 +43,7 @@ from constants import (
     GEO_MAP_TABLE_ROW_PADDING_RIGHT_PX,
     GEO_MAP_TABLE_ROW_PADDING_Y_PX,
     GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT,
-    GEO_MAP_TABLE_TOGGLE_BG_DARK,
-    GEO_MAP_TABLE_TOGGLE_BG_LIGHT,
-    GEO_MAP_TABLE_TOGGLE_BORDER_DARK,
-    GEO_MAP_TABLE_TOGGLE_BORDER_LIGHT,
-    GEO_MAP_TABLE_TOGGLE_FG_DARK,
-    GEO_MAP_TABLE_TOGGLE_FG_LIGHT,
-    GEO_MAP_TABLE_TOGGLE_HOVER_BG_DARK,
-    GEO_MAP_TABLE_TOGGLE_HOVER_BG_LIGHT,
+    GEO_MAP_TABLE_TOGGLE_BAR_Z_INDEX,
     SESSION_KEY_GEO_MAP_TABLE_EXPANDED,
     SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW,
     SESSION_KEY_GEO_RESULT_SUMMARY,
@@ -73,14 +68,6 @@ def geo_map_project_table_css_rules() -> str:
     fmd = GEO_MAP_TABLE_FG_MUTED_DARK
     fbl = GEO_MAP_TABLE_FG_BODY_LIGHT
     fbd = GEO_MAP_TABLE_FG_BODY_DARK
-    tfgl = GEO_MAP_TABLE_TOGGLE_FG_LIGHT
-    tfgd = GEO_MAP_TABLE_TOGGLE_FG_DARK
-    tbgl = GEO_MAP_TABLE_TOGGLE_BG_LIGHT
-    tbgd = GEO_MAP_TABLE_TOGGLE_BG_DARK
-    tbdl = GEO_MAP_TABLE_TOGGLE_BORDER_LIGHT
-    tbdd = GEO_MAP_TABLE_TOGGLE_BORDER_DARK
-    thbl = GEO_MAP_TABLE_TOGGLE_HOVER_BG_LIGHT
-    thbd = GEO_MAP_TABLE_TOGGLE_HOVER_BG_DARK
     divl = GEO_MAP_TABLE_DIVIDER_LIGHT
     divd = GEO_MAP_TABLE_DIVIDER_DARK
     hbg_l = GEO_MAP_TABLE_HEAD_BG_LIGHT
@@ -97,11 +84,12 @@ def geo_map_project_table_css_rules() -> str:
     fly_mh = GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS
     fly_z = GEO_MAP_TABLE_FLYOUT_Z_INDEX
     scroll_n = GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT
-    tbl_body_scroll_max_px = scroll_n * (
-        2 * GEO_MAP_TABLE_ROW_PADDING_Y_PX
-        + GEO_MAP_TABLE_GOTO_BUTTON_HEIGHT_PX
-        + 4
-    ) + max(0, scroll_n - 1)
+    tbl_body_scroll_max_px = (
+        scroll_n
+        * (2 * GEO_MAP_TABLE_ROW_PADDING_Y_PX + GEO_MAP_TABLE_GOTO_BUTTON_HEIGHT_PX + 4)
+        + max(0, scroll_n - 1)
+        + 8
+    )
     tbl_hdr_min_px = max(hpy * 2 + 14, 40)
     dbg_u = '[class*="geo_map_table_debug_wrap"]'
     dbg_k = '[class*="geo-map-table-debug-wrap"]'
@@ -115,12 +103,6 @@ def geo_map_project_table_css_rules() -> str:
         f'{dbg_k} > div > [data-testid="stVerticalBlock"], '
         f'{dbg_u} > div > div > [data-testid="stVerticalBlock"], '
         f'{dbg_k} > div > div > [data-testid="stVerticalBlock"]'
-    )
-    sel_fly_row = (
-        f'{dbg_u} [data-testid="stVerticalBlock"] > div:has({fly_u}), '
-        f'{dbg_k} [data-testid="stVerticalBlock"] > div:has({fly_u}), '
-        f'{dbg_u} [data-testid="stVerticalBlock"] > div:has({fly_k}), '
-        f'{dbg_k} [data-testid="stVerticalBlock"] > div:has({fly_k})'
     )
     sel_fly_vb = (
         f'{fly_u} [data-testid="stVerticalBlock"]:not([class*="st-key-geo_tbl_rows"]), '
@@ -145,7 +127,15 @@ def geo_map_project_table_css_rules() -> str:
         f'[data-testid="stElementContainer"]'
     )
     return f"""
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_BOTTOM_PANEL_ROOT}"],
+[class*="st-key-geo_map_bottom_panel_root"] {{
+    position: relative !important;
+    width: 100% !important;
+    z-index: 20 !important;
+}}
 [class*="st-key-geo_tbl_toggle_wrap"] {{
+    position: relative !important;
+    z-index: {GEO_MAP_TABLE_TOGGLE_BAR_Z_INDEX} !important;
     padding: 0 !important;
     margin: 0 !important;
 }}
@@ -153,90 +143,68 @@ def geo_map_project_table_css_rules() -> str:
     padding: 0 !important;
     margin: 0 !important;
     gap: 0 !important;
+    overflow: visible !important;
 }}
 [class*="st-key-geo_tbl_toggle_wrap"] [data-testid="stVerticalBlock"] {{
     padding: 0 !important;
     margin: 0 !important;
     gap: 0 !important;
+    overflow: visible !important;
 }}
-[class*="st-key-geo_map_tbl_exp"],
-[class*="st-key-geo_map_tbl_col"] {{
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"],
+[class*="st-key-geo_map_tbl_toggle"] {{
+    position: relative !important;
+    z-index: {GEO_MAP_TABLE_TOGGLE_BAR_Z_INDEX + 6} !important;
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
 }}
-[class*="st-key-geo_map_tbl_exp"] button,
-[class*="st-key-geo_map_tbl_col"] button {{
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button,
+[class*="st-key-geo_map_tbl_toggle"] button {{
     width: 100% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding: 0.3rem 0.7rem !important;
-    min-height: 0 !important;
-    height: auto !important;
-    line-height: 1.4 !important;
-    font-size: 0.82rem !important;
-    background: {tbgl} !important;
-    border: 1px solid {tbdl} !important;
-    border-radius: 6px !important;
-    color: {tfgl} !important;
-    cursor: pointer !important;
-    box-sizing: border-box !important;
-    transition: background 0.15s !important;
+    padding: 0.55rem 0.75rem !important;
+    min-height: 2.5rem !important;
+    line-height: 1.35 !important;
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(49, 51, 63, 0.2) !important;
+    border-radius: 0.5rem !important;
+    color: rgba(49, 51, 63, 0.8) !important;
+    box-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
 }}
-[class*="st-key-geo_map_tbl_exp"] button:hover,
-[class*="st-key-geo_map_tbl_col"] button:hover {{
-    background: {thbl} !important;
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button:hover,
+[class*="st-key-geo_map_tbl_toggle"] button:hover {{
+    background: rgba(49, 51, 63, 0.04) !important;
 }}
-@media (prefers-color-scheme: dark) {{
-    [class*="st-key-geo_map_tbl_exp"] button,
-    [class*="st-key-geo_map_tbl_col"] button {{
-        background: {tbgd} !important;
-        border-color: {tbdd} !important;
-        color: {tfgd} !important;
-    }}
-    [class*="st-key-geo_map_tbl_exp"] button:hover,
-    [class*="st-key-geo_map_tbl_col"] button:hover {{
-        background: {thbd} !important;
-    }}
-}}
-@supports (background-color: light-dark(white, black)) {{
-    [class*="st-key-geo_map_tbl_exp"] button,
-    [class*="st-key-geo_map_tbl_col"] button {{
-        background: light-dark({tbgl}, {tbgd}) !important;
-        border-color: light-dark({tbdl}, {tbdd}) !important;
-        color: light-dark({tfgl}, {tfgd}) !important;
-    }}
-    [class*="st-key-geo_map_tbl_exp"] button:hover,
-    [class*="st-key-geo_map_tbl_col"] button:hover {{
-        background: light-dark({thbl}, {thbd}) !important;
-    }}
-}}
-[class*="st-key-geo_map_tbl_exp"] button p,
-[class*="st-key-geo_map_tbl_col"] button p {{
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button p,
+[class*="st-key-geo_map_tbl_toggle"] button p {{
     flex: 1 1 auto !important;
     text-align: left !important;
     margin: 0 !important;
 }}
-[class*="st-key-geo_map_tbl_exp"] button svg,
-[class*="st-key-geo_map_tbl_col"] button svg,
-[class*="st-key-geo_map_tbl_exp"] button [data-testid="baseButton-icon"],
-[class*="st-key-geo_map_tbl_col"] button [data-testid="baseButton-icon"] {{
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button svg,
+[class*="st-key-geo_map_tbl_toggle"] button svg,
+[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button [data-testid="baseButton-icon"],
+[class*="st-key-geo_map_tbl_toggle"] button [data-testid="baseButton-icon"] {{
     display: none !important;
 }}
-[class*="st-key-geo_map_tbl_exp"] button::after {{
-    content: "▼";
-    flex-shrink: 0 !important;
-    font-size: 0.7rem !important;
-    opacity: 0.5 !important;
-    margin-left: auto !important;
-}}
-[class*="st-key-geo_map_tbl_col"] button::after {{
-    content: "▶";
-    flex-shrink: 0 !important;
-    font-size: 0.7rem !important;
-    opacity: 0.5 !important;
-    margin-left: auto !important;
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button,
+    [class*="st-key-geo_map_tbl_toggle"] button {{
+        background: rgb(14, 17, 23) !important;
+        border-color: rgba(250, 250, 250, 0.2) !important;
+        color: rgba(232, 234, 237, 0.85) !important;
+    }}
+    [class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button:hover,
+    [class*="st-key-geo_map_tbl_toggle"] button:hover {{
+        background: rgba(255, 255, 255, 0.06) !important;
+    }}
 }}
 {sel_hdr} {{
     display: flex !important;
@@ -290,19 +258,42 @@ def geo_map_project_table_css_rules() -> str:
         color: light-dark({fbl}, {fbd}) !important;
     }}
 }}
-[data-testid="stVerticalBlock"][class*="st-key-geo_map_table_flyout"],
-[data-testid="stVerticalBlock"][class*="st-key-geo-map-table-flyout"] {{
+[class*="st-key-geo_map_table_flyout"],
+[class*="st-key-geo-map-table-flyout"] {{
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 100% !important;
+    margin-bottom: 4px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
     min-height: 0 !important;
-    flex-shrink: 1 !important;
     max-width: 100% !important;
+    max-height: {fly_mh} !important;
+    z-index: {fly_z} !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(49, 51, 63, 0.2) !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12) !important;
+    overflow: hidden !important;
+    transition: none !important;
+    animation: none !important;
+}}
+@media (prefers-color-scheme: dark) {{
+    [class*="st-key-geo_map_table_flyout"],
+    [class*="st-key-geo-map-table-flyout"] {{
+        background: rgb(14, 17, 23) !important;
+        border-color: rgba(250, 250, 250, 0.2) !important;
+        box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45) !important;
+    }}
 }}
 [data-testid="stVerticalBlock"][class*="st-key-geo_tbl_rows"] {{
     flex: 1 1 auto !important;
     min-height: 0 !important;
     max-height: {tbl_body_scroll_max_px}px !important;
+    padding-bottom: 4px !important;
+    box-sizing: border-box !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     scrollbar-width: thin !important;
@@ -472,16 +463,6 @@ def geo_map_project_table_css_rules() -> str:
     position: relative !important;
     overflow: visible !important;
     z-index: {fly_z - 5} !important;
-}}
-{sel_fly_row} {{
-    flex: 0 0 0 !important;
-    min-height: 0 !important;
-    height: 0 !important;
-    max-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-    position: relative !important;
 }}
 {sel_fly} {{
     position: absolute !important;
@@ -664,67 +645,78 @@ def render_geo_map_bottom_table() -> None:
 
     map_actions = st.session_state.get(SESSION_KEY_MAP_ACTIONS, [])
     by_pid, by_oid = _build_geometry_lookups(map_actions)
-    expanded = st.session_state.get(SESSION_KEY_GEO_MAP_TABLE_EXPANDED, True)
+    table_open = st.session_state.get(SESSION_KEY_GEO_MAP_TABLE_EXPANDED, True)
     label_plural = geo_summary.get("label_plural", "results")
 
     _panel_rules = (
-        build_geo_map_panel_result_rows_css(expanded)
+        build_geo_map_panel_result_rows_css()
         .replace("<style>", "")
         .replace("</style>", "")
         .strip()
     )
     _tbl_rules = geo_map_project_table_css_rules()
-    st.markdown(
-        f"<style>\n{_panel_rules}\n{_tbl_rules}\n</style>",
-        unsafe_allow_html=True,
-    )
 
-    btn_key = "geo_map_tbl_exp" if expanded else "geo_map_tbl_col"
+    with st.container(key=GEO_MAP_STREAMLIT_KEY_BOTTOM_PANEL_ROOT):
+        with st.container(key="geo_tbl_toggle_wrap"):
+            if st.button(
+                f"{total} {label_plural}",
+                key=GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE,
+                use_container_width=True,
+            ):
+                st.session_state[SESSION_KEY_GEO_MAP_TABLE_EXPANDED] = not table_open
 
-    if expanded:
-        with st.container(key=GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT):
-            lh = GEO_MAP_TABLE_ROW_LINE_HEIGHT
+            table_open = st.session_state.get(SESSION_KEY_GEO_MAP_TABLE_EXPANDED, True)
+            _chevron = "\u25b2" if table_open else "\u25bc"
+            _toggle_chevron = (
+                f'[class*="st-key-{GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE}"] button::after, '
+                f'[class*="st-key-geo_map_tbl_toggle"] button::after {{ '
+                f'content: "{_chevron}" !important; flex-shrink: 0 !important; font-size: 0.65rem !important; '
+                "opacity: 0.55 !important; margin-left: auto !important; font-weight: 600 !important; }}"
+            )
             st.markdown(
-                '<div class="geo-map-tbl-header">'
-                '<span style="flex:0 0 10%">ID</span>'
-                '<span style="flex:1 1 auto;min-width:0">Name</span>'
-                '<span style="flex:0 0 auto;min-width:4.75rem"></span>'
-                "</div>",
+                f"<style>\n{_panel_rules}\n{_tbl_rules}\n{_toggle_chevron}\n</style>",
                 unsafe_allow_html=True,
             )
 
-            with st.container(key="geo_tbl_rows", border=False):
-                for i, row in enumerate(rows):
-                    display_id = geo_feature_row_display_id(row)
-                    name = _get_row_name(row)
-                    has_geom = _geometry_for_feature_row(row, by_pid, by_oid) is not None
+            if table_open:
+                with st.container(key=GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT):
+                    lh = GEO_MAP_TABLE_ROW_LINE_HEIGHT
+                    st.markdown(
+                        '<div class="geo-map-tbl-header">'
+                        '<span style="flex:0 0 10%">ID</span>'
+                        '<span style="flex:1 1 auto;min-width:0">Name</span>'
+                        '<span style="flex:0 0 auto;min-width:4.75rem"></span>'
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                    r1, r2, r3 = st.columns([10, 58, 14], gap="small", vertical_alignment="center")
-                    with r1:
-                        st.markdown(
-                            '<p class="geo-map-tbl-id" style="margin:0;padding:0;font-size:0.78rem;'
-                            f'line-height:{lh};white-space:nowrap">'
-                            + html.escape(str(display_id))
-                            + "</p>",
-                            unsafe_allow_html=True,
-                        )
-                    with r2:
-                        st.markdown(
-                            f'<p class="geo-map-tbl-name" style="{GEO_MAP_TABLE_NAME_CELL_STYLE}">'
-                            f"{html.escape(_cell_name_text(str(name)))}</p>",
-                            unsafe_allow_html=True,
-                        )
-                    with r3:
-                        if st.button(
-                            "Go to",
-                            key=f"geo_map_goto_{i}",
-                            use_container_width=True,
-                            disabled=not has_geom,
-                        ):
-                            st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = i
-                            st.rerun()
+                    with st.container(key="geo_tbl_rows", border=False):
+                        for i, row in enumerate(rows):
+                            display_id = geo_feature_row_display_id(row)
+                            name = _get_row_name(row)
+                            has_geom = _geometry_for_feature_row(row, by_pid, by_oid) is not None
 
-    with st.container(key="geo_tbl_toggle_wrap"):
-        if st.button(f"{total} {label_plural}", key=btn_key, use_container_width=True):
-            st.session_state[SESSION_KEY_GEO_MAP_TABLE_EXPANDED] = not expanded
-            st.rerun(scope="fragment")
+                            r1, r2, r3 = st.columns([10, 58, 14], gap="small", vertical_alignment="center")
+                            with r1:
+                                st.markdown(
+                                    '<p class="geo-map-tbl-id" style="margin:0;padding:0;font-size:0.78rem;'
+                                    f'line-height:{lh};white-space:nowrap">'
+                                    + html.escape(str(display_id))
+                                    + "</p>",
+                                    unsafe_allow_html=True,
+                                )
+                            with r2:
+                                st.markdown(
+                                    f'<p class="geo-map-tbl-name" style="{GEO_MAP_TABLE_NAME_CELL_STYLE}">'
+                                    f"{html.escape(_cell_name_text(str(name)))}</p>",
+                                    unsafe_allow_html=True,
+                                )
+                            with r3:
+                                if st.button(
+                                    "Go to",
+                                    key=f"geo_map_goto_{i}",
+                                    use_container_width=True,
+                                    disabled=not has_geom,
+                                ):
+                                    st.session_state[SESSION_KEY_GEO_MAP_TABLE_FOCUS_ROW] = i
+                                    st.rerun()

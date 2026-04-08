@@ -309,8 +309,11 @@ GEO_MAP_PANEL_TOP_SPACING_REM = 0.85
 GEO_MAP_STREAMLIT_KEY_IFRAME_HOST = "geo_map_iframe_host"
 GEO_MAP_STREAMLIT_KEY_BOTTOM_TABLE_WRAP = "geo_map_bottom_table_wrap"
 GEO_MAP_STREAMLIT_KEY_TABLE_FLYOUT = "geo_map_table_flyout"
+GEO_MAP_STREAMLIT_KEY_BOTTOM_PANEL_ROOT = "geo_map_bottom_panel_root"
+GEO_MAP_STREAMLIT_KEY_TABLE_TOGGLE = "geo_map_tbl_toggle"
 GEO_MAP_TABLE_FLYOUT_MAX_HEIGHT_CSS = "min(50vh, 400px)"
 GEO_MAP_TABLE_FLYOUT_Z_INDEX = 40
+GEO_MAP_TABLE_TOGGLE_BAR_Z_INDEX = 50
 GEO_MAP_TABLE_SCROLL_VISIBLE_ROW_COUNT = 5
 STREAMLIT_DEBUG_GEO_MAP_ENV = "STREAMLIT_DEBUG_GEO_MAP"
 GEO_MAP_ST_HEADER_REM = "3.75rem"
@@ -669,10 +672,10 @@ def build_geo_map_column_css() -> str:
     """
 
 
-def build_geo_map_panel_result_rows_css(expanded: bool) -> str:
+def build_geo_map_panel_result_rows_css() -> str:
     hdr = GEO_MAP_ST_HEADER_REM
-    host_flex = "6 1 0" if expanded else "9 1 0"
-    host_cap = f"calc((100vh - {hdr}) * 0.55)" if expanded else f"calc((100vh - {hdr}) * 0.9)"
+    host_flex = "9 1 0"
+    host_cap = f"calc((100vh - {hdr}) * 0.9)"
     mnh_panel = GEO_MAP_IFRAME_MIN_HEIGHT_PX
     sel_host = _GEO_MAP_COL_IFRAME_HOST_SEL
     st_iframe_el_h = _geo_map_host_descendants(sel_host, '[data-testid="stIFrame"]')
